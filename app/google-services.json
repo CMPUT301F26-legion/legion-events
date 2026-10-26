@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1042613225206",
+    "project_id": "legion-events-f529b",
+    "storage_bucket": "legion-events-f529b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1042613225206:android:cb15d748f43d3535ca4ed7",
+        "android_client_info": {
+          "package_name": "com.example.legion_events"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-uVFL8pTwUUFdme8YEm2lJSBRMFL2zJs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
