@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">legion-events</string>
+    <string name="onboarding_loading">Opening your account…</string>
+    <string name="onboarding_error">Could not open your account</string>
+    <string name="retry">Retry</string>
+    <string name="account_disabled">Account disabled</string>
+    <string name="account_disabled_help">This account has been disabled. Contact the app administrator for help.</string>
+    <string name="check_again">Check again</string>
+    <string name="home_welcome">Welcome to Legion Events</string>
+    <string name="home_ready">Your account is ready. No username or password needed.</string>
 </resources>
