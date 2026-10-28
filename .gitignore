@@ -10,9 +10,8 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 
-# Keep generated Dokka HTML available for version control.
-!/doc/api/
-!/doc/api/**
+# Generate Dokka HTML locally.
+/doc/api/
 /build
 /captures
 .externalNativeBuild
