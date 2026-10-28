@@ -109,14 +109,14 @@ class OnboardingControllerTest {
 
     @Test
     fun recreatedActivityUsesRetainedControllerAndDoesNotInitializeAgain() = runTest(dispatcher) {
-        val repository = FakeRepository { UserProfile(uid = "entrant", name = "Saved name", role = "owner") }
+        val repository = FakeRepository { UserProfile(uid = "entrant", name = "Saved name", role = "admin") }
         val first = controller(repository)
         runCurrent()
         val recreated = controller(repository)
         runCurrent()
         assertSame(first, recreated)
         assertEquals(1, repository.calls)
-        assertEquals("owner", (recreated.state.value as OnboardingState.Ready).profile.role)
+        assertEquals("admin", (recreated.state.value as OnboardingState.Ready).profile.role)
         assertEquals("Saved name", (recreated.state.value as OnboardingState.Ready).profile.name)
     }
 
