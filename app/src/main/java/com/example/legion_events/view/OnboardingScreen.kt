@@ -17,6 +17,14 @@ import androidx.compose.ui.unit.dp
 import com.example.legion_events.R
 import com.example.legion_events.controller.OnboardingState
 
+/**
+ * Shows account setup progress, an error with Retry, or a disabled-account message.
+ *
+ * This view only displays state and forwards button taps; it does not access Firebase.
+ *
+ * @param state The setup state to display. Ready keeps the loading view until navigation finishes.
+ * @param onRetry Called when the user taps Retry or Check again.
+ */
 @Composable
 fun OnboardingScreen(state: OnboardingState, onRetry: () -> Unit) {
     Column(

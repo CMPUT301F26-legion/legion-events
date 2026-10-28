@@ -16,11 +16,25 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
-/** CRC: the single place for Firebase identity and Firestore user access. */
+/**
+ * Handles Firebase account and profile access, as assigned by the repository CRC card.
+ * @property auth The Firebase authentication service that keeps the user's identity.
+ * @property firestore The Firestore database that stores user profiles.
+ */
 class FirebaseRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
 ) : UserRepository {
+    /**
+     * Opens the current account, signing in anonymously only when needed.
+     *
+     * Creates a missing profile without overwriting an existing one. If the rules deny
+     * reading a missing profile, uses a server-enforced create-only request instead.
+     *
+     * @return The saved profile, or new profile defaults after a successful transaction.
+     * @throws UserInitializationException If sign-in or profile setup cannot finish.
+     * @throws AccountDisabledException If Firebase Authentication reports a disabled account.
+     */
     override suspend fun initializeUser(): UserProfile {
         val user = try {
             // A cancelled screen must not release the lock while sign-in is still running.
@@ -86,6 +100,11 @@ class FirebaseRepository(
         }
     }
 
+    /**
+     * Reads saved document fields into a profile value without changing Firestore.
+     * @param uid The authenticated user ID belonging to this document.
+     * @return A profile with saved values and defaults for fields that are missing.
+     */
     private fun DocumentSnapshot.toUserProfile(uid: String) = UserProfile(
         uid = uid,
         name = getString("name") ?: "",
@@ -100,14 +119,20 @@ class FirebaseRepository(
         updatedAt = getTimestamp("updatedAt"),
     )
 
+    /** Shared repository access and the exact defaults used for new profiles. */
     companion object {
-        // Shared even if multiple repository instances initialize the same FirebaseAuth.
+        /** Prevents simultaneous callers from starting separate sign-in requests. */
         private val authenticationMutex = Mutex()
 
+        /** Repository using the app's existing default Firebase configuration. */
         val instance: FirebaseRepository by lazy {
             FirebaseRepository(FirebaseAuth.getInstance(), FirebaseFirestore.getInstance())
         }
 
+        /**
+         * Builds the exact fields for a new entrant profile, with server timestamp markers.
+         * @return New-account defaults; these must never be used to reset an existing profile.
+         */
         internal fun newProfileFields(): Map<String, Any?> = mapOf(
             "name" to "",
             "email" to "",

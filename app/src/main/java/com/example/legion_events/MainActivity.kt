@@ -15,7 +15,12 @@ import com.example.legion_events.controller.OnboardingController
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.ui.theme.LegioneventsTheme
 
+/** Starts the app and hosts its Compose screens. */
 class MainActivity : ComponentActivity() {
+    /**
+     * Gets the retained onboarding controller and displays the app's navigation.
+     * @param savedInstanceState Saved Android state when recreating this activity, or null on a new launch.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val controller = ViewModelProvider(

@@ -11,12 +11,14 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
+/** App colors used when dark mode is selected and dynamic colors are unavailable. */
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
     secondary = PurpleGrey80,
     tertiary = Pink80
 )
 
+/** App colors used when light mode is selected and dynamic colors are unavailable. */
 private val LightColorScheme = lightColorScheme(
     primary = Purple40,
     secondary = PurpleGrey40,
@@ -33,6 +35,12 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+/**
+ * Applies the app's colors and text styles to its screens.
+ * @param darkTheme Whether to use dark colors; follows the device setting by default.
+ * @param dynamicColor Whether to use wallpaper-based colors on Android 12 or newer.
+ * @param content The screens and other UI to show inside this theme.
+ */
 @Composable
 fun LegioneventsTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

@@ -1,6 +1,9 @@
+import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.dokka)
     id("com.google.gms.google-services")
 }
 
@@ -33,6 +36,21 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+}
+
+dokka {
+    dokkaPublications.html {
+        moduleName.set("Legion Events")
+        // Keep generated HTML outside build/ so it can be committed with the source.
+        outputDirectory.set(rootProject.layout.projectDirectory.dir("doc/api"))
+        suppressInheritedMembers.set(true)
+    }
+    dokkaSourceSets.configureEach {
+        documentedVisibilities.set(
+            setOf(VisibilityModifier.Public, VisibilityModifier.Protected, VisibilityModifier.Internal, VisibilityModifier.Private),
+        )
+        reportUndocumented.set(true)
     }
 }
 

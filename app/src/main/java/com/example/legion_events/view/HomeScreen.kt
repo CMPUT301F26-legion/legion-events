@@ -14,6 +14,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.R
 
+/** Shows the welcome message after the user's account and profile are ready. */
 @Composable
 fun HomeScreen() {
     Column(

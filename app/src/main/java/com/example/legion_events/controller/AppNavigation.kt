@@ -15,9 +15,20 @@ import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.OnboardingScreen
 import kotlinx.coroutines.flow.filterIsInstance
 
+/** Route shown while the app opens or creates the user's account. */
 internal const val ONBOARDING_ROUTE = "onboarding"
+/** Route shown after account and profile setup succeeds. */
 internal const val HOME_ROUTE = "home"
 
+/**
+ * Shows onboarding until the account is ready, then opens Home.
+ *
+ * Removes onboarding from the back stack so Back from Home leaves the app.
+ * A restored Home also waits for the current process to finish checking the profile.
+ *
+ * @param controller Provides the setup state and handles Retry actions.
+ * @param navController Moves between onboarding and Home and remembers the back stack.
+ */
 @Composable
 fun AppNavigation(
     controller: OnboardingController,

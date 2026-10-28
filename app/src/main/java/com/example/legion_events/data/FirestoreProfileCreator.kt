@@ -11,6 +11,17 @@ import java.net.URL
 
 /** Creates a missing profile when deployed rules deny reads before it exists. */
 internal class FirestoreProfileCreator {
+    /**
+     * Creates the user's profile only when its document does not already exist.
+     *
+     * Uses the user's own Firebase token and rules. If another caller creates the
+     * document first, leaves it unchanged and lets the repository read it afterward.
+     *
+     * @param user The authenticated user who owns the profile.
+     * @param projectId The project ID from the app's Firebase configuration.
+     * @param fields The exact new-profile defaults, including server timestamp markers.
+     * @throws UserInitializationException If authentication or the create request is rejected.
+     */
     suspend fun createIfAbsent(
         user: FirebaseUser,
         projectId: String,
@@ -55,7 +66,17 @@ internal class FirestoreProfileCreator {
         }
     }
 
+    /** Builds the Firestore request body used by the create-only operation. */
     companion object {
+        /**
+         * Converts profile defaults into a write that the server rejects if the document exists.
+         * @param database The Firestore database resource path, including the project ID.
+         * @param uid The authenticated user ID to use as the profile document ID.
+         * @param fields The new profile's strings, booleans, nulls, and server timestamp markers.
+         * @return A REST commit body with the no-overwrite condition and server time transforms.
+         * @throws IllegalArgumentException If a field marker is not a server timestamp.
+         * @throws IllegalStateException If a field has an unsupported value type.
+         */
         internal fun createRequest(
             database: String,
             uid: String,

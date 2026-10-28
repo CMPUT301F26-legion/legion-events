@@ -1,5 +1,6 @@
 *.iml
 .gradle
+/.kotlin/
 /local.properties
 /.idea/caches
 /.idea/libraries
@@ -8,6 +9,10 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
+
+# Keep generated Dokka HTML available for version control.
+!/doc/api/
+!/doc/api/**
 /build
 /captures
 .externalNativeBuild
