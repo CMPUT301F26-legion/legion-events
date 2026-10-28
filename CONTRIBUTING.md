@@ -10,6 +10,23 @@
 
 Read the CRC cards in `images/crc_cards` and [SCHEMA.md](SCHEMA.md) before changing data behavior.
 
+## Theme
+
+The app-wide **Dark mode** switch selects light or dark appearance. Light is the
+default, and the choice is saved on the device across app restarts.
+
+Define shared colors in `ui/theme/Color.kt` and map their roles in `ui/theme/Theme.kt`.
+Light mode uses moderately saturated fern-green accents, pure white backgrounds,
+and neutral gray controls. Dark mode uses charcoal surfaces with brighter green
+accents from the same family. The root
+`LegioneventsTheme` applies the selected palette to every screen.
+
+Use `MaterialTheme.colorScheme` roles such as `primary`, `background`, `surface`,
+and `onSurface` in components. Standard Material controls inherit these colors;
+avoid hardcoded colors or separate light/dark checks in each component. Keep
+preference storage in `ThemePreferences`, actions in `ThemeController`, and the
+switch UI in `ThemeToggle`.
+
 ## Accounts and ownership
 
 Account roles are `user` and `admin`. Ordinary users share the same capabilities.
