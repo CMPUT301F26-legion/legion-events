@@ -23,8 +23,8 @@ Keep each commit focused on one small feature. Separate unrelated changes and
 avoid adding future functionality to the same commit.
 
 Add simple KDoc to model, controller, and view functions, including private helpers.
-Use `@param`, `@return`, and `@property` where useful. Regenerate the HTML after
-changing documented code; `doc/api/` is tracked and should not be edited by hand.
+Use `@param`, `@return`, and `@property` where useful. Generate HTML locally when
+needed; `doc/api/` is ignored and should not be committed or edited by hand.
 
 ## Checks
 

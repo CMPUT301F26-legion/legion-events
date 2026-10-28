@@ -42,7 +42,7 @@ android {
 dokka {
     dokkaPublications.html {
         moduleName.set("Legion Events")
-        // Keep generated HTML outside build/ so it can be committed with the source.
+        // Local HTML output; handwritten documentation stays in doc/.
         outputDirectory.set(rootProject.layout.projectDirectory.dir("doc/api"))
         suppressInheritedMembers.set(true)
     }

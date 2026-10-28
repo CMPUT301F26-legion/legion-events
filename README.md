@@ -24,9 +24,8 @@ so controller helpers are documented too. Add simple explanations to every new o
 changed controller, view, and model function. Describe inputs with `@param` and
 return values with `@return` when useful; describe model fields with `@property`.
 
-Generated HTML is saved in `doc/api/`, outside the ignored build folders, and is
-explicitly allowed by `.gitignore`. Regenerate it after changing the KDoc and
-include the updated `doc/api/` files with your source changes when committing.
+Generated HTML is saved in `doc/api/` and ignored by Git. Generate it locally
+when needed; commit the KDoc source and Dokka configuration, not the HTML output.
 The first generation may download Dokka and its dependencies.
 
 See the [Dokka Gradle guide](https://kotlinlang.org/docs/dokka-gradle.html) for the
