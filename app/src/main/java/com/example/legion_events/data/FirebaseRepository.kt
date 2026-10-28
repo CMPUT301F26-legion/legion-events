@@ -1,6 +1,7 @@
 package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile
+import com.example.legion_events.model.Campsite
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -10,6 +11,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Source
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,7 +28,39 @@ import kotlinx.coroutines.withContext
 class FirebaseRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-) : UserRepository {
+) : UserRepository, CampsiteRepository {
+    /** Watches active campsites and removes the listener when the controller stops collecting. */
+    override fun observeCampsites(): Flow<List<Campsite>> = callbackFlow {
+        val listener = firestore.collection("campsites").whereEqualTo("active", true)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(IllegalStateException("Could not load campsites. Please retry.", error))
+                } else {
+                    try {
+                        trySend(snapshot?.documents.orEmpty().map(::readCampsite).sortedBy { it.name })
+                    } catch (error: Exception) {
+                        close(IllegalStateException("A campsite has incomplete listing information.", error))
+                    }
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    /** Reads only the fields needed by the campsite list and search filters. */
+    private fun readCampsite(document: DocumentSnapshot): Campsite = with(document) {
+        Campsite(
+            id = id,
+            ownerId = getString("ownerId").orEmpty(),
+            name = getString("name").orEmpty(),
+            description = getString("description").orEmpty(),
+            locationName = getString("locationName").orEmpty(),
+            maxGuests = requireNotNull(getLong("maxGuests")).toInt(),
+            pricePerNight = requireNotNull(getLong("pricePerNight")),
+            amenities = (get("amenities") as? List<*>)?.filterIsInstance<String>().orEmpty(),
+            tags = (get("tags") as? List<*>)?.filterIsInstance<String>().orEmpty(),
+        )
+    }
+
     /**
      * Opens the current account, signing in anonymously only when needed.
      *
@@ -130,7 +166,7 @@ class FirebaseRepository(
         }
 
         /**
-         * Builds the exact fields for a new entrant profile, with server timestamp markers.
+         * Builds the exact fields for a new user profile, with server timestamp markers.
          * @return New-account defaults; these must never be used to reset an existing profile.
          */
         internal fun newProfileFields(): Map<String, Any?> = mapOf(

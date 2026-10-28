@@ -107,7 +107,7 @@
   <div class="breadcrumbs"><a href="../../../index.html">Legion Events</a><span class="delimiter">/</span><a href="../index.html">com.example.legion_events.data</a><span class="delimiter">/</span><span class="current">FirebaseRepository</span></div>
   <div class="cover ">
     <h1 class="cover"><span>Firebase</span><wbr></wbr><span><span>Repository</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":app/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">FirebaseRepository</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>auth<span class="token operator">: </span><span data-unresolved-link="com.google.firebase.auth/FirebaseAuth///PointingToDeclaration/">FirebaseAuth</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>firestore<span class="token operator">: </span><span data-unresolved-link="com.google.firebase.firestore/FirebaseFirestore///PointingToDeclaration/">FirebaseFirestore</span></span></span><span class="token punctuation">)</span> : <a href="../-user-repository/index.html">UserRepository</a></div><p class="paragraph">Handles Firebase account and profile access, as assigned by the repository CRC card.</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":app/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">FirebaseRepository</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>auth<span class="token operator">: </span><span data-unresolved-link="com.google.firebase.auth/FirebaseAuth///PointingToDeclaration/">FirebaseAuth</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>firestore<span class="token operator">: </span><span data-unresolved-link="com.google.firebase.firestore/FirebaseFirestore///PointingToDeclaration/">FirebaseFirestore</span></span></span><span class="token punctuation">)</span> : <a href="../-user-repository/index.html">UserRepository</a>, <a href="../-campsite-repository/index.html">CampsiteRepository</a></div><p class="paragraph">Handles Firebase account and profile access, as assigned by the repository CRC card.</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
@@ -197,6 +197,36 @@
               <div>
                 <div class="title">
                   <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":app/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">suspend override </span><span class="token keyword">fun </span><a href="initialize-user.html"><span class="token function">initializeUser</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.example.legion_events.model/-user-profile/index.html">UserProfile</a></div><div class="brief "><p class="paragraph">Opens the current account, signing in anonymously only when needed.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-476502380%2FFunctions%2F-865142711" anchor-label="observeCampsites" id="-476502380%2FFunctions%2F-865142711" data-filterable-set=":app/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":app/release" data-filterable-set=":app/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="observe-campsites.html"><span>observe</span><wbr></wbr><span><span>Campsites</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-476502380%2FFunctions%2F-865142711"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":app/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="observe-campsites.html"><span class="token function">observeCampsites</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><span data-unresolved-link="kotlinx.coroutines.flow/Flow///PointingToDeclaration/">Flow</span><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../../com.example.legion_events.model/-campsite/index.html">Campsite</a><span class="token operator">&gt;</span><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Watches active campsites and removes the listener when the controller stops collecting.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="181884132%2FFunctions%2F-865142711" anchor-label="readCampsite" id="181884132%2FFunctions%2F-865142711" data-filterable-set=":app/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":app/release" data-filterable-set=":app/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="read-campsite.html"><span>read</span><wbr></wbr><span><span>Campsite</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="181884132%2FFunctions%2F-865142711"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":app/release"><div class="symbol monospace"><span class="token keyword">private </span><span class="token keyword">fun </span><a href="read-campsite.html"><span class="token function">readCampsite</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">document<span class="token operator">: </span><span data-unresolved-link="com.google.firebase.firestore/DocumentSnapshot///PointingToDeclaration/">DocumentSnapshot</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="../../com.example.legion_events.model/-campsite/index.html">Campsite</a></div><div class="brief "><p class="paragraph">Reads only the fields needed by the campsite list and search filters.</p></div></div></div>
                 </div>
               </div>
             </div>

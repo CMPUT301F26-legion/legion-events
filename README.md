@@ -1,5 +1,9 @@
 # Campsite Lottery Application
 
+The home screen lists active Firestore campsites with text search, guest-capacity,
+and nightly-price filters. See [CONTRIBUTING.md](CONTRIBUTING.md) for project conventions
+and [SCHEMA.md](SCHEMA.md) for account roles and listing fields.
+
 ## Generate the API documentation
 
 Run this command from the repository root:

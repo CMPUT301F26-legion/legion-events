@@ -13,6 +13,9 @@ import com.example.legion_events.controller.AppNavigation
 import com.example.legion_events.controller.OnboardingController
 import com.example.legion_events.data.UserInitializationException
 import com.example.legion_events.data.UserRepository
+import com.example.legion_events.data.CampsiteRepository
+import com.example.legion_events.model.Campsite
+import kotlinx.coroutines.flow.flowOf
 import com.example.legion_events.model.UserProfile
 import com.example.legion_events.ui.theme.LegioneventsTheme
 import kotlinx.coroutines.CompletableDeferred
@@ -26,6 +29,10 @@ class OnboardingNavigationTest {
     @get:Rule
     val compose = createComposeRule()
 
+    private val campsites = object : CampsiteRepository {
+        override fun observeCampsites() = flowOf(emptyList<Campsite>())
+    }
+
     @Test
     fun loadingWaitsForSuccessAndHomeHasNoOnboardingBackEntry() {
         val result = CompletableDeferred<UserProfile>()
@@ -35,7 +42,7 @@ class OnboardingNavigationTest {
         compose.runOnUiThread { controller = OnboardingController(repository) }
         compose.setContent {
             navigation = rememberNavController()
-            LegioneventsTheme { AppNavigation(controller, navigation) }
+            LegioneventsTheme { AppNavigation(controller, navigation, campsites) }
         }
         compose.onNodeWithText("Opening your account…").assertIsDisplayed()
         compose.runOnIdle { assertEquals("onboarding", navigation.currentDestination?.route) }
@@ -58,10 +65,10 @@ class OnboardingNavigationTest {
         }
         lateinit var controller: OnboardingController
         compose.runOnUiThread { controller = OnboardingController(repository) }
-        compose.setContent { LegioneventsTheme { AppNavigation(controller) } }
+        compose.setContent { LegioneventsTheme { AppNavigation(controller, campsites = campsites) } }
         compose.onNodeWithText("Connection unavailable. Please retry.").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
-        compose.onNodeWithText("Welcome to Legion Events").assertDoesNotExist()
+        compose.onNodeWithText("Explore campsites").assertDoesNotExist()
         compose.runOnIdle { fail = false }
         compose.onNodeWithText("Retry").performClick()
         waitForHome()
@@ -74,10 +81,10 @@ class OnboardingNavigationTest {
         compose.runOnUiThread {
             controller = OnboardingController(FakeRepository { UserProfile(uid = "entrant", disabled = true) })
         }
-        compose.setContent { LegioneventsTheme { AppNavigation(controller) } }
+        compose.setContent { LegioneventsTheme { AppNavigation(controller, campsites = campsites) } }
         compose.onNodeWithText("Account disabled").assertIsDisplayed()
         compose.onNodeWithText("Check again").assertIsDisplayed()
-        compose.onNodeWithText("Welcome to Legion Events").assertDoesNotExist()
+        compose.onNodeWithText("Explore campsites").assertDoesNotExist()
     }
 
     @Test
@@ -89,7 +96,7 @@ class OnboardingNavigationTest {
         compose.runOnUiThread { controller = OnboardingController(repository) }
         restoration.setContent {
             navigation = rememberNavController()
-            LegioneventsTheme { AppNavigation(controller, navigation) }
+            LegioneventsTheme { AppNavigation(controller, navigation, campsites) }
         }
         waitForHome()
         restoration.emulateSavedInstanceStateRestore()
@@ -109,7 +116,7 @@ class OnboardingNavigationTest {
             currentController.value = OnboardingController(FakeRepository { UserProfile(uid = "entrant") })
         }
         restoration.setContent {
-            LegioneventsTheme { AppNavigation(checkNotNull(currentController.value)) }
+            LegioneventsTheme { AppNavigation(checkNotNull(currentController.value), campsites = campsites) }
         }
         waitForHome()
 
@@ -119,20 +126,20 @@ class OnboardingNavigationTest {
         }
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithText("Opening your account…").assertIsDisplayed()
-        compose.onNodeWithText("Welcome to Legion Events").assertDoesNotExist()
+        compose.onNodeWithText("Explore campsites").assertDoesNotExist()
         pending.complete(UserProfile(uid = "entrant", disabled = true))
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Account disabled").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Account disabled").assertIsDisplayed()
-        compose.onNodeWithText("Welcome to Legion Events").assertDoesNotExist()
+        compose.onNodeWithText("Explore campsites").assertDoesNotExist()
     }
 
     private fun waitForHome() {
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("Welcome to Legion Events").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Explore campsites").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Welcome to Legion Events").assertIsDisplayed()
+        compose.onNodeWithText("Explore campsites").assertIsDisplayed()
     }
 
     private class FakeRepository(private val initialize: suspend () -> UserProfile) : UserRepository {
