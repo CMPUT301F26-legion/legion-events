@@ -2,6 +2,7 @@ package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile
 import com.example.legion_events.model.Campsite
+import com.example.legion_events.model.Photo
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -21,14 +22,34 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * Handles Firebase account and profile access, as assigned by the repository CRC card.
+ * Handles Firebase accounts, campsite reads, and photos, as assigned by the repository CRC card.
  * @property auth The Firebase authentication service that keeps the user's identity.
- * @property firestore The Firestore database that stores user profiles.
+ * @property firestore The app's Firestore database.
  */
 class FirebaseRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-) : UserRepository, CampsiteRepository {
+) : UserRepository, CampsiteRepository, CampsiteDetailsRepository {
+    /** Reads the selected active campsite; missing or inactive listings are unavailable. */
+    override suspend fun getCampsite(campsiteId: String): Campsite? {
+        val document = firestore.collection("campsites").document(campsiteId).get().await()
+        return if (document.exists() && document.getBoolean("active") == true) readCampsite(document) else null
+    }
+
+    /** Loads only photos belonging to this campsite, placing its cover first without duplicating it. */
+    override suspend fun getCampsitePhotos(campsiteId: String, coverPhotoId: String?): List<Photo> =
+        firestore.collection("photos").whereEqualTo("targetType", "campsite")
+            .whereEqualTo("targetId", campsiteId).get().await().documents.map { document ->
+                Photo(
+                    id = document.id,
+                    ownerId = document.getString("ownerId").orEmpty(),
+                    targetType = document.getString("targetType").orEmpty(),
+                    targetId = document.getString("targetId").orEmpty(),
+                    imageBase64 = document.getString("imageBase64").orEmpty(),
+                    mimeType = document.getString("mimeType").orEmpty(),
+                )
+            }.sortedBy { it.id != coverPhotoId }
+
     /** Watches active campsites and removes the listener when the controller stops collecting. */
     override fun observeCampsites(): Flow<List<Campsite>> = callbackFlow {
         val listener = firestore.collection("campsites").whereEqualTo("active", true)
@@ -46,7 +67,7 @@ class FirebaseRepository(
         awaitClose { listener.remove() }
     }
 
-    /** Reads only the fields needed by the campsite list and search filters. */
+    /** Maps the shared campsite schema; optional details have safe defaults for older listings. */
     private fun readCampsite(document: DocumentSnapshot): Campsite = with(document) {
         Campsite(
             id = id,
@@ -58,6 +79,19 @@ class FirebaseRepository(
             pricePerNight = requireNotNull(getLong("pricePerNight")),
             amenities = (get("amenities") as? List<*>)?.filterIsInstance<String>().orEmpty(),
             tags = (get("tags") as? List<*>)?.filterIsInstance<String>().orEmpty(),
+            location = getGeoPoint("location"),
+            // Display either a rules text block or separate rule strings without changing stored data.
+            rules = when (val rules = get("rules")) {
+                is String -> listOf(rules).filter(String::isNotBlank)
+                is List<*> -> rules.filterIsInstance<String>()
+                else -> emptyList()
+            },
+            cancellationPolicy = getString("cancellationPolicy").orEmpty(),
+            availableNights = (get("availableNights") as? List<*>)?.filterIsInstance<String>()
+                .orEmpty().distinct().sorted(),
+            photoId = getString("photoId"),
+            ratingAverage = (get("ratingAverage") as? Number)?.toDouble() ?: 0.0,
+            ratingCount = getLong("ratingCount") ?: 0,
         )
     }
 
