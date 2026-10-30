@@ -10,6 +10,18 @@
 
 Read the CRC cards in `images/crc_cards` and [SCHEMA.md](SCHEMA.md) before changing data behavior.
 
+## Campsite details
+
+Tapping a listing opens `CampsiteDetailsScreen` through `AppNavigation`, passing
+only its document ID. `CampsiteDetailsController` loads the listing and photos
+through `CampsiteDetailsRepository`, implemented by `FirebaseRepository`.
+Search text and filters remain on the Home back-stack entry. Keep new detail UI in
+the details screen and database reads in the repository. Photos use the schema's
+Base64 data and are decoded off the main thread as gallery items become visible.
+
+The search bar's QR scan button and the details screen's lottery-entry button are
+disabled placeholders. Neither requests permissions nor changes Firestore data.
+
 ## Theme
 
 The app-wide **Dark mode** switch selects light or dark appearance. Light is the

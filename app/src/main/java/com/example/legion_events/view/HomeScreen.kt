@@ -15,12 +15,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.CampsiteFilter
 import com.example.legion_events.controller.CampsiteListState
 import com.example.legion_events.model.Campsite
+import com.example.legion_events.R
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Locale
@@ -31,6 +33,7 @@ import java.util.Locale
  * @param onSearch Changes the search text in the controller.
  * @param onFilter Changes the selected filter.
  * @param onRetry Reloads listings after a failed request.
+ * @param onCampsiteClick Opens a campsite using its document ID.
  */
 @Composable
 fun HomeScreen(
@@ -38,6 +41,7 @@ fun HomeScreen(
     onSearch: (String) -> Unit,
     onFilter: (CampsiteFilter) -> Unit,
     onRetry: () -> Unit,
+    onCampsiteClick: (String) -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val focus = LocalFocusManager.current
@@ -60,6 +64,12 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+                    trailingIcon = {
+                        // Reserved for QR search; no camera access or navigation is connected yet.
+                        IconButton(onClick = {}, enabled = false) {
+                            Icon(painterResource(R.drawable.ic_qr_code_scan), "Scan campsite QR code (coming soon)")
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent,
                         focusedLabelColor = accent, cursorColor = accent),
                 )
@@ -94,17 +104,17 @@ fun HomeScreen(
                 }
                 else -> {
                     item { Text("${listings.size} ${if (listings.size == 1) "campsite" else "campsites"}", style = MaterialTheme.typography.labelLarge) }
-                    items(listings, key = { it.id }) { CampsiteListing(it) }
+                    items(listings, key = { it.id }) { site -> CampsiteListing(site) { onCampsiteClick(site.id) } }
                 }
             }
         }
     }
 }
 
-/** Shows listing information without opening a detail or editing screen. */
+/** Shows listing information and forwards taps to the shared router through the screen callback. */
 @Composable
-private fun CampsiteListing(site: Campsite) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+private fun CampsiteListing(site: Campsite, onClick: () -> Unit) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -118,5 +128,5 @@ private fun CampsiteListing(site: Campsite) {
 }
 
 /** Formats integer CAD cents without rounding a floating-point price. */
-private fun campsitePrice(cents: Long): String =
+internal fun campsitePrice(cents: Long): String =
     NumberFormat.getCurrencyInstance(Locale.CANADA).format(BigDecimal.valueOf(cents, 2)) + " CAD / night"
