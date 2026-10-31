@@ -61,6 +61,13 @@ class OnboardingController(private val repository: UserRepository) : ViewModel()
         }
     }
 
+    /** Opens a new account after the current profile is deleted. */
+    fun restart() {
+        if (state.value is OnboardingState.Loading) return
+        mutableState.value = OnboardingState.Loading
+        initialize()
+    }
+
     /** Opens the account in a lifecycle-aware coroutine and updates the screen state. */
     private fun initialize() {
         viewModelScope.launch {

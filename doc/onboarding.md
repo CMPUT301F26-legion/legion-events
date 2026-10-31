@@ -2,8 +2,9 @@
 
 The app uses Firebase Anonymous Authentication. On launch it reuses the current
 user or signs in anonymously, then creates `users/{uid}` only if it is missing.
-Existing profile data is never reset. Successful initialization opens campsite
-search; failures show Retry and disabled accounts show a blocked screen.
+Existing profile data is never reset. Successful initialization opens the S01
+welcome screen on a device's first launch and campsite search afterward; failures
+show Retry and disabled accounts show a blocked screen.
 
 ## Configuration
 

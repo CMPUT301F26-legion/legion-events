@@ -10,6 +10,24 @@
 
 Read the CRC cards in `images/crc_cards` and [SCHEMA.md](SCHEMA.md) before changing data behavior.
 
+## Navigation skeleton
+
+`AppNavigation.kt` has a route constant for every mockup screen (S01 to S20). Screens
+not built yet are listed in `PLACEHOLDER_SCREENS` and show a "Coming soon" page.
+To build yours, remove its entry there, register it with `composable(...)` wrapped in
+`RequireAccount`, and add route arguments if it needs an ID. The bottom bar shows on
+the five tab routes: Explore, Lotteries, Inbox, Bookings, and Profile.
+
+## Profile
+
+S01 (`WelcomeScreen`) appears once per device after setup; `WelcomePreferences`
+remembers it. S11 (`ProfileScreen`) edits name, email, and phone, sets
+`notificationsEnabled` (check it before sending a notification), and deletes the
+profile. Deleting removes `users/{uid}` and the anonymous account, then onboarding
+opens a new identity. `ProfileController` handles these actions through
+`ProfileRepository`, implemented by `FirebaseProfileRepository`. `PolicyScreen`
+shows the app policy and guidelines from S01 and S11.
+
 ## Campsite details
 
 Tapping a listing opens `CampsiteDetailsScreen` through `AppNavigation`, passing
