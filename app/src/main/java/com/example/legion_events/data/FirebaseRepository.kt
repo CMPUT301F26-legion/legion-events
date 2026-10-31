@@ -170,25 +170,6 @@ class FirebaseRepository(
         }
     }
 
-    /**
-     * Reads saved document fields into a profile value without changing Firestore.
-     * @param uid The authenticated user ID belonging to this document.
-     * @return A profile with saved values and defaults for fields that are missing.
-     */
-    private fun DocumentSnapshot.toUserProfile(uid: String) = UserProfile(
-        uid = uid,
-        name = getString("name") ?: "",
-        email = getString("email") ?: "",
-        phone = getString("phone") ?: "",
-        role = getString("role") ?: "user",
-        disabled = getBoolean("disabled") ?: false,
-        photoId = getString("photoId"),
-        fcmToken = getString("fcmToken"),
-        notificationsEnabled = getBoolean("notificationsEnabled") ?: true,
-        createdAt = getTimestamp("createdAt"),
-        updatedAt = getTimestamp("updatedAt"),
-    )
-
     /** Shared repository access and the exact defaults used for new profiles. */
     companion object {
         /** Prevents simultaneous callers from starting separate sign-in requests. */
