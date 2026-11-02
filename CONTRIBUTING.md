@@ -12,6 +12,10 @@ Read the CRC cards in `images/crc_cards` and [SCHEMA.md](SCHEMA.md) before chang
 
 ## Navigation skeleton
 
+S11's "Manage my campsites" opens the owner dashboard (S12) for every user, since
+ownership is not a role. Its "Admin dashboard" link (S19) appears only when `role`
+is `admin`. Reach other owner and admin screens from those dashboards.
+
 `AppNavigation.kt` has a route constant for every mockup screen (S01 to S20). Screens
 not built yet are listed in `PLACEHOLDER_SCREENS` and show a "Coming soon" page.
 To build yours, remove its entry there, register it with `composable(...)` wrapped in

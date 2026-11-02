@@ -25,6 +25,7 @@ private val PHONE = Regex("""^\+?[\d\s().-]{7,20}$""")
  * @property emailError Why the email cannot be saved, or null.
  * @property phoneError Why the phone number cannot be saved, or null.
  * @property notificationsEnabled Whether the user receives notifications.
+ * @property admin Whether the user can open the admin dashboard.
  * @property saving Whether a contact or notification change is being saved.
  * @property message A short result to show after saving, or null.
  * @property confirmingDelete Whether the delete confirmation dialog is open.
@@ -41,6 +42,7 @@ data class ProfileState(
     val emailError: String? = null,
     val phoneError: String? = null,
     val notificationsEnabled: Boolean = true,
+    val admin: Boolean = false,
     val saving: Boolean = false,
     val message: String? = null,
     val confirmingDelete: Boolean = false,
@@ -70,7 +72,8 @@ class ProfileController(private val repository: ProfileRepository) : ViewModel()
             mutableState.value = try {
                 val profile = repository.getProfile()
                 ProfileState(loading = false, name = profile.name, email = profile.email,
-                    phone = profile.phone, notificationsEnabled = profile.notificationsEnabled)
+                    phone = profile.phone, notificationsEnabled = profile.notificationsEnabled,
+                    admin = profile.role == "admin")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

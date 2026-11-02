@@ -102,6 +102,31 @@ class ProfileNavigationTest {
     }
 
     @Test
+    fun anyUserCanOpenOwnerDashboardButOnlyAdminsSeeAdminDashboard() {
+        WelcomePreferences(preferences).markWelcomeSeen()
+        open()
+        waitFor("Explore campsites")
+        compose.onNodeWithText("Profile").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Manage my campsites").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Admin dashboard").assertDoesNotExist()
+        compose.onNodeWithText("Manage my campsites").performScrollTo().performClick()
+        waitFor("Owner dashboard")
+    }
+
+    @Test
+    fun adminCanOpenAdminDashboard() {
+        WelcomePreferences(preferences).markWelcomeSeen()
+        profiles.role = "admin"
+        open()
+        waitFor("Explore campsites")
+        compose.onNodeWithText("Profile").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Admin dashboard").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Admin dashboard").performScrollTo().performClick()
+        waitFor("Admin dashboard")
+        compose.runOnIdle { assertEquals("admin", navigation.currentDestination?.route) }
+    }
+
+    @Test
     fun deletingProfileOpensNewAccount() {
         WelcomePreferences(preferences).markWelcomeSeen()
         open()
@@ -153,8 +178,9 @@ class ProfileNavigationTest {
         var saved: Triple<String, String, String>? = null
         var notifications: Boolean? = null
         var deletes = 0
+        var role = "user"
 
-        override suspend fun getProfile() = UserProfile("entrant", "Alex Morgan", "alex@example.com", "780-555-0142")
+        override suspend fun getProfile() = UserProfile("entrant", "Alex Morgan", "alex@example.com", "780-555-0142", role)
 
         override suspend fun updateContact(name: String, email: String, phone: String) {
             saved = Triple(name, email, phone)

@@ -239,6 +239,8 @@ fun AppNavigation(
                         onPhoneChange = profile::setPhone,
                         onSave = profile::save,
                         onNotificationsChange = profile::setNotificationsEnabled,
+                        onOwnerDashboard = { navController.navigate(OWNER_DASHBOARD_ROUTE) { launchSingleTop = true } },
+                        onAdminDashboard = { navController.navigate(ADMIN_DASHBOARD_ROUTE) { launchSingleTop = true } },
                         onPolicy = { navController.navigate(POLICY_ROUTE) { launchSingleTop = true } },
                         onDelete = profile::requestDelete,
                         onConfirmDelete = profile::confirmDelete,
