@@ -23,6 +23,7 @@ import com.example.legion_events.controller.OnboardingController
 import com.example.legion_events.controller.ThemeController
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.ThemePreferences
+import com.example.legion_events.data.WelcomePreferences
 import com.example.legion_events.ui.theme.DarkForest
 import com.example.legion_events.ui.theme.LegioneventsTheme
 import com.example.legion_events.ui.theme.LightBackground
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
         val theme = ViewModelProvider(this, viewModelFactory {
             initializer { ThemeController(ThemePreferences(getSharedPreferences("appearance", MODE_PRIVATE))) }
         })[ThemeController::class.java]
+        val welcome = WelcomePreferences(getSharedPreferences("onboarding", MODE_PRIVATE))
         enableEdgeToEdge()
         setContent {
             val darkTheme by theme.darkTheme.collectAsStateWithLifecycle()
@@ -59,7 +61,7 @@ class MainActivity : ComponentActivity() {
                     topBar = { ThemeToggle(darkTheme, theme::setDarkTheme) },
                 ) { innerPadding ->
                     Box(Modifier.padding(innerPadding)) {
-                        AppNavigation(controller)
+                        AppNavigation(controller, welcome = welcome)
                     }
                 }
             }

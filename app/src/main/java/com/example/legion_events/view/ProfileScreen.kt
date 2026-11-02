@@ -23,6 +23,8 @@ import com.example.legion_events.controller.ProfileState
  * @param onPhoneChange Sends phone edits to the controller.
  * @param onSave Saves the contact fields.
  * @param onNotificationsChange Saves the notification choice.
+ * @param onOwnerDashboard Opens the owner dashboard for the user's campsites.
+ * @param onAdminDashboard Opens the admin dashboard; shown only to admins.
  * @param onPolicy Opens the app policy and guidelines.
  * @param onDelete Opens the delete confirmation.
  * @param onConfirmDelete Deletes the profile.
@@ -37,6 +39,8 @@ fun ProfileScreen(
     onPhoneChange: (String) -> Unit,
     onSave: () -> Unit,
     onNotificationsChange: (Boolean) -> Unit,
+    onOwnerDashboard: () -> Unit,
+    onAdminDashboard: () -> Unit,
     onPolicy: () -> Unit,
     onDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
@@ -77,6 +81,9 @@ fun ProfileScreen(
                     }
                     Text("When notifications are off, check your inbox for lottery results and reservation updates.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Any user can own campsites, so the owner dashboard is not limited by role.
+                    TextButton(onClick = onOwnerDashboard) { Text("Manage my campsites") }
+                    if (state.admin) TextButton(onClick = onAdminDashboard) { Text("Admin dashboard") }
                     TextButton(onClick = onPolicy) { Text("App policy & guidelines") }
                     TextButton(onClick = onDelete, enabled = !state.deleting) {
                         Text(if (state.deleting) "Deleting profile…" else "Delete profile", color = MaterialTheme.colorScheme.error)

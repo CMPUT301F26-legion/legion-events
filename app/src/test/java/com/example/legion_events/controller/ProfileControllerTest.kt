@@ -43,7 +43,15 @@ class ProfileControllerTest {
             assertEquals("alex@example.com", email)
             assertEquals("780-555-0142", phone)
             assertFalse(notificationsEnabled)
+            assertFalse(admin)
         }
+    }
+
+    @Test
+    fun adminRoleEnablesAdminDashboard() = runTest(dispatcher) {
+        val controller = ProfileController(FakeRepository().apply { role = "admin" })
+        runCurrent()
+        assertTrue(controller.state.value.admin)
     }
 
     @Test
@@ -193,6 +201,7 @@ class ProfileControllerTest {
     private class FakeRepository : ProfileRepository {
         var failLoad = false
         var failWrites = false
+        var role = "user"
         var saved: Triple<String, String, String>? = null
         var notifications: Boolean? = null
         var deletes = 0
@@ -200,7 +209,7 @@ class ProfileControllerTest {
 
         override suspend fun getProfile(): UserProfile {
             if (failLoad) error("offline")
-            return UserProfile("entrant", "Alex Morgan", "alex@example.com", "780-555-0142", notificationsEnabled = false)
+            return UserProfile("entrant", "Alex Morgan", "alex@example.com", "780-555-0142", role, notificationsEnabled = false)
         }
 
         override suspend fun updateContact(name: String, email: String, phone: String) {
