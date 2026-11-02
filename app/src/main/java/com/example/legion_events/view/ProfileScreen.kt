@@ -89,7 +89,7 @@ fun ProfileScreen(
         AlertDialog(
             onDismissRequest = onCancelDelete,
             title = { Text("Delete your profile?") },
-            text = { Text("Your profile, waiting list entries and reservations will be removed. This cannot be undone.") },
+            text = { Text("Your profile will be removed. This cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = onConfirmDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
