@@ -91,6 +91,21 @@ class OnboardingControllerTest {
     }
 
     @Test
+    fun restartOpensNewAccountAfterProfileDeletion() = runTest(dispatcher) {
+        var uid = "deleted-entrant"
+        val repository = FakeRepository { UserProfile(uid = uid) }
+        val controller = controller(repository)
+        runCurrent()
+        uid = "new-entrant"
+        controller.restart()
+        controller.restart()
+        assertEquals(OnboardingState.Loading, controller.state.value)
+        runCurrent()
+        assertEquals(2, repository.calls)
+        assertEquals("new-entrant", (controller.state.value as OnboardingState.Ready).profile.uid)
+    }
+
+    @Test
     fun disabledAuthenticationIsBlocked() = runTest(dispatcher) {
         val controller = controller(FakeRepository { throw AccountDisabledException() })
         runCurrent()
