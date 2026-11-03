@@ -16,7 +16,8 @@ interface OfferRepository {
      * @param offerId Firestore document ID of the offer.
      * @return The saved offer, or null if it no longer exists.
      * @throws IllegalStateException If no user is signed in.
-     * @throws SecurityException If the offer belongs to another user.
+     * @throws IllegalArgumentException If offerId is blank or contains a document path.
+     * @throws SecurityException If the offer belongs to another user or Firestore denies access.
      */
     suspend fun getOffer(offerId: String): BookingOffer?
 
@@ -24,6 +25,7 @@ interface OfferRepository {
      * Reads all offers belonging to the signed-in user, including offers that are no longer open.
      * @return The user's offers, or an empty list if they have none.
      * @throws IllegalStateException If no user is signed in.
+     * @throws SecurityException If Firestore denies access.
      */
     suspend fun getOffersForCurrentUser(): List<BookingOffer>
 
@@ -39,7 +41,8 @@ interface OfferRepository {
      * @return The saved declined offer.
      * @throws IllegalStateException If no user is signed in, the offer is missing, or it can no
      * longer be declined.
-     * @throws SecurityException If the offer belongs to another user.
+     * @throws IllegalArgumentException If offerId is blank or contains a document path.
+     * @throws SecurityException If the offer belongs to another user or Firestore denies access.
      */
     suspend fun declineOffer(offerId: String): BookingOffer
 }

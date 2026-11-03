@@ -44,6 +44,14 @@ Base64 data and are decoded off the main thread as gallery items become visible.
 The search bar's QR scan button and the details screen's lottery-entry button are
 disabled placeholders. Neither requests permissions nor changes Firestore data.
 
+## Booking offers
+
+`FirebaseOfferRepository` implements `OfferRepository` for the signed-in entrant's
+offers. It checks ownership, maps the shared `BookingOffer` schema, and declines
+open offers in a transaction. Views use the interface through a controller.
+Offer creation belongs to the draw worker. See [the booking-offer guide](doc/booking-offers.md)
+for the method behavior, error handling, Firebase rule requirements, and tests.
+
 ## Theme
 
 The app-wide **Dark mode** switch selects light or dark appearance. Light is the

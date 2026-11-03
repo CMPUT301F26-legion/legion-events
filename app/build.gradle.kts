@@ -1,10 +1,25 @@
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
+import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.Classpath
+import org.gradle.process.CommandLineArgumentProvider
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.dokka)
     id("com.google.gms.google-services")
+}
+
+// Attach Mockito explicitly for local JVM tests on Java 21 and newer.
+val mockitoAgent = configurations.create("mockitoAgent")
+
+/** Resolves the test agent at execution time and tracks it as a classpath input. */
+class MockitoAgentArguments(@get:Classpath val classpath: FileCollection) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-javaagent:${classpath.singleFile.absolutePath}")
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgumentProviders.add(MockitoAgentArguments(mockitoAgent))
 }
 
 android {
@@ -71,6 +86,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    mockitoAgent(libs.mockito.core) { isTransitive = false }
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
