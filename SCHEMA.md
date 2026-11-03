@@ -44,3 +44,19 @@ Photos are stored at `photos/{id}` with `ownerId`, `targetType`, `targetId`,
 where `targetType == "campsite"` and `targetId` matches the selected campsite.
 Its `photoId` identifies the cover, shown first when present in those results.
 Image data is Base64-encoded JPEG, WebP, or PNG, rather than a download URL.
+
+## Lotteries
+
+Lotteries are stored at `lotteries/{id}`. Any user can create one for campsites they own.
+
+| Field | Type |
+| --- | --- |
+| Document ID | String, not an extra stored field |
+| `ownerId` | User ID string |
+| `title` | String |
+| `campsiteIds` | String array of campsite IDs, at least one |
+| `registrationStart`, `registrationEnd` | Timestamp |
+| `bookingStart`, `bookingEnd` | Night dates in `YYYY-MM-DD` |
+| `numWinners` | Integer, at least 1 |
+| `waitlistCapacity` | Integer, or missing for no limit |
+| `drawn` | Boolean, set once when winners are drawn |
