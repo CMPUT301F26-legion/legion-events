@@ -1,3 +1,14 @@
+/*
+ * FirebaseProfileRepository.kt
+ *
+ * Purpose: Firebase implementation of ProfileRepository, backed by users/{uid} and the anonymous
+ *   Firebase Auth account.
+ * Role: Data layer (MVC model access). The only place profile edits and deletion reach Firestore.
+ * Outstanding issues: Waitlist entries and reservations are left behind on delete. Firestore
+ *   security rules must allow a user to update and delete their own users/{uid}; tests use fakes,
+ *   so this is not covered automatically. initializeUser() still lives in FirebaseRepository and
+ *   should move here.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile

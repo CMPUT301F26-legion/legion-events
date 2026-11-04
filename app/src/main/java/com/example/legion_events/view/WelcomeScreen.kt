@@ -1,3 +1,11 @@
+/*
+ * WelcomeScreen.kt
+ *
+ * Purpose: S01 Welcome & device identity: introduces the lottery and explains there is no username
+ *   or password (US 01.09.01, 01.11.01).
+ * Role: View in MVC. Only renders text and forwards button taps; it does not access Firebase.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.background

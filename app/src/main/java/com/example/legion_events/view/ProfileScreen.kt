@@ -1,3 +1,11 @@
+/*
+ * ProfileScreen.kt
+ *
+ * Purpose: S11 Profile & settings: edit name, email, and phone, opt out of notifications, open the
+ *   dashboards and policy, and delete the profile.
+ * Role: View in MVC. Renders ProfileState and forwards actions to ProfileController.
+ * Outstanding issues: No profile photo or accessibility settings (S11b) yet; both are deferred.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.*

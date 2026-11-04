@@ -1,3 +1,10 @@
+/*
+ * PlaceholderScreen.kt
+ *
+ * Purpose: "Coming soon" page for screens that have a route but are not built yet.
+ * Role: View in MVC, used by AppNavigation's navigation skeleton.
+ * Outstanding issues: Temporary: each placeholder is removed as its owner builds the real screen.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.*

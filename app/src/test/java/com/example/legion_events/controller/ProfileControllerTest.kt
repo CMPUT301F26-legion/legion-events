@@ -1,3 +1,11 @@
+/*
+ * ProfileControllerTest.kt
+ *
+ * Purpose: Unit tests for ProfileController: loading, validation, saving, the notification opt-
+ *   out, admin access, and deletion.
+ * Role: Tests the controller with a fake ProfileRepository, so no Firebase access is needed.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import com.example.legion_events.data.ProfileRepository
