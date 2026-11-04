@@ -29,6 +29,10 @@ class CampsiteSearchTest {
         compose.onNodeWithText("Spruce Creek").assertIsDisplayed()
         compose.onNodeWithText("Pine Ridge").assertDoesNotExist()
         compose.onNodeWithText("Search campsites").performTextClearance()
+        // Clearing refocuses the field, so the keyboard can push the first listing out of the
+        // LazyColumn's viewport on small screens. Scroll the list itself, since an off-screen
+        // lazy item is not composed and cannot be found by performScrollTo().
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Pine Ridge"))
         compose.onNodeWithText("Pine Ridge").assertIsDisplayed()
     }
 

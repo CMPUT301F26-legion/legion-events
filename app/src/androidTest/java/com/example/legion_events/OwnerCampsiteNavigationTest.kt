@@ -2,6 +2,7 @@ package com.example.legion_events
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -73,9 +74,12 @@ class OwnerCampsiteNavigationTest {
             assertEquals("owner/campsite/{campsiteId}", navigation.currentDestination?.route)
         }
 
-        compose.onNodeWithText("Campsite QR code").performScrollTo()
-        compose.onNodeWithText("Generate QR").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Generated").fetchSemanticsNodes().isNotEmpty() }
+        // Scroll to the button itself: on small screens it sits below the card title, off-screen.
+        compose.onNodeWithText("Generate QR").performScrollTo().performClick()
+        waitFor("Generated")
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithContentDescription("QR code for Two Jack Main").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test
