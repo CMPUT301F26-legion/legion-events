@@ -31,6 +31,20 @@ Other campsite fields remain unchanged: `location`, `rules`, `cancellationPolicy
 References use string IDs, coordinates use GeoPoint, instants use Timestamp, and
 night dates use `YYYY-MM-DD`. Security rules and indexes are maintained separately.
 
+## Owner campsite writes
+
+S13 writes exactly the fields the deployed security rules allow. A new `campsites/{id}`
+has `ownerId` set to the signed-in user, `active: true`, `ratingAverage: 0`,
+`ratingCount: 0`, `photoId: null`, and `createdAt`/`updatedAt` server timestamps.
+`location` is required. `rules` is one string with one rule per line, as the rules'
+`text()` check requires. Updates change only the editable fields and `updatedAt`.
+
+A new cover photo goes to `photos/{id}` with `targetType: "campsite"` and
+`mimeType: "image/jpeg"`, in the same batch that sets the campsite's `photoId`. Its
+Base64 data is at most 280,000 characters. The photo rule reads the campsite with
+`get()`, which cannot see writes in the same batch, so a new campsite is created first
+and its photo is added in a second write. Earlier photos are kept in the gallery.
+
 ## Campsite details and photos
 
 Details read the selected active `campsites/{id}` document. They display description,
