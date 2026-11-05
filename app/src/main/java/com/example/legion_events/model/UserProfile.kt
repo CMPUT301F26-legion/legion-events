@@ -1,3 +1,13 @@
+/*
+ * UserProfile.kt
+ *
+ * Purpose: The user's saved account details and preferences, stored at users/{uid} (US 01.07.03,
+ *   01.09.01, 01.10.01).
+ * Role: Model in MVC. Plain data with no Firebase calls; ProfileRepository and UserRepository read
+ *   and write it.
+ * Outstanding issues: role is a plain string ("user" or "admin") rather than an enum. Nothing sets
+ *   photoId or fcmToken yet; profile photos and push tokens come later.
+ */
 package com.example.legion_events.model
 
 import com.google.firebase.Timestamp
