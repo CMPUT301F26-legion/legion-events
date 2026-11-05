@@ -37,7 +37,7 @@ class FirebaseOwnerCampsiteRepository(
     /** Lists the owner's lotteries, skipping documents with missing required fields. */
     override suspend fun getMyLotteries(): List<Lottery> =
         firestore.collection("lotteries").whereEqualTo("ownerId", ownerId()).get().await()
-            .documents.mapNotNull { document -> runCatching { document.toOwnerLottery() }.getOrNull() }
+            .documents.mapNotNull { document -> runCatching { document.toLottery() }.getOrNull() }
 
     /** Reads each photo in parallel; there is at most one cover per campsite. */
     override suspend fun getPhotos(photoIds: List<String>): List<Photo> = coroutineScope {
@@ -192,22 +192,4 @@ private fun DocumentSnapshot.toOwnedCampsite() = Campsite(
     photoId = getString("photoId"),
     ratingAverage = (get("ratingAverage") as? Number)?.toDouble() ?: 0.0,
     ratingCount = getLong("ratingCount") ?: 0,
-)
-
-/**
- * Maps a lottery document for lottery badges.
- * @throws IllegalArgumentException If a required field is missing.
- */
-private fun DocumentSnapshot.toOwnerLottery() = Lottery(
-    id = id,
-    ownerId = getString("ownerId").orEmpty(),
-    title = getString("title").orEmpty(),
-    campsiteIds = (get("campsiteIds") as? List<*>)?.filterIsInstance<String>().orEmpty(),
-    registrationStart = requireNotNull(getTimestamp("registrationStart")),
-    registrationEnd = requireNotNull(getTimestamp("registrationEnd")),
-    bookingStart = getString("bookingStart").orEmpty(),
-    bookingEnd = getString("bookingEnd").orEmpty(),
-    numWinners = getLong("numWinners")?.toInt() ?: 0,
-    waitlistCapacity = getLong("waitlistCapacity")?.toInt(),
-    drawn = getBoolean("drawn") ?: false,
 )
