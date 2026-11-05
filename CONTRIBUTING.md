@@ -8,7 +8,8 @@
 - `data/`: repository interfaces and Firebase access. Keep database calls out of views.
 - `AppNavigation.kt`: the shared router. Register new screens here and pass IDs as route arguments.
 
-Read the CRC cards in `images/crc_cards` and [SCHEMA.md](SCHEMA.md) before changing data behavior.
+Read the CRC cards in `images/crc_cards`, the UML diagrams in `doc/uml`, and
+[SCHEMA.md](SCHEMA.md) before changing data behavior.
 
 ## Navigation skeleton
 
