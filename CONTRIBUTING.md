@@ -21,7 +21,8 @@ is `admin`. Reach other owner and admin screens from those dashboards.
 not built yet are listed in `PLACEHOLDER_SCREENS` and show a "Coming soon" page.
 To build yours, remove its entry there, register it with `composable(...)` wrapped in
 `RequireAccount`, and add route arguments if it needs an ID. The bottom bar shows on
-the five tab routes: Explore, Lotteries, Inbox, Bookings, and Profile.
+the five tab routes: Explore, Lotteries, Inbox, Bookings, and Profile. Offer list and
+detail routes also keep this bar visible with Lotteries selected.
 
 ## Profile
 
@@ -75,10 +76,14 @@ offers. It checks ownership, maps the shared `BookingOffer` schema, and declines
 open offers in a transaction. Views use the interface through a controller.
 Offer creation belongs to the draw worker. See [the booking-offer guide](doc/booking-offers.md)
 for the method behavior, error handling, Firebase rule requirements, and tests.
-The list and decline screens are under **Profile → Lottery offers**. Controllers
+The list and decline screens are under **Lotteries → Booking offers → View offers**. Controllers
 use the real repository by default; fake offers are supplied only by tests.
 Winning notifications can open an offer through `bookingOfferRoute(offerId)` when
 Part 5's inbox is implemented. Pass only the document ID; the repository checks ownership.
+`LotteriesScreen` reserves a separate Lottery entries section for Part 5; it does
+not treat winning offers as the user's full entry history. Offer views use the
+shared theme, outlined cards, and Back arrow, with decline/reload actions above
+the bottom navigation. Keep notification navigation compatible with direct offer links.
 
 ## Theme
 

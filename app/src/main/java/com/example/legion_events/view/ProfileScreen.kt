@@ -38,7 +38,6 @@ import com.example.legion_events.controller.ProfileState
  * @param onConfirmDelete Deletes the profile.
  * @param onCancelDelete Closes the delete confirmation.
  * @param onRetry Reloads the profile after a failed load.
- * @param onOffers Opens the signed-in user's lottery offers independently of the inbox.
  */
 @Composable
 fun ProfileScreen(
@@ -55,7 +54,6 @@ fun ProfileScreen(
     onConfirmDelete: () -> Unit,
     onCancelDelete: () -> Unit,
     onRetry: () -> Unit,
-    onOffers: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -91,7 +89,6 @@ fun ProfileScreen(
                     }
                     Text("When notifications are off, check your inbox for lottery results and reservation updates.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = onOffers) { Text("Lottery offers") }
                     // Any user can own campsites, so the owner dashboard is not limited by role.
                     TextButton(onClick = onOwnerDashboard) { Text("Manage my campsites") }
                     if (state.admin) TextButton(onClick = onAdminDashboard) { Text("Admin dashboard") }

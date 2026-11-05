@@ -26,12 +26,15 @@ import java.text.NumberFormat
 import java.util.Locale
 
 /**
- * A back arrow used at the top of owner screens.
+ * A shared back arrow used at the top of owner and offer screens.
  * @param onBack Returns to the previous screen.
+ * @param enabled Whether navigation is available while a screen action is pending.
  */
 @Composable
-internal fun BackArrow(onBack: () -> Unit) {
-    IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
+internal fun BackArrow(onBack: () -> Unit, enabled: Boolean = true) {
+    IconButton(onClick = onBack, enabled = enabled) {
+        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back")
+    }
 }
 
 /**

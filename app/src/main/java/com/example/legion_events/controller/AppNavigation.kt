@@ -41,6 +41,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.LotteryEditScreen
+import com.example.legion_events.view.LotteriesScreen
 import com.example.legion_events.view.CampsiteDetailsScreen
 import com.example.legion_events.view.CampsiteEditActions
 import com.example.legion_events.view.CampsiteEditScreen
@@ -142,7 +143,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  */
 private val PLACEHOLDER_SCREENS = mapOf(
     QR_SCAN_ROUTE to "Scan QR code",
-    LOTTERIES_ROUTE to "My lotteries",
     INBOX_ROUTE to "Notifications",
     RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
     BOOKINGS_ROUTE to "My reservations",
@@ -227,6 +227,11 @@ fun AppNavigation(
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
     val currentRoute = current?.destination?.route
+    // Offer screens are part of Lotteries, including links opened from the future inbox.
+    val entrantTab = when (currentRoute) {
+        BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
+        else -> currentRoute
+    }
     Column {
         NavHost(navController = navController, startDestination = ONBOARDING_ROUTE, modifier = Modifier.weight(1f)) {
             composable(ONBOARDING_ROUTE) {
@@ -285,6 +290,13 @@ fun AppNavigation(
             composable(POLICY_ROUTE) {
                 PolicyScreen { navController.popBackStack() }
             }
+            composable(LOTTERIES_ROUTE) {
+                RequireAccount(state, controller) {
+                    LotteriesScreen {
+                        navController.navigate(BOOKING_OFFER_ROUTE) { launchSingleTop = true }
+                    }
+                }
+            }
             composable(BOOKING_OFFER_ROUTE) {
                 RequireAccount(state, controller) {
                     val list: BookingOffersController = viewModel(factory = viewModelFactory {
@@ -341,7 +353,6 @@ fun AppNavigation(
                         onConfirmDelete = profile::confirmDelete,
                         onCancelDelete = profile::cancelDelete,
                         onRetry = profile::retry,
-                        onOffers = { navController.navigate(BOOKING_OFFER_ROUTE) { launchSingleTop = true } },
                     )
                 }
             }
@@ -499,12 +510,12 @@ fun AppNavigation(
                 }
             }
         }
-        if (TABS.any { it.route == currentRoute }) {
+        if (TABS.any { it.route == entrantTab }) {
             // The activity's Scaffold already pads for the system navigation bar.
             NavigationBar(windowInsets = WindowInsets(0)) {
                 TABS.forEach { tab ->
                     NavigationBarItem(
-                        selected = currentRoute == tab.route,
+                        selected = entrantTab == tab.route,
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(HOME_ROUTE) { saveState = true }

@@ -4,7 +4,7 @@ This is the Part 6 implementation for viewing lottery offers and declining an of
 (US 01.04.03). It can be developed and tested before the waitlist and notification
 features are available.
 
-The list and decline screens are reachable through **Profile → Lottery offers**.
+The list and decline screens are reachable through **Lotteries → Booking offers → View offers**.
 They use `FirebaseOfferRepository.instance` by default. An empty database shows an
 empty list; the app does not manufacture demo offers.
 
@@ -16,11 +16,20 @@ empty list; the app does not manufacture demo offers.
 - `controller/BookingOffersController.kt`: list loading, refresh, retry, and cancellation.
 - `controller/BookingOfferController.kt`: detail loading and confirmed decline actions.
 - `view/BookingOfferScreen.kt`: list/detail views and decline confirmation.
+- `view/LotteriesScreen.kt`: entrant tab with an offers section and an entry-history placeholder.
 
 Navigation reads a single ID through `bookingOfferRoute(offerId)`. This is also the
 entry point for Part 5's winning notifications. The list reloads when resumed after
 viewing an offer, so a saved decline appears on return. Existing owner and lottery
-routes remain available alongside the new routes.
+routes remain available alongside the new routes. The bottom navigation stays
+visible on both offer screens with Lotteries selected, including when a notification
+opens an offer directly. Back returns to the screen that opened the offer.
+
+The UI uses the app's green theme, rounded outlined cards, shared Back arrow, and
+existing text styles in both light and dark mode. Detail decline/reload actions
+stay at the bottom above the navigation bar while the content scrolls. The profile
+screen no longer contains the offers shortcut. Full lottery-entry history remains
+Part 5 work and is explicitly marked as coming soon in its separate section.
 
 The detail controller checks response expiry when confirmation is requested and
 submitted, and blocks repeated submissions while a decline is in flight. A failed
@@ -130,14 +139,21 @@ and terminal offers, uncertain decline outcomes, ownership denial, and cancellat
 when a ViewModel is cleared. These tests do not exercise Firebase authentication,
 networking, or rules.
 
-`BookingOfferNavigationTest` runs the real Compose profile/list/detail routes with
+`BookingOfferNavigationTest` runs the real Compose Lotteries/list/detail routes with
 fake account, profile, campsite, and offer repositories. It also injects owner and
 lottery repositories that reject unexpected calls, keeping the newly added routes
 isolated from real Firebase access. It covers encoded offer IDs, cancellation and
 confirmed decline, saved-state restoration, list refresh on return, read/action
-failures, missing offers, and expiry. Run it on an Android emulator; it does not
+failures, empty lists, missing offers, expiry, selected bottom navigation, and switching
+between Profile and an offer in dark mode. It also checks that Profile has no offers
+shortcut. Run it on an Android emulator; it does not
 create or change Firestore documents. No Gradle dependency or production-data switch
 is needed to move these screens out of a testing environment.
+
+For visual review, add `-Pandroid.testInstrumentationRunnerArguments.captureOfferScreens=true`
+to that test command. It saves light-mode overview/list/detail/empty-list and dark-mode
+detail PNGs in the debug app's cache, using only synthetic test offers. These previews
+are not production app data and should not be committed as source assets.
 
 ## Remaining integration work
 

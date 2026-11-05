@@ -1,11 +1,14 @@
 /* Offer UI tests inject every repository; no Firebase accounts or documents are changed. */
 package com.example.legion_events
 
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.legion_events.controller.AppNavigation
 import com.example.legion_events.controller.OnboardingController
 import com.example.legion_events.controller.bookingOfferRoute
@@ -27,8 +30,9 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import java.io.File
 
-/** Tests the real profile/list/detail routes with fake authenticated data. */
+/** Tests the real Lotteries/list/detail routes with fake authenticated data. */
 class BookingOfferNavigationTest {
     /** Compose host with a real navigation controller and lifecycle-owned screen controllers. */
     @get:Rule val compose = createComposeRule()
@@ -37,16 +41,25 @@ class BookingOfferNavigationTest {
     /** Saves and restores Compose/navigation state while retaining the entry's ViewModel. */
     private lateinit var restoration: StateRestorationTester
 
-    /** Profile entry, confirmation cancellation, decline, restoration, and list refresh work together. */
-    @Test fun profileOpensOffersAndConfirmedDeclinePersistsWhenReturning() {
+    /** Lotteries entry, confirmation cancellation, decline, restoration, and list refresh work together. */
+    @Test fun lotteriesOpenOffersAndConfirmedDeclinePersistsWhenReturning() {
         val repository = FakeOffers()
         open(repository)
         compose.onNodeWithText("Profile").performClick()
-        waitFor("Lottery offers")
-        compose.onNodeWithText("Lottery offers").performScrollTo().performClick()
+        waitFor("Profile & settings")
+        compose.onNodeWithText("Lottery offers").assertDoesNotExist()
+        compose.onNodeWithText("Lotteries").performClick()
+        waitFor("My lotteries")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        captureScreen("lotteries-overview-light")
+        compose.onNodeWithText("View offers").performScrollTo().performClick()
         waitFor("View offer")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        captureScreen("offer-list-light")
         compose.onNodeWithText("View offer").performClick()
         waitFor("Decline offer")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        captureScreen("offer-detail-light")
         compose.runOnIdle {
             assertEquals(repository.offer!!.id, navigation.currentBackStackEntry?.arguments?.getString("offerId"))
         }
@@ -59,7 +72,7 @@ class BookingOfferNavigationTest {
         compose.onNodeWithText("Decline offer").assertDoesNotExist()
         restoration.emulateSavedInstanceStateRestore()
         waitFor("You declined this offer.")
-        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
         waitFor("Declined")
         compose.runOnIdle { assertEquals(1, repository.declines) }
     }
@@ -93,8 +106,45 @@ class BookingOfferNavigationTest {
         compose.runOnIdle { assertEquals(0, repository.declines) }
     }
 
+    /** Failed and empty lists can reload real responses without inserting demo offers. */
+    @Test fun failedAndEmptyListsCanRefresh() {
+        val repository = FakeOffers().apply { failList = true }
+        open(repository)
+        compose.onNodeWithText("Lotteries").performClick()
+        waitFor("View offers")
+        compose.onNodeWithText("View offers").performClick()
+        waitFor("Could not load your offers. Check your connection and retry.")
+        compose.runOnIdle { repository.failList = false; repository.offer = null }
+        compose.onNodeWithText("Retry").performClick()
+        waitFor("You have no lottery offers yet.")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        captureScreen("offer-list-empty-light")
+        compose.runOnIdle { repository.offer = BookingOffer("another", "oak", "alice") }
+        compose.onNodeWithText("Refresh offers").performClick()
+        waitFor("View offer")
+    }
+
+    /** Offer details retain their Lotteries tab and saved navigation state in the dark palette. */
+    @Test fun offerDetailsRestoreUnderLotteriesInDarkMode() {
+        val repository = FakeOffers()
+        open(repository, darkTheme = true)
+        compose.onNodeWithText("Lotteries").performClick()
+        waitFor("View offers")
+        compose.onNodeWithText("View offers").performClick()
+        waitFor("View offer")
+        compose.onNodeWithText("View offer").performClick()
+        waitFor("Decline offer")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        compose.onNodeWithText("Profile").performClick()
+        waitFor("Profile & settings")
+        compose.onNodeWithText("Lotteries").performClick()
+        waitFor("Decline offer")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        captureScreen("offer-detail-dark")
+    }
+
     /** Builds the actual router with fake data and rejects calls to unrelated owner/lottery features. */
-    private fun open(offers: OfferRepository) {
+    private fun open(offers: OfferRepository, darkTheme: Boolean = false) {
         lateinit var onboarding: OnboardingController
         compose.runOnUiThread {
             onboarding = OnboardingController(object : UserRepository {
@@ -148,7 +198,7 @@ class BookingOfferNavigationTest {
         restoration = StateRestorationTester(compose)
         restoration.setContent {
             navigation = rememberNavController()
-            LegioneventsTheme {
+            LegioneventsTheme(darkTheme = darkTheme) {
                 AppNavigation(onboarding, navigation, campsites, details, profiles,
                     lotteries = lotteries, owners = owners, offers = offers)
             }
@@ -161,12 +211,25 @@ class BookingOfferNavigationTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    /** Saves fake-data previews in the test app's cache only when captureOfferScreens is requested. */
+    private fun captureScreen(name: String) {
+        if (InstrumentationRegistry.getArguments().getString("captureOfferScreens") != "true") return
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(context.cacheDir, "$name.png").outputStream().use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        }
+    }
+
     /** Mutable synthetic offer storage; its ID exercises navigation encoding. */
     private class FakeOffers : OfferRepository {
         /** Synthetic current offer; null simulates an unavailable document. */
-        var offer: BookingOffer? = BookingOffer("offer #1?", "pine", "alice")
+        var offer: BookingOffer? = BookingOffer("offer #1?", "pine", "alice",
+            createdAt = Timestamp(1_793_836_800L, 0), expiresAt = Timestamp(4_070_908_800L, 0))
         /** Whether detail reads should fail. */
         var failRead = false
+        /** Whether list reads should fail independently of detail reads. */
+        var failList = false
         /** Whether decline attempts should fail. */
         var failDecline = false
         /** Count of successfully persisted fake declines. */
@@ -177,7 +240,10 @@ class BookingOfferNavigationTest {
             return offer?.takeIf { it.id == offerId }
         }
         /** Returns only the synthetic account's records. */
-        override suspend fun getOffersForCurrentUser(): List<BookingOffer> = listOfNotNull(offer)
+        override suspend fun getOffersForCurrentUser(): List<BookingOffer> {
+            if (failList) error("Offline")
+            return listOfNotNull(offer)
+        }
         /** Persists a fake decline after validating the routed document ID. */
         override suspend fun declineOffer(offerId: String): BookingOffer {
             if (failDecline) error("Offline")
