@@ -1,3 +1,13 @@
+/*
+ * ProfileRepository.kt
+ *
+ * Purpose: Interface for reading, updating, and deleting the signed-in user's profile (US
+ *   01.07.03, 01.08.01, 01.10.01).
+ * Role: Data layer (MVC model access). Lets ProfileController work without depending on Firebase,
+ *   so it can be tested with a fake.
+ * Outstanding issues: deleteProfile() does not yet remove the user's waitlist entries or
+ *   reservations; that needs WaitlistEntry (Person 5).
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile

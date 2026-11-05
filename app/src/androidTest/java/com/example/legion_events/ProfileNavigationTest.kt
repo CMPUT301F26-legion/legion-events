@@ -1,3 +1,12 @@
+/*
+ * ProfileNavigationTest.kt
+ *
+ * Purpose: Intent tests for S01, the policy screen, S11 editing and opt-out, the owner and admin
+ *   dashboard links, and profile deletion.
+ * Role: Drives AppNavigation with fake repositories so tests never change real accounts.
+ * Outstanding issues: Live Firestore rules for profile update and delete are not covered by these
+ *   tests.
+ */
 package com.example.legion_events
 
 import android.content.Context

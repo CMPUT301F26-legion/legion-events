@@ -1,3 +1,10 @@
+/*
+ * PolicyScreen.kt
+ *
+ * Purpose: Shows the app policy and guidelines (US 01.11.01), opened from S01 and S11.
+ * Role: View in MVC. Static content only.
+ * Outstanding issues: The policy text is a team draft and may change after review.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.*

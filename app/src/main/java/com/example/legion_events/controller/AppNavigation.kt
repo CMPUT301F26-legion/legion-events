@@ -1,3 +1,12 @@
+/*
+ * AppNavigation.kt
+ *
+ * Purpose: Shared router: onboarding, S01 welcome, every screen route (S01 to S20), and the bottom
+ *   bar.
+ * Role: Controller in MVC; also the navigation skeleton every team member registers screens in.
+ * Outstanding issues: Routes for S05 to S20 are placeholders without route arguments; each owner
+ *   replaces theirs and adds arguments as needed.
+ */
 package com.example.legion_events.controller
 
 import android.net.Uri

@@ -1,3 +1,12 @@
+/*
+ * ProfileController.kt
+ *
+ * Purpose: Holds S11 Profile & settings state and handles editing contact details, the
+ *   notification opt-out, and profile deletion.
+ * Role: Controller in MVC. ProfileScreen renders its state; ProfileRepository stores the changes.
+ * Outstanding issues: Changing the profile photo (shown in the S11 mockup) is not implemented.
+ *   Email and phone checks are basic format checks only.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

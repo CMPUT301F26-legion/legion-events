@@ -1,3 +1,11 @@
+/*
+ * WelcomePreferences.kt
+ *
+ * Purpose: Remembers on this device whether the S01 welcome screen has been shown.
+ * Role: Data layer (local device storage), used by AppNavigation.
+ * Outstanding issues: The flag is per install, not per account, so deleting a profile does not
+ *   show S01 again.
+ */
 package com.example.legion_events.data
 
 import android.content.SharedPreferences
