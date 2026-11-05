@@ -47,16 +47,24 @@ Image data is Base64-encoded JPEG, WebP, or PNG, rather than a download URL.
 
 ## Lotteries
 
-Lotteries are stored at `lotteries/{id}`. Any user can create one for campsites they own.
+Lotteries are stored at `lotteries/{id}`. Any user can create one for active campsites
+they own. Field names and limits match the deployed security rules, which reject a
+document with any missing or extra field.
 
 | Field | Type |
 | --- | --- |
 | Document ID | String, not an extra stored field |
 | `ownerId` | User ID string |
-| `title` | String |
-| `campsiteIds` | String array of campsite IDs, at least one |
-| `registrationStart`, `registrationEnd` | Timestamp |
-| `bookingStart`, `bookingEnd` | Night dates in `YYYY-MM-DD` |
-| `numWinners` | Integer, at least 1 |
-| `waitlistCapacity` | Integer, or missing for no limit |
-| `drawn` | Boolean, set once when winners are drawn |
+| `campsiteIds` | String array of 1 to 8 active campsite IDs owned by `ownerId` |
+| `registrationStartAt`, `registrationEndAt` | Timestamp; start before end, end in the future when created |
+| `bookingStartAt`, `bookingEndAt` | Timestamp; booking starts no earlier than `registrationEndAt` |
+| `winnerCount` | Integer, 1 to `waitlistLimit` |
+| `waitlistLimit` | Integer, 1 to 100; the app saves 100 when the owner sets no limit |
+| `entrantCount` | Integer, 0 when created; changed only by joining or leaving the waitlist |
+| `status` | `"open"` when created |
+| `winnersDrawn` | Boolean, `false` when created; set once when winners are drawn |
+| `createdAt`, `updatedAt` | Server timestamps |
+
+The app picks days, not times: registration opens at the start of its first day and
+closes at the start of the day after its last day; booking works the same way.
+An owner can edit a lottery only before registration opens and while nobody has joined.

@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -27,6 +28,8 @@ import java.util.TimeZone
 class LotteryEditControllerTest {
     private val dispatcher = StandardTestDispatcher()
     private val utc = TimeZone.getTimeZone("UTC")
+    /** "Today" for every test: 2026-11-04 at midnight UTC. */
+    private val today = day("2026-11-04")
     private val campsites = listOf(
         Campsite("c1", "owner", "Lakeside", "Jasper", 4, 6550),
         Campsite("c2", "owner", "Ridge", "Banff", 2, 4000),
@@ -42,32 +45,39 @@ class LotteryEditControllerTest {
         Dispatchers.resetMain()
     }
 
-    /** Creates a controller and lets it finish loading. */
+    /** Midnight UTC at the start of the given day. */
+    private fun day(value: String): Timestamp =
+        Timestamp(SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = utc }.parse(value)!!)
+
+    /** Creates a controller with a fixed clock and lets it finish loading. */
     private fun TestScope.controller(
         repository: FakeRepository = FakeRepository(),
         lotteryId: String? = null,
     ): LotteryEditController {
-        val controller = LotteryEditController(lotteryId, repository, { campsites }, utc)
+        val controller = LotteryEditController(lotteryId, repository, { campsites }, utc, { today.toDate() })
         runCurrent()
         return controller
     }
 
     /** Fills every field with valid values. */
     private fun LotteryEditController.fillValid() {
-        setTitle("Summer draw")
         toggleCampsite("c1")
         toggleCampsite("c2")
         setRegistrationStart("2026-12-01")
         setRegistrationEnd("2026-12-10")
         setBookingStart("2027-06-01")
         setBookingEnd("2027-06-30")
-        setNumWinners("3")
-        setWaitlistCapacity("20")
+        setWinnerCount("3")
+        setWaitlistLimit("20")
     }
 
-    /** Midnight UTC on the given day. */
-    private fun day(value: String) =
-        Timestamp(SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = utc }.parse(value)!!)
+    /** A saved lottery that can still be edited. */
+    private fun saved() = Lottery(
+        id = "L1", ownerId = "owner", campsiteIds = listOf("c1"),
+        registrationStartAt = day("2026-12-01"), registrationEndAt = day("2026-12-11"),
+        bookingStartAt = day("2027-06-01"), bookingEndAt = day("2027-07-01"),
+        winnerCount = 3, waitlistLimit = 100,
+    )
 
     @Test
     fun loadsOwnerCampsitesForNewLottery() = runTest(dispatcher) {
@@ -85,25 +95,25 @@ class LotteryEditControllerTest {
         controller.save()
         runCurrent()
         val created = repository.created!!
-        assertEquals("Summer draw", created.title)
         assertEquals(listOf("c1", "c2"), created.campsiteIds)
-        assertEquals(day("2026-12-01"), created.registrationStart)
-        assertEquals(day("2026-12-11"), created.registrationEnd) // closes when Dec 10 ends
-        assertEquals("2027-06-01", created.bookingStart)
-        assertEquals(3, created.numWinners)
-        assertEquals(20, created.waitlistCapacity)
+        assertEquals(day("2026-12-01"), created.registrationStartAt)
+        assertEquals(day("2026-12-11"), created.registrationEndAt) // closes when Dec 10 ends
+        assertEquals(day("2027-06-01"), created.bookingStartAt)
+        assertEquals(day("2027-07-01"), created.bookingEndAt) // closes when Jun 30 ends
+        assertEquals(3, created.winnerCount)
+        assertEquals(20, created.waitlistLimit)
         assertEquals("new-id", controller.state.value.savedLotteryId)
     }
 
     @Test
-    fun emptyCapacityMeansNoLimit() = runTest(dispatcher) {
+    fun emptyLimitSavesMaximum() = runTest(dispatcher) {
         val repository = FakeRepository()
         val controller = controller(repository)
         controller.fillValid()
-        controller.setWaitlistCapacity("")
+        controller.setWaitlistLimit("")
         controller.save()
         runCurrent()
-        assertNull(repository.created!!.waitlistCapacity)
+        assertEquals(100, repository.created!!.waitlistLimit)
     }
 
     @Test
@@ -113,14 +123,14 @@ class LotteryEditControllerTest {
         controller.save()
         runCurrent()
         assertEquals(
-            setOf(LotteryField.TITLE, LotteryField.CAMPSITES, LotteryField.REGISTRATION, LotteryField.BOOKING, LotteryField.WINNERS),
+            setOf(LotteryField.CAMPSITES, LotteryField.REGISTRATION, LotteryField.BOOKING, LotteryField.WINNERS),
             controller.state.value.errors.keys,
         )
         assertNull(repository.created)
     }
 
     @Test
-    fun bookingMustStartAfterRegistrationEnds() = runTest(dispatcher) {
+    fun bookingMustOpenAfterRegistrationEnds() = runTest(dispatcher) {
         val controller = controller()
         controller.fillValid()
         controller.setBookingStart("2026-12-10")
@@ -138,30 +148,61 @@ class LotteryEditControllerTest {
     }
 
     @Test
+    fun registrationCannotEndInThePast() = runTest(dispatcher) {
+        val controller = controller()
+        controller.fillValid()
+        controller.setRegistrationStart("2026-10-01")
+        controller.setRegistrationEnd("2026-11-03")
+        controller.save()
+        assertTrue(LotteryField.REGISTRATION in controller.state.value.errors)
+    }
+
+    @Test
+    fun registrationEndingTodayIsAllowed() = runTest(dispatcher) {
+        val repository = FakeRepository()
+        val controller = controller(repository)
+        controller.fillValid()
+        controller.setRegistrationStart("2026-11-01")
+        controller.setRegistrationEnd("2026-11-04")
+        controller.save()
+        runCurrent()
+        assertNotNull(repository.created)
+    }
+
+    @Test
     fun winnersMustBeAtLeastOne() = runTest(dispatcher) {
         val controller = controller()
         controller.fillValid()
-        controller.setNumWinners("0")
+        controller.setWinnerCount("0")
         controller.save()
         assertTrue(LotteryField.WINNERS in controller.state.value.errors)
     }
 
     @Test
-    fun capacityCannotBeBelowWinners() = runTest(dispatcher) {
+    fun winnersCannotExceedLimit() = runTest(dispatcher) {
         val controller = controller()
         controller.fillValid()
-        controller.setWaitlistCapacity("2")
+        controller.setWaitlistLimit("2")
         controller.save()
-        assertTrue(LotteryField.CAPACITY in controller.state.value.errors)
+        assertTrue(LotteryField.WINNERS in controller.state.value.errors)
+    }
+
+    @Test
+    fun limitCannotExceedMaximum() = runTest(dispatcher) {
+        val controller = controller()
+        controller.fillValid()
+        controller.setWaitlistLimit("101")
+        controller.save()
+        assertTrue(LotteryField.LIMIT in controller.state.value.errors)
     }
 
     @Test
     fun editingFieldClearsItsError() = runTest(dispatcher) {
         val controller = controller()
         controller.save()
-        controller.setTitle("Fixed")
-        assertFalse(LotteryField.TITLE in controller.state.value.errors)
-        assertTrue(LotteryField.CAMPSITES in controller.state.value.errors)
+        controller.toggleCampsite("c1")
+        assertFalse(LotteryField.CAMPSITES in controller.state.value.errors)
+        assertTrue(LotteryField.WINNERS in controller.state.value.errors)
     }
 
     @Test
@@ -170,34 +211,48 @@ class LotteryEditControllerTest {
         val controller = controller(repository, lotteryId = "L1")
         with(controller.state.value) {
             assertTrue(editing)
+            assertFalse(locked)
             assertEquals("2026-12-01", registrationStart)
             assertEquals("2026-12-10", registrationEnd)
+            assertEquals("2027-06-30", bookingEnd)
             assertEquals(setOf("c1"), selectedCampsiteIds)
-            assertEquals("", waitlistCapacity)
+            assertEquals("100", waitlistLimit)
         }
-        controller.setNumWinners("5")
+        controller.setWinnerCount("5")
         controller.save()
         runCurrent()
         assertNull(repository.created)
         assertEquals("L1", repository.updated!!.id)
-        assertEquals(5, repository.updated!!.numWinners)
-        assertEquals(day("2026-12-11"), repository.updated!!.registrationEnd)
+        assertEquals(5, repository.updated!!.winnerCount)
+        assertEquals(day("2026-12-11"), repository.updated!!.registrationEndAt)
     }
 
     @Test
     fun drawnLotteryCannotBeEdited() = runTest(dispatcher) {
-        val repository = FakeRepository().apply { existing = saved().copy(drawn = true) }
+        val repository = FakeRepository().apply { existing = saved().copy(winnersDrawn = true) }
         val controller = controller(repository, lotteryId = "L1")
         assertTrue(controller.state.value.locked)
-        controller.setTitle("Changed")
+        controller.setWinnerCount("9")
         controller.save()
         runCurrent()
-        assertEquals("Summer draw", controller.state.value.title)
+        assertEquals("3", controller.state.value.winnerCount)
         assertNull(repository.updated)
     }
 
     @Test
-    fun saveFailureShowsMessageAndAllowsRetry() = runTest(dispatcher) {
+    fun lotteryWithEntrantsCannotBeEdited() = runTest(dispatcher) {
+        val repository = FakeRepository().apply { existing = saved().copy(entrantCount = 1) }
+        assertTrue(controller(repository, lotteryId = "L1").state.value.locked)
+    }
+
+    @Test
+    fun lotteryWithOpenRegistrationCannotBeEdited() = runTest(dispatcher) {
+        val repository = FakeRepository().apply { existing = saved().copy(registrationStartAt = day("2026-11-01")) }
+        assertTrue(controller(repository, lotteryId = "L1").state.value.locked)
+    }
+
+    @Test
+    fun saveFailureShowsMessage() = runTest(dispatcher) {
         val repository = FakeRepository().apply { failWrites = true }
         val controller = controller(repository)
         controller.fillValid()
@@ -212,21 +267,14 @@ class LotteryEditControllerTest {
     fun loadFailureShowsRetry() = runTest(dispatcher) {
         val repository = FakeRepository().apply { failLoad = true }
         val controller = controller(repository, lotteryId = "L1")
-        assertTrue(controller.state.value.loadError != null)
+        assertNotNull(controller.state.value.loadError)
         repository.failLoad = false
         repository.existing = saved()
         controller.retry()
         runCurrent()
         assertNull(controller.state.value.loadError)
-        assertEquals("Summer draw", controller.state.value.title)
+        assertEquals("3", controller.state.value.winnerCount)
     }
-
-    /** A saved lottery as Firestore would return it. */
-    private fun saved() = Lottery(
-        id = "L1", ownerId = "owner", title = "Summer draw", campsiteIds = listOf("c1"),
-        registrationStart = day("2026-12-01"), registrationEnd = day("2026-12-11"),
-        bookingStart = "2027-06-01", bookingEnd = "2027-06-30", numWinners = 3,
-    )
 
     /** In-memory repository that records what the controller saves. */
     private class FakeRepository : LotteryRepository {

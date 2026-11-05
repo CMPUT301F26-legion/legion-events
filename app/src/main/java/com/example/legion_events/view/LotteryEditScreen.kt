@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.LotteryEditState
 import com.example.legion_events.controller.LotteryField
+import com.example.legion_events.model.MAX_WAITLIST_LIMIT
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -24,14 +25,13 @@ import java.util.TimeZone
  * @param state Form values and request state from the controller.
  * @param onBack Leaves without saving.
  * @param onRetry Reloads after a failed load.
- * @param onTitleChange Sends title edits.
  * @param onToggleCampsite Adds or removes a campsite by ID.
  * @param onRegistrationStart Sets the first registration day (`YYYY-MM-DD`).
  * @param onRegistrationEnd Sets the last registration day.
- * @param onBookingStart Sets the first bookable night.
- * @param onBookingEnd Sets the last bookable night.
+ * @param onBookingStart Sets the first booking day.
+ * @param onBookingEnd Sets the last booking day.
  * @param onWinnersChange Sends number-of-winners edits.
- * @param onCapacityChange Sends waitlist capacity edits; empty means no limit.
+ * @param onLimitChange Sends waitlist limit edits; empty saves the maximum.
  * @param onSave Validates and saves.
  */
 @Composable
@@ -39,14 +39,13 @@ fun LotteryEditScreen(
     state: LotteryEditState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
-    onTitleChange: (String) -> Unit,
     onToggleCampsite: (String) -> Unit,
     onRegistrationStart: (String) -> Unit,
     onRegistrationEnd: (String) -> Unit,
     onBookingStart: (String) -> Unit,
     onBookingEnd: (String) -> Unit,
     onWinnersChange: (String) -> Unit,
-    onCapacityChange: (String) -> Unit,
+    onLimitChange: (String) -> Unit,
     onSave: () -> Unit,
 ) {
     val enabled = !state.saving && !state.locked
@@ -67,16 +66,9 @@ fun LotteryEditScreen(
                 else -> {
                     state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
-                    OutlinedTextField(
-                        value = state.title, onValueChange = onTitleChange, label = { Text("Title") },
-                        singleLine = true, enabled = enabled, modifier = Modifier.fillMaxWidth(),
-                        isError = LotteryField.TITLE in state.errors,
-                        supportingText = state.errors[LotteryField.TITLE]?.let { { Text(it) } },
-                    )
-
                     Section("Campsites")
                     if (state.campsites.isEmpty()) {
-                        Text("You have no campsites yet. Add one before creating a lottery.",
+                        Text("You have no campsites yet. Add an active campsite before creating a lottery.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     state.campsites.forEach { campsite ->
@@ -90,7 +82,7 @@ fun LotteryEditScreen(
                         ) {
                             Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)
                             Spacer(Modifier.width(8.dp))
-                            Text("${campsite.name} · ${campsite.locationName}")
+                            Text(listOf(campsite.name, campsite.locationName).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { campsite.id })
                         }
                     }
                     FieldError(state.errors[LotteryField.CAMPSITES])
@@ -101,14 +93,14 @@ fun LotteryEditScreen(
                     FieldError(state.errors[LotteryField.REGISTRATION])
 
                     Section("Booking period")
-                    DayButton("First night", state.bookingStart, enabled, onBookingStart)
-                    DayButton("Last night", state.bookingEnd, enabled, onBookingEnd)
+                    DayButton("Opens", state.bookingStart, enabled, onBookingStart)
+                    DayButton("Closes (last day)", state.bookingEnd, enabled, onBookingEnd)
                     FieldError(state.errors[LotteryField.BOOKING])
 
-                    NumberField("Number of winners", state.numWinners, state.errors[LotteryField.WINNERS], enabled, onWinnersChange)
-                    NumberField("Waitlist capacity (optional)", state.waitlistCapacity,
-                        state.errors[LotteryField.CAPACITY] ?: "Leave empty for no limit.", enabled, onCapacityChange,
-                        isError = LotteryField.CAPACITY in state.errors)
+                    NumberField("Number of winners", state.winnerCount, state.errors[LotteryField.WINNERS], enabled, onWinnersChange)
+                    NumberField("Waitlist limit (optional)", state.waitlistLimit,
+                        state.errors[LotteryField.LIMIT] ?: "Leave empty for the maximum of $MAX_WAITLIST_LIMIT.",
+                        enabled, onLimitChange, isError = LotteryField.LIMIT in state.errors)
 
                     Button(onClick = onSave, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                         Text(when {

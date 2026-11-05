@@ -280,14 +280,13 @@ fun AppNavigation(
                         state = form,
                         onBack = { navController.popBackStack() },
                         onRetry = edit::retry,
-                        onTitleChange = edit::setTitle,
                         onToggleCampsite = edit::toggleCampsite,
                         onRegistrationStart = edit::setRegistrationStart,
                         onRegistrationEnd = edit::setRegistrationEnd,
                         onBookingStart = edit::setBookingStart,
                         onBookingEnd = edit::setBookingEnd,
-                        onWinnersChange = edit::setNumWinners,
-                        onCapacityChange = edit::setWaitlistCapacity,
+                        onWinnersChange = edit::setWinnerCount,
+                        onLimitChange = edit::setWaitlistLimit,
                         onSave = edit::save,
                     )
                 }
