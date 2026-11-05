@@ -37,6 +37,7 @@ data class OwnerCampsiteState(
  * @property campsiteId The campsite document ID from the route.
  * @property repository Reads the owner's campsites, lotteries, and photos.
  * @property now Supplies the current time, replaceable in tests.
+ * TEST COMMENT TO TEST IF PUSH IS WORKING
  */
 class OwnerCampsiteController(
     private val campsiteId: String,
