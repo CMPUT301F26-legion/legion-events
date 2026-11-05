@@ -4,8 +4,8 @@
  * Purpose: Shared router: onboarding, S01 welcome, every screen route (S01 to S20), and the bottom
  *   bar.
  * Role: Controller in MVC; also the navigation skeleton every team member registers screens in.
- * Outstanding issues: Routes for S05 to S20 are placeholders without route arguments; each owner
- *   replaces theirs and adds arguments as needed.
+ * Outstanding issues: Some routes remain placeholders; each screen owner replaces theirs and
+ *   adds arguments as needed.
  */
 package com.example.legion_events.controller
 
@@ -51,13 +51,17 @@ import com.example.legion_events.view.PlaceholderScreen
 import com.example.legion_events.view.PolicyScreen
 import com.example.legion_events.view.ProfileScreen
 import com.example.legion_events.view.WelcomeScreen
+import com.example.legion_events.view.BookingOfferScreen
+import com.example.legion_events.view.BookingOffersScreen
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.CampsiteDetailsRepository
 import com.example.legion_events.data.FirebaseLotteryRepository
+import com.example.legion_events.data.FirebaseOfferRepository
 import com.example.legion_events.data.FirebaseProfileRepository
 import com.example.legion_events.data.LotteryRepository
 import com.example.legion_events.data.FirebaseOwnerCampsiteRepository
 import com.example.legion_events.data.OwnerCampsiteRepository
+import com.example.legion_events.data.OfferRepository
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.WelcomePreferences
@@ -82,8 +86,21 @@ internal const val QR_SCAN_ROUTE = "qr_scan"
 internal const val LOTTERIES_ROUTE = "lotteries"
 /** S07: notification inbox. */
 internal const val INBOX_ROUTE = "inbox"
-/** S08: choose a campsite and dates from a booking offer. */
+/** S08 entry: list owned offers; campsite/date selection remains a later booking feature. */
 internal const val BOOKING_OFFER_ROUTE = "booking_offer"
+/** One owned offer, opened by the list or a winning notification. */
+internal const val BOOKING_OFFER_DETAILS_ROUTE = "booking_offer/{offerId}"
+
+/**
+ * Builds the shared destination for a winning offer using only its document ID.
+ * @param offerId A single bookingOffers document ID from the list or winning notification.
+ * @return Encoded internal navigation route.
+ */
+internal fun bookingOfferRoute(offerId: String): String {
+    require(offerId.isNotBlank() && '/' !in offerId) { "A single offer document ID is required." }
+    return "booking_offer/${Uri.encode(offerId)}"
+}
+
 /** S09: reservation confirmation. */
 internal const val RESERVATION_CONFIRMATION_ROUTE = "reservation_confirmation"
 /** S10: the entrant's reservations. */
@@ -127,7 +144,6 @@ private val PLACEHOLDER_SCREENS = mapOf(
     QR_SCAN_ROUTE to "Scan QR code",
     LOTTERIES_ROUTE to "My lotteries",
     INBOX_ROUTE to "Notifications",
-    BOOKING_OFFER_ROUTE to "Choose campsite & dates",
     RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
     BOOKINGS_ROUTE to "My reservations",
     RESERVATION_DETAILS_ROUTE to "Reservation details",
@@ -194,6 +210,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param welcome Remembers whether S01 was shown; null skips S01.
  * @param lotteries Reads and saves lotteries.
  * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
+ * @param offers Reads and declines the authenticated user's offers; tests inject a fake.
  */
 @Composable
 fun AppNavigation(
@@ -205,6 +222,7 @@ fun AppNavigation(
     welcome: WelcomePreferences? = null,
     lotteries: LotteryRepository = FirebaseLotteryRepository.instance,
     owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
+    offers: OfferRepository = FirebaseOfferRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -267,6 +285,35 @@ fun AppNavigation(
             composable(POLICY_ROUTE) {
                 PolicyScreen { navController.popBackStack() }
             }
+            composable(BOOKING_OFFER_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: BookingOffersController = viewModel(factory = viewModelFactory {
+                        initializer { BookingOffersController(offers) }
+                    })
+                    val information by list.state.collectAsStateWithLifecycle()
+                    // Returning from a decline reloads the list with its saved status.
+                    LifecycleResumeEffect(list) {
+                        list.retry()
+                        onPauseOrDispose {}
+                    }
+                    BookingOffersScreen(information, { navController.popBackStack() }, list::retry) { offerId ->
+                        navController.navigate(bookingOfferRoute(offerId)) { launchSingleTop = true }
+                    }
+                }
+            }
+            composable(
+                BOOKING_OFFER_DETAILS_ROUTE,
+                arguments = listOf(navArgument("offerId") { type = NavType.StringType }),
+            ) { entry ->
+                RequireAccount(state, controller) {
+                    val offer: BookingOfferController = viewModel(factory = viewModelFactory {
+                        initializer { BookingOfferController(checkNotNull(entry.arguments?.getString("offerId")), offers) }
+                    })
+                    val information by offer.state.collectAsStateWithLifecycle()
+                    BookingOfferScreen(information, { navController.popBackStack() }, offer::retry,
+                        offer::requestDecline, offer::confirmDecline, offer::cancelDecline)
+                }
+            }
             composable(PROFILE_ROUTE) {
                 RequireAccount(state, controller) {
                     val profile: ProfileController = viewModel(factory = viewModelFactory {
@@ -294,6 +341,7 @@ fun AppNavigation(
                         onConfirmDelete = profile::confirmDelete,
                         onCancelDelete = profile::cancelDelete,
                         onRetry = profile::retry,
+                        onOffers = { navController.navigate(BOOKING_OFFER_ROUTE) { launchSingleTop = true } },
                     )
                 }
             }

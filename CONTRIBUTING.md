@@ -75,6 +75,10 @@ offers. It checks ownership, maps the shared `BookingOffer` schema, and declines
 open offers in a transaction. Views use the interface through a controller.
 Offer creation belongs to the draw worker. See [the booking-offer guide](doc/booking-offers.md)
 for the method behavior, error handling, Firebase rule requirements, and tests.
+The list and decline screens are under **Profile → Lottery offers**. Controllers
+use the real repository by default; fake offers are supplied only by tests.
+Winning notifications can open an offer through `bookingOfferRoute(offerId)` when
+Part 5's inbox is implemented. Pass only the document ID; the repository checks ownership.
 
 ## Theme
 
