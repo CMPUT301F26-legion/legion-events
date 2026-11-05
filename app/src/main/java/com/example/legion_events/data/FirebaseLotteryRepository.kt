@@ -1,6 +1,5 @@
 package com.example.legion_events.data
 
-import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Lottery
 import com.example.legion_events.model.MAX_WAITLIST_LIMIT
 import com.google.firebase.auth.FirebaseAuth
@@ -54,25 +53,6 @@ class FirebaseLotteryRepository(
 
     override suspend fun getLotteriesForOwner(ownerId: String): List<Lottery> =
         lotteries.whereEqualTo("ownerId", ownerId).get().await().documents.map { it.toLottery() }
-
-    /**
-     * Reads campsites owned by the signed-in user, for choosing which ones a lottery offers.
-     * Temporary: replace with the campsite owner's query once CampsiteRepository has one.
-     */
-    suspend fun getMyCampsites(): List<Campsite> {
-        val ownerId = checkNotNull(auth.currentUser) { "No user is signed in." }.uid
-        return firestore.collection("campsites").whereEqualTo("ownerId", ownerId).get().await()
-            .documents.map { document ->
-                Campsite(
-                    id = document.id,
-                    ownerId = ownerId,
-                    name = document.getString("name").orEmpty(),
-                    locationName = document.getString("locationName").orEmpty(),
-                    maxGuests = document.getLong("maxGuests")?.toInt() ?: 0,
-                    pricePerNight = document.getLong("pricePerNight") ?: 0,
-                )
-            }.sortedBy { it.name }
-    }
 
     /** Fields the owner may set when creating or editing (US 02.04.01–02.04.07). */
     private fun Lottery.editableFields(): Map<String, Any> = mapOf(

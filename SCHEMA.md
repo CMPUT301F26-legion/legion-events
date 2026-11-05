@@ -69,7 +69,6 @@ document with any missing or extra field.
 | --- | --- |
 | Document ID | String, not an extra stored field |
 | `ownerId` | User ID string |
-<<<<<<< HEAD
 | `campsiteIds` | String array of 1 to 8 active campsite IDs owned by `ownerId` |
 | `registrationStartAt`, `registrationEndAt` | Timestamp; start before end, end in the future when created |
 | `bookingStartAt`, `bookingEndAt` | Timestamp; booking starts no earlier than `registrationEndAt` |
@@ -83,14 +82,6 @@ document with any missing or extra field.
 The app picks days, not times: registration opens at the start of its first day and
 closes at the start of the day after its last day; booking works the same way.
 An owner can edit a lottery only before registration opens and while nobody has joined.
-=======
-| `title` | String |
-| `campsiteIds` | String array of campsite IDs, at least one |
-| `registrationStart`, `registrationEnd` | Timestamp |
-| `bookingStart`, `bookingEnd` | Night dates in `YYYY-MM-DD` |
-| `numWinners` | Integer, at least 1 |
-| `waitlistCapacity` | Integer, or missing for no limit |
-| `drawn` | Boolean, set once when winners are drawn |
 
 ## Booking offers
 
@@ -118,4 +109,3 @@ already declined offer succeeds without changing it. Used or expired offers cann
 be declined. Enforce these restrictions in the repository and Firestore rules;
 the rules are maintained separately. Notification records can reference the offer
 by its document ID.
->>>>>>> origin/main

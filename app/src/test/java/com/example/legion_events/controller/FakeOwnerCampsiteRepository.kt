@@ -21,9 +21,10 @@ internal const val NOW = 1_800_000_000_000L
  * @param drawn Whether winners were drawn.
  */
 internal fun testLottery(vararg campsites: String, startDays: Int, endDays: Int, drawn: Boolean = false) = Lottery(
-    id = "lottery-${campsites.joinToString()}-$startDays", ownerId = "owner", title = "Draw", campsiteIds = campsites.toList(),
-    registrationStart = Timestamp(Date(NOW + startDays * DAY)), registrationEnd = Timestamp(Date(NOW + endDays * DAY)),
-    bookingStart = "2027-07-01", bookingEnd = "2027-08-31", numWinners = 5, drawn = drawn,
+    id = "lottery-${campsites.joinToString()}-$startDays", ownerId = "owner", campsiteIds = campsites.toList(),
+    registrationStartAt = Timestamp(Date(NOW + startDays * DAY)), registrationEndAt = Timestamp(Date(NOW + endDays * DAY)),
+    bookingStartAt = Timestamp(Date(NOW + (endDays + 1) * DAY)), bookingEndAt = Timestamp(Date(NOW + (endDays + 30) * DAY)),
+    winnerCount = 5, winnersDrawn = drawn,
 )
 
 /** Supplies controlled owner data without connecting to Firebase, and records saves. */

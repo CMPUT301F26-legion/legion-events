@@ -48,9 +48,9 @@ internal fun lotteryBadge(campsiteId: String, lotteries: List<Lottery>, now: Lon
  * @return Its badge; never [LotteryBadge.NONE].
  */
 internal fun lotteryBadge(lottery: Lottery, now: Long): LotteryBadge = when {
-    lottery.drawn -> LotteryBadge.DRAWN
-    now < lottery.registrationStart.toDate().time -> LotteryBadge.UPCOMING
-    now < lottery.registrationEnd.toDate().time -> LotteryBadge.OPEN
+    lottery.winnersDrawn -> LotteryBadge.DRAWN
+    now < lottery.registrationStartAt.toDate().time -> LotteryBadge.UPCOMING
+    now < lottery.registrationEndAt.toDate().time -> LotteryBadge.OPEN
     else -> LotteryBadge.CLOSED
 }
 

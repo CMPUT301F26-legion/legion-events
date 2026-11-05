@@ -30,7 +30,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
-import com.example.legion_events.model.Campsite
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.LotteryEditScreen
 import com.example.legion_events.view.CampsiteDetailsScreen
@@ -45,15 +44,11 @@ import com.example.legion_events.view.ProfileScreen
 import com.example.legion_events.view.WelcomeScreen
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.CampsiteDetailsRepository
-<<<<<<< HEAD
 import com.example.legion_events.data.FirebaseLotteryRepository
 import com.example.legion_events.data.FirebaseProfileRepository
 import com.example.legion_events.data.LotteryRepository
-=======
 import com.example.legion_events.data.FirebaseOwnerCampsiteRepository
-import com.example.legion_events.data.FirebaseProfileRepository
 import com.example.legion_events.data.OwnerCampsiteRepository
->>>>>>> origin/main
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.WelcomePreferences
@@ -129,13 +124,6 @@ private val PLACEHOLDER_SCREENS = mapOf(
     RESERVATION_DETAILS_ROUTE to "Reservation details",
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-<<<<<<< HEAD
-    OWNER_DASHBOARD_ROUTE to "Owner dashboard",
-    OWNER_CAMPSITE_EDIT_ROUTE to "Add / edit campsite",
-    OWNER_CAMPSITE_ROUTE to "Owner campsite details",
-=======
-    LOTTERY_EDIT_ROUTE to "Create / edit lottery",
->>>>>>> origin/main
     LOTTERY_MANAGEMENT_ROUTE to "Lottery management",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
     OWNER_NOTIFICATIONS_ROUTE to "Owner notifications",
@@ -195,12 +183,8 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param details Supplies the selected campsite and its photos.
  * @param profiles Reads and changes the user's profile.
  * @param welcome Remembers whether S01 was shown; null skips S01.
-<<<<<<< HEAD
  * @param lotteries Reads and saves lotteries.
- * @param ownerCampsites Loads the signed-in user's campsites for S15.
-=======
  * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
->>>>>>> origin/main
  */
 @Composable
 fun AppNavigation(
@@ -210,12 +194,8 @@ fun AppNavigation(
     details: CampsiteDetailsRepository = FirebaseRepository.instance,
     profiles: ProfileRepository = FirebaseProfileRepository.instance,
     welcome: WelcomePreferences? = null,
-<<<<<<< HEAD
     lotteries: LotteryRepository = FirebaseLotteryRepository.instance,
-    ownerCampsites: suspend () -> List<Campsite> = { FirebaseLotteryRepository.instance.getMyCampsites() },
-=======
     owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
->>>>>>> origin/main
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -308,22 +288,6 @@ fun AppNavigation(
                     )
                 }
             }
-<<<<<<< HEAD
-            composable(
-                LOTTERY_EDIT_PATTERN,
-                arguments = listOf(navArgument("lotteryId") { type = NavType.StringType; nullable = true; defaultValue = null }),
-            ) { entry ->
-                RequireAccount(state, controller) {
-                    val edit: LotteryEditController = viewModel(factory = viewModelFactory {
-                        initializer { LotteryEditController(entry.arguments?.getString("lotteryId"), lotteries, ownerCampsites) }
-                    })
-                    val form by edit.state.collectAsStateWithLifecycle()
-                    LaunchedEffect(form.savedLotteryId) {
-                        if (form.savedLotteryId != null) {
-                            // Replace S15 with S16 so Back does not reopen the saved form.
-                            navController.navigate(LOTTERY_MANAGEMENT_ROUTE) {
-                                popUpTo(LOTTERY_EDIT_PATTERN) { inclusive = true }
-=======
             composable(OWNER_DASHBOARD_ROUTE) {
                 RequireAccount(state, controller) {
                     val dashboard: OwnerDashboardController = viewModel(factory = viewModelFactory {
@@ -363,25 +327,10 @@ fun AppNavigation(
                             // Replace the form with S14 so Back returns to S12, not the saved form.
                             navController.navigate(ownerCampsiteRoute(saved)) {
                                 popUpTo(OWNER_CAMPSITE_EDIT_PATTERN) { inclusive = true }
->>>>>>> origin/main
                                 launchSingleTop = true
                             }
                         }
                     }
-<<<<<<< HEAD
-                    LotteryEditScreen(
-                        state = form,
-                        onBack = { navController.popBackStack() },
-                        onRetry = edit::retry,
-                        onToggleCampsite = edit::toggleCampsite,
-                        onRegistrationStart = edit::setRegistrationStart,
-                        onRegistrationEnd = edit::setRegistrationEnd,
-                        onBookingStart = edit::setBookingStart,
-                        onBookingEnd = edit::setBookingEnd,
-                        onWinnersChange = edit::setWinnerCount,
-                        onLimitChange = edit::setWaitlistLimit,
-                        onSave = edit::save,
-=======
                     CampsiteEditScreen(form, CampsiteEditActions(
                         onBack = { navController.popBackStack() },
                         onRetry = edit::retry,
@@ -428,7 +377,39 @@ fun AppNavigation(
                         onEdit = { navController.navigate(campsiteEditRoute(campsiteId)) { launchSingleTop = true } },
                         onRetry = owned::refresh,
                         onGenerateQr = owned::generateQr,
->>>>>>> origin/main
+                    )
+                }
+            }
+            composable(
+                LOTTERY_EDIT_PATTERN,
+                arguments = listOf(navArgument("lotteryId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                RequireAccount(state, controller) {
+                    val edit: LotteryEditController = viewModel(factory = viewModelFactory {
+                        initializer { LotteryEditController(entry.arguments?.getString("lotteryId"), lotteries, owners::getMyCampsites) }
+                    })
+                    val form by edit.state.collectAsStateWithLifecycle()
+                    LaunchedEffect(form.savedLotteryId) {
+                        if (form.savedLotteryId != null) {
+                            // Replace S15 with S16 so Back does not reopen the saved form.
+                            navController.navigate(LOTTERY_MANAGEMENT_ROUTE) {
+                                popUpTo(LOTTERY_EDIT_PATTERN) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    LotteryEditScreen(
+                        state = form,
+                        onBack = { navController.popBackStack() },
+                        onRetry = edit::retry,
+                        onToggleCampsite = edit::toggleCampsite,
+                        onRegistrationStart = edit::setRegistrationStart,
+                        onRegistrationEnd = edit::setRegistrationEnd,
+                        onBookingStart = edit::setBookingStart,
+                        onBookingEnd = edit::setBookingEnd,
+                        onWinnersChange = edit::setWinnerCount,
+                        onLimitChange = edit::setWaitlistLimit,
+                        onSave = edit::save,
                     )
                 }
             }
