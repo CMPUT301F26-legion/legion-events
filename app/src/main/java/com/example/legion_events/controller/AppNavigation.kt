@@ -32,6 +32,8 @@ import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.LotteryEditScreen
+import com.example.legion_events.view.LotteryManagementScreen
+import com.example.legion_events.view.OwnerLotteriesScreen
 import com.example.legion_events.view.CampsiteDetailsScreen
 import com.example.legion_events.view.CampsiteEditActions
 import com.example.legion_events.view.CampsiteEditScreen
@@ -99,8 +101,10 @@ internal const val OWNER_CAMPSITE_PATTERN = "$OWNER_CAMPSITE_ROUTE/{campsiteId}"
 internal const val LOTTERY_EDIT_ROUTE = "owner/lottery_edit"
 /** S15 with an optional `lotteryId`: missing creates a lottery, present edits that one. */
 internal const val LOTTERY_EDIT_PATTERN = "$LOTTERY_EDIT_ROUTE?lotteryId={lotteryId}"
-/** S16: lottery management. */
+/** Owner Lotteries tab: the owner's lotteries, leading to S15 and S16. */
 internal const val LOTTERY_MANAGEMENT_ROUTE = "owner/lottery"
+/** S16 for one lottery; only its document ID is saved in the navigation arguments. */
+internal const val LOTTERY_DETAILS_PATTERN = "$LOTTERY_MANAGEMENT_ROUTE/{lotteryId}"
 /** S17: owner reservations. */
 internal const val OWNER_RESERVATIONS_ROUTE = "owner/reservations"
 /** S18: owner notifications. */
@@ -124,7 +128,6 @@ private val PLACEHOLDER_SCREENS = mapOf(
     RESERVATION_DETAILS_ROUTE to "Reservation details",
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-    LOTTERY_MANAGEMENT_ROUTE to "Lottery management",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
     OWNER_NOTIFICATIONS_ROUTE to "Owner notifications",
     ADMIN_DASHBOARD_ROUTE to "Admin dashboard",
@@ -162,6 +165,21 @@ private val OWNER_TABS = listOf(
  * @return The route to navigate to.
  */
 private fun ownerCampsiteRoute(campsiteId: String) = "$OWNER_CAMPSITE_ROUTE/${Uri.encode(campsiteId)}"
+
+/**
+ * Opens S15.
+ * @param lotteryId The lottery to edit, or null to create one.
+ * @return The route to navigate to.
+ */
+private fun lotteryEditRoute(lotteryId: String?) =
+    if (lotteryId == null) LOTTERY_EDIT_ROUTE else "$LOTTERY_EDIT_ROUTE?lotteryId=${Uri.encode(lotteryId)}"
+
+/**
+ * Opens S16 for a lottery.
+ * @param lotteryId The lottery document ID.
+ * @return The route to navigate to.
+ */
+private fun lotteryDetailsRoute(lotteryId: String) = "$LOTTERY_MANAGEMENT_ROUTE/${Uri.encode(lotteryId)}"
 
 /**
  * Opens S13.
@@ -389,10 +407,15 @@ fun AppNavigation(
                         initializer { LotteryEditController(entry.arguments?.getString("lotteryId"), lotteries, owners::getMyCampsites) }
                     })
                     val form by edit.state.collectAsStateWithLifecycle()
+                    val editingExisting = entry.arguments?.getString("lotteryId") != null
                     LaunchedEffect(form.savedLotteryId) {
-                        if (form.savedLotteryId != null) {
-                            // Replace S15 with S16 so Back does not reopen the saved form.
-                            navController.navigate(LOTTERY_MANAGEMENT_ROUTE) {
+                        val saved = form.savedLotteryId ?: return@LaunchedEffect
+                        if (editingExisting) {
+                            // S16 is below this form and reloads when it resumes.
+                            navController.popBackStack()
+                        } else {
+                            // Replace S15 with S16 so Back returns to the Lotteries tab, not the saved form.
+                            navController.navigate(lotteryDetailsRoute(saved)) {
                                 popUpTo(LOTTERY_EDIT_PATTERN) { inclusive = true }
                                 launchSingleTop = true
                             }
@@ -413,6 +436,46 @@ fun AppNavigation(
                     )
                 }
             }
+            composable(LOTTERY_MANAGEMENT_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: OwnerLotteriesController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerLotteriesController(lotteries, owners::getMyCampsites) }
+                    })
+                    val listings by list.state.collectAsStateWithLifecycle()
+                    // Reload on every return so lotteries created or edited in S15 appear.
+                    LifecycleResumeEffect(list) {
+                        list.refresh()
+                        onPauseOrDispose {}
+                    }
+                    OwnerLotteriesScreen(
+                        state = listings,
+                        onRetry = list::refresh,
+                        onLotteryClick = { id -> navController.navigate(lotteryDetailsRoute(id)) { launchSingleTop = true } },
+                        onCreateLottery = { navController.navigate(lotteryEditRoute(null)) { launchSingleTop = true } },
+                    )
+                }
+            }
+            composable(LOTTERY_DETAILS_PATTERN, arguments = listOf(navArgument("lotteryId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val lotteryId = checkNotNull(entry.arguments?.getString("lotteryId"))
+                    val manage: LotteryManagementController = viewModel(factory = viewModelFactory {
+                        initializer { LotteryManagementController(lotteryId, lotteries, owners::getMyCampsites) }
+                    })
+                    val information by manage.state.collectAsStateWithLifecycle()
+                    // Reload on every return so edits saved in S15 appear.
+                    LifecycleResumeEffect(manage) {
+                        manage.refresh()
+                        onPauseOrDispose {}
+                    }
+                    LotteryManagementScreen(
+                        state = information,
+                        onBack = { navController.popBackStack() },
+                        onRetry = manage::refresh,
+                        onEdit = { navController.navigate(lotteryEditRoute(lotteryId)) { launchSingleTop = true } },
+                        onTab = manage::selectTab,
+                    )
+                }
+            }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->
                 composable(route) {
                     RequireAccount(state, controller) {
@@ -422,13 +485,15 @@ fun AppNavigation(
                 }
             }
         }
-        if (OWNER_TABS.any { it.route == currentRoute } || currentRoute == OWNER_CAMPSITE_PATTERN) {
+        if (OWNER_TABS.any { it.route == currentRoute } || currentRoute == OWNER_CAMPSITE_PATTERN ||
+            currentRoute == LOTTERY_DETAILS_PATTERN) {
             NavigationBar(windowInsets = WindowInsets(0)) {
                 OWNER_TABS.forEach { tab ->
                     NavigationBarItem(
                         // S14 belongs to the Dashboard tab.
                         selected = currentRoute == tab.route ||
-                            (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN),
+                            (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN) ||
+                            (tab.route == LOTTERY_MANAGEMENT_ROUTE && currentRoute == LOTTERY_DETAILS_PATTERN),
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(OWNER_DASHBOARD_ROUTE) { saveState = true }
