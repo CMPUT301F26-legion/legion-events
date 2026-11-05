@@ -1,0 +1,113 @@
+# Booking offers
+
+This is the Part 6 data layer for viewing lottery offers and declining an offer
+(US 01.04.03). It can be developed and tested before the waitlist and notification
+features are available.
+
+## Files and responsibilities
+
+- `model/BookingOffer.kt`: the winning entrant, lottery reference, status, and timestamps.
+- `data/OfferRepository.kt`: the interface used by controllers and test doubles.
+- `data/FirebaseOfferRepository.kt`: Firebase reads, ownership checks, and the decline transaction.
+
+The paths above are relative to `app/src/main/java/com/example/legion_events/`.
+Use `FirebaseOfferRepository.instance` for the default Firebase app, or pass a
+`FirebaseAuth` and `FirebaseFirestore` instance into its constructor. The optional
+clock argument supplies device time and makes deadline tests deterministic.
+
+## Stored data
+
+See [SCHEMA.md](../SCHEMA.md#booking-offers) for the field contract. Documents live
+at `bookingOffers/{offerId}`. The document ID becomes `BookingOffer.id`; it is not
+an extra stored field. `userId` is the winner's Firebase Auth UID, not a profile
+name, email, or offer ID. Anonymous Firebase accounts have a UID too.
+
+`lotteryId` points to the lottery that supplies the offered campsites and stay
+dates. `expiresAt` is a separate response deadline. Null or missing optional
+timestamps are accepted. Required text must be nonblank, status must be one of
+`open`, `used`, `declined`, or `expired`, and timestamp fields must contain timestamps.
+Invalid records fail instead of being treated as new open offers.
+
+The draw worker will create one offer for each winning user and lottery, using a
+stable ID on retries. The Android repository does not create offers or choose
+winners. Offer creation must be committed with the draw results by the worker.
+
+## Repository operations
+
+`getOffer(offerId)` checks for a signed-in account before reading. It returns the
+owned offer, or null if Firestore reports that the document does not exist. IDs
+must identify one document; blank IDs and slash-separated paths are rejected.
+
+`getOffersForCurrentUser()` queries `bookingOffers` with
+`userId == auth.currentUser.uid`. It returns all matching statuses and an empty
+list when no offers match. Every returned document is also checked for ownership.
+These two reads use the SDK's default source behavior, which can serve cached
+data when the server is unavailable.
+
+`declineOffer(offerId)` checks the current document inside a Firestore transaction:
+
+1. Confirm the document exists and belongs to the authenticated entrant.
+2. Validate its stored fields.
+3. If already declined, perform no write, even if its deadline has since passed.
+4. Otherwise require `open` status and either no deadline or `expiresAt > now`.
+5. Set only `status` to `declined` and `updatedAt` to a server timestamp.
+6. After the transaction succeeds, read from `Source.SERVER` and return the saved offer.
+
+The checks run again if [Firestore retries the transaction](https://firebase.google.com/docs/firestore/manage-data/transactions).
+An offer used by another
+operation during a retry cannot be overwritten as declined. Transactions require
+a server connection. A commit may succeed before a later read or the caller fails;
+retrying the method is safe because already declined offers do not receive another
+write or timestamp change. This method does not send notifications or draw a replacement.
+
+## Errors and Firebase rules
+
+Signed-out calls, malformed records, missing offers during decline, and invalid
+declines raise `IllegalStateException`. Invalid document IDs raise
+`IllegalArgumentException`. Ownership mismatches and Firestore `PERMISSION_DENIED`
+errors raise `SecurityException`; the latter retains the original error as its
+cause. Other Firebase errors and coroutine cancellation propagate to the controller.
+
+Rules can deny a document read before the repository learns whether it exists.
+That produces an access error rather than a null result. Controllers should treat
+an inaccessible offer as unavailable without revealing whether another user owns it.
+
+Rules and indexes are maintained separately from this app repository. The deployed
+offer rules must enforce:
+
+- Authentication and ownership for reads; list queries include the user's UID.
+- Only an owned `open` offer can change to `declined` through the client.
+- Updates change only `status` and `updatedAt`, preserving lottery and user IDs.
+- `updatedAt` equals `request.time`, and a response deadline has not passed according
+  to [request.time](https://firebase.google.com/docs/reference/rules/rules.firestore.Request#time).
+  The device clock check is for app behavior, not authoritative enforcement.
+- Client creation and deletion of offers are denied; the trusted draw worker creates them.
+
+The Kotlin ownership checks do not replace these rules. This change does not deploy rules.
+
+## Verification
+
+Run the repository tests and the project checks from the repository root:
+
+```sh
+./gradlew :app:testDebugUnitTest --tests '*FirebaseOfferRepositoryTest'
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+./gradlew :app:dokkaGeneratePublicationHtml
+```
+
+The unit tests use Mockito at Firebase SDK boundaries and fixed timestamps. They
+cover signed-out access, owner checks, mapping, malformed data, queries, status and
+expiry restrictions, idempotency, a simulated transaction callback retry, and a
+failed read after a successful commit. They do not contact Firebase or validate
+deployed rules. Mockito is a local test dependency, explicitly attached as a Java
+agent for JVM tests; it is not included in the Android app.
+
+Before connecting a screen, verify the Firebase integration with the team's rules
+in an isolated emulator or approved test project. Seed an owned open offer, another
+user's offer, and used, expired, and declined offers. Check that list reads exclude
+the other user, declines persist, a repeated decline preserves `updatedAt`, and
+concurrent attempts cannot overwrite an already used offer. Do not run these
+checks against shared production data.
+
+Generated KDoc HTML is under `doc/api/` and remains ignored by Git. Commit Kotlin
+KDoc and this guide, rather than generated HTML.

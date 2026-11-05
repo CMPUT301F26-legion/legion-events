@@ -16,10 +16,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.legion_events.controller.AppNavigation
 import com.example.legion_events.controller.OnboardingController
 import com.example.legion_events.data.CampsiteRepository
+import com.example.legion_events.data.OwnerCampsiteRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.UserRepository
 import com.example.legion_events.data.WelcomePreferences
 import com.example.legion_events.model.Campsite
+import com.example.legion_events.model.Lottery
+import com.example.legion_events.model.Photo
 import com.example.legion_events.model.UserProfile
 import com.example.legion_events.ui.theme.LegioneventsTheme
 import kotlinx.coroutines.flow.flowOf
@@ -36,6 +39,13 @@ class ProfileNavigationTest {
 
     private val campsites = object : CampsiteRepository {
         override fun observeCampsites() = flowOf(emptyList<Campsite>())
+    }
+    private val owners = object : OwnerCampsiteRepository {
+        override suspend fun getMyCampsites() = emptyList<Campsite>()
+        override suspend fun getMyCampsite(campsiteId: String): Campsite? = null
+        override suspend fun getMyLotteries() = emptyList<Lottery>()
+        override suspend fun getPhotos(photoIds: List<String>) = emptyList<Photo>()
+        override suspend fun saveCampsite(campsite: Campsite, coverJpegBase64: String?) = error("Not used")
     }
     private val preferences = InstrumentationRegistry.getInstrumentation().targetContext
         .getSharedPreferences("profile-navigation-test", Context.MODE_PRIVATE)
@@ -110,7 +120,8 @@ class ProfileNavigationTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Manage my campsites").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Admin dashboard").assertDoesNotExist()
         compose.onNodeWithText("Manage my campsites").performScrollTo().performClick()
-        waitFor("Owner dashboard")
+        waitFor("My Campsites")
+        waitFor("You have no campsites yet. Tap Add Campsite to list your first one.")
     }
 
     @Test
@@ -161,7 +172,8 @@ class ProfileNavigationTest {
         compose.setContent {
             navigation = rememberNavController()
             LegioneventsTheme {
-                AppNavigation(controller, navigation, campsites, profiles = profiles, welcome = WelcomePreferences(preferences))
+                AppNavigation(controller, navigation, campsites, profiles = profiles,
+                    welcome = WelcomePreferences(preferences), owners = owners)
             }
         }
         compose.waitUntil(5_000) {

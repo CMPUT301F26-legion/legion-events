@@ -31,6 +31,20 @@ Other campsite fields remain unchanged: `location`, `rules`, `cancellationPolicy
 References use string IDs, coordinates use GeoPoint, instants use Timestamp, and
 night dates use `YYYY-MM-DD`. Security rules and indexes are maintained separately.
 
+## Owner campsite writes
+
+S13 writes exactly the fields the deployed security rules allow. A new `campsites/{id}`
+has `ownerId` set to the signed-in user, `active: true`, `ratingAverage: 0`,
+`ratingCount: 0`, `photoId: null`, and `createdAt`/`updatedAt` server timestamps.
+`location` is required. `rules` is one string with one rule per line, as the rules'
+`text()` check requires. Updates change only the editable fields and `updatedAt`.
+
+A new cover photo goes to `photos/{id}` with `targetType: "campsite"` and
+`mimeType: "image/jpeg"`, in the same batch that sets the campsite's `photoId`. Its
+Base64 data is at most 280,000 characters. The photo rule reads the campsite with
+`get()`, which cannot see writes in the same batch, so a new campsite is created first
+and its photo is added in a second write. Earlier photos are kept in the gallery.
+
 ## Campsite details and photos
 
 Details read the selected active `campsites/{id}` document. They display description,
@@ -55,6 +69,7 @@ document with any missing or extra field.
 | --- | --- |
 | Document ID | String, not an extra stored field |
 | `ownerId` | User ID string |
+<<<<<<< HEAD
 | `campsiteIds` | String array of 1 to 8 active campsite IDs owned by `ownerId` |
 | `registrationStartAt`, `registrationEndAt` | Timestamp; start before end, end in the future when created |
 | `bookingStartAt`, `bookingEndAt` | Timestamp; booking starts no earlier than `registrationEndAt` |
@@ -68,3 +83,39 @@ document with any missing or extra field.
 The app picks days, not times: registration opens at the start of its first day and
 closes at the start of the day after its last day; booking works the same way.
 An owner can edit a lottery only before registration opens and while nobody has joined.
+=======
+| `title` | String |
+| `campsiteIds` | String array of campsite IDs, at least one |
+| `registrationStart`, `registrationEnd` | Timestamp |
+| `bookingStart`, `bookingEnd` | Night dates in `YYYY-MM-DD` |
+| `numWinners` | Integer, at least 1 |
+| `waitlistCapacity` | Integer, or missing for no limit |
+| `drawn` | Boolean, set once when winners are drawn |
+
+## Booking offers
+
+Offers are stored at `bookingOffers/{id}`. The draw worker creates one offer per
+winning user and lottery, reusing its document ID on retries. Creation belongs to
+the same atomic draw operation as the lottery results and `drawn` flag.
+
+| Field | Type |
+| --- | --- |
+| Document ID | String, not an extra stored field |
+| `lotteryId` | Lottery ID string |
+| `userId` | Winning entrant's Firebase Auth UID |
+| `status` | String: `open`, `used`, `declined`, or `expired`; initially `open` |
+| `expiresAt` | Timestamp, or null/missing when no response deadline is set |
+| `createdAt`, `updatedAt` | Server timestamps |
+
+The referenced lottery supplies the offered campsite IDs and stay dates. An offer
+does not reserve nights. Its response deadline is separate from the lottery's
+`bookingStart` and `bookingEnd` stay dates.
+
+The app reads offers only for the signed-in user. Declining must atomically check
+ownership, an `open` status, and a response deadline that has not passed, then set
+`status` to `declined` and `updatedAt` to the server time. Repeating a decline on an
+already declined offer succeeds without changing it. Used or expired offers cannot
+be declined. Enforce these restrictions in the repository and Firestore rules;
+the rules are maintained separately. Notification records can reference the offer
+by its document ID.
+>>>>>>> origin/main

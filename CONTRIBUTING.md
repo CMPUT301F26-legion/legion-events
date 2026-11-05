@@ -44,6 +44,37 @@ Base64 data and are decoded off the main thread as gallery items become visible.
 The search bar's QR scan button and the details screen's lottery-entry button are
 disabled placeholders. Neither requests permissions nor changes Firestore data.
 
+## Owner campsites
+
+S12 (`OwnerDashboardScreen`), S13 (`CampsiteEditScreen`), and S14 (`OwnerCampsiteScreen`)
+use `OwnerCampsiteRepository`, implemented by `FirebaseOwnerCampsiteRepository`. It reads
+only campsites whose `ownerId` is the signed-in user, active or not. S12 and S14 reload
+each time they resume, so changes saved in S13 appear on return. Each card's lottery
+badge comes from the owner's `lotteries` (open, upcoming, awaiting draw, drawn, or none).
+The owner bottom bar (Dashboard, Lotteries, Reservations, Notices) shows on S12, S14,
+and the owner tab routes.
+
+S13 adds a campsite when opened without `campsiteId` and edits one when given an ID.
+Save validates inline against the same limits as the Firestore rules, writes the
+listing, adds any new cover photo, then opens S14. If only the photo fails, the form
+stays open on the saved campsite so Save retries the photo without creating a duplicate.
+Coordinates are required. Edits keep the owner, ratings, and active flag. The open-from and
+open-until dates are saved as every night in that range in `availableNights`, at most
+366. "Use current location" asks for location permission only when tapped. Photos are
+resized and saved as Base64 JPEG, as the schema describes.
+
+S14's QR code holds `legionevents://campsite/{campsiteId}`. Use `CampsiteQr.decode`
+in the S05 scanner to read the ID, then open S04. Download saves the code as a PNG;
+Share sends it through the Android share sheet using the app's `FileProvider`.
+
+## Booking offers
+
+`FirebaseOfferRepository` implements `OfferRepository` for the signed-in entrant's
+offers. It checks ownership, maps the shared `BookingOffer` schema, and declines
+open offers in a transaction. Views use the interface through a controller.
+Offer creation belongs to the draw worker. See [the booking-offer guide](doc/booking-offers.md)
+for the method behavior, error handling, Firebase rule requirements, and tests.
+
 ## Theme
 
 The app-wide **Dark mode** switch selects light or dark appearance. Light is the
