@@ -18,6 +18,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -31,6 +32,10 @@ import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.CampsiteDetailsScreen
+import com.example.legion_events.view.CampsiteEditActions
+import com.example.legion_events.view.CampsiteEditScreen
+import com.example.legion_events.view.OwnerCampsiteScreen
+import com.example.legion_events.view.OwnerDashboardScreen
 import com.example.legion_events.view.OnboardingScreen
 import com.example.legion_events.view.PlaceholderScreen
 import com.example.legion_events.view.PolicyScreen
@@ -38,7 +43,9 @@ import com.example.legion_events.view.ProfileScreen
 import com.example.legion_events.view.WelcomeScreen
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.CampsiteDetailsRepository
+import com.example.legion_events.data.FirebaseOwnerCampsiteRepository
 import com.example.legion_events.data.FirebaseProfileRepository
+import com.example.legion_events.data.OwnerCampsiteRepository
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.WelcomePreferences
@@ -79,8 +86,12 @@ internal const val ACCESSIBILITY_ROUTE = "accessibility"
 internal const val OWNER_DASHBOARD_ROUTE = "owner"
 /** S13: add or edit a campsite. */
 internal const val OWNER_CAMPSITE_EDIT_ROUTE = "owner/campsite_edit"
+/** S13 with an optional `campsiteId`: missing adds a campsite, present edits that one. */
+internal const val OWNER_CAMPSITE_EDIT_PATTERN = "$OWNER_CAMPSITE_EDIT_ROUTE?campsiteId={campsiteId}"
 /** S14: owner campsite details. */
 internal const val OWNER_CAMPSITE_ROUTE = "owner/campsite"
+/** S14 for one campsite; only its document ID is saved in the navigation arguments. */
+internal const val OWNER_CAMPSITE_PATTERN = "$OWNER_CAMPSITE_ROUTE/{campsiteId}"
 /** S15: create or edit a lottery. */
 internal const val LOTTERY_EDIT_ROUTE = "owner/lottery_edit"
 /** S16: lottery management. */
@@ -108,9 +119,6 @@ private val PLACEHOLDER_SCREENS = mapOf(
     RESERVATION_DETAILS_ROUTE to "Reservation details",
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-    OWNER_DASHBOARD_ROUTE to "Owner dashboard",
-    OWNER_CAMPSITE_EDIT_ROUTE to "Add / edit campsite",
-    OWNER_CAMPSITE_ROUTE to "Owner campsite details",
     LOTTERY_EDIT_ROUTE to "Create / edit lottery",
     LOTTERY_MANAGEMENT_ROUTE to "Lottery management",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
@@ -136,6 +144,29 @@ private val TABS = listOf(
     Tab(PROFILE_ROUTE, "Profile", R.drawable.ic_nav_profile),
 )
 
+/** Owner bottom-bar tabs in mockup order, shown on S12, S14, and the owner tab screens. */
+private val OWNER_TABS = listOf(
+    Tab(OWNER_DASHBOARD_ROUTE, "Dashboard", R.drawable.ic_nav_dashboard),
+    Tab(LOTTERY_MANAGEMENT_ROUTE, "Lotteries", R.drawable.ic_nav_lotteries),
+    Tab(OWNER_RESERVATIONS_ROUTE, "Reservations", R.drawable.ic_nav_bookings),
+    Tab(OWNER_NOTIFICATIONS_ROUTE, "Notices", R.drawable.ic_nav_inbox),
+)
+
+/**
+ * Opens S14 for a campsite.
+ * @param campsiteId The campsite document ID.
+ * @return The route to navigate to.
+ */
+private fun ownerCampsiteRoute(campsiteId: String) = "$OWNER_CAMPSITE_ROUTE/${Uri.encode(campsiteId)}"
+
+/**
+ * Opens S13.
+ * @param campsiteId The campsite to edit, or null to add one.
+ * @return The route to navigate to.
+ */
+private fun campsiteEditRoute(campsiteId: String?) =
+    if (campsiteId == null) OWNER_CAMPSITE_EDIT_ROUTE else "$OWNER_CAMPSITE_EDIT_ROUTE?campsiteId=${Uri.encode(campsiteId)}"
+
 /**
  * Shows onboarding until the account is ready, then routes between the app's screens.
  *
@@ -148,6 +179,7 @@ private val TABS = listOf(
  * @param details Supplies the selected campsite and its photos.
  * @param profiles Reads and changes the user's profile.
  * @param welcome Remembers whether S01 was shown; null skips S01.
+ * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
  */
 @Composable
 fun AppNavigation(
@@ -157,6 +189,7 @@ fun AppNavigation(
     details: CampsiteDetailsRepository = FirebaseRepository.instance,
     profiles: ProfileRepository = FirebaseProfileRepository.instance,
     welcome: WelcomePreferences? = null,
+    owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -249,11 +282,124 @@ fun AppNavigation(
                     )
                 }
             }
+            composable(OWNER_DASHBOARD_ROUTE) {
+                RequireAccount(state, controller) {
+                    val dashboard: OwnerDashboardController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerDashboardController(owners) }
+                    })
+                    val listings by dashboard.state.collectAsStateWithLifecycle()
+                    // Reload on every return so campsites added or edited in S13 appear.
+                    LifecycleResumeEffect(dashboard) {
+                        dashboard.refresh()
+                        onPauseOrDispose {}
+                    }
+                    OwnerDashboardScreen(
+                        state = listings,
+                        onBack = { navController.popBackStack() },
+                        onRetry = dashboard::refresh,
+                        onCampsiteClick = { id -> navController.navigate(ownerCampsiteRoute(id)) { launchSingleTop = true } },
+                        onAddCampsite = { navController.navigate(campsiteEditRoute(null)) { launchSingleTop = true } },
+                    )
+                }
+            }
+            composable(
+                OWNER_CAMPSITE_EDIT_PATTERN,
+                arguments = listOf(navArgument("campsiteId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                RequireAccount(state, controller) {
+                    val edit: CampsiteEditController = viewModel(factory = viewModelFactory {
+                        initializer { CampsiteEditController(entry.arguments?.getString("campsiteId"), owners) }
+                    })
+                    val form by edit.state.collectAsStateWithLifecycle()
+                    val editingExisting = entry.arguments?.getString("campsiteId") != null
+                    LaunchedEffect(form.savedCampsiteId) {
+                        val saved = form.savedCampsiteId ?: return@LaunchedEffect
+                        if (editingExisting) {
+                            // S14 is below this form and reloads when it resumes.
+                            navController.popBackStack()
+                        } else {
+                            // Replace the form with S14 so Back returns to S12, not the saved form.
+                            navController.navigate(ownerCampsiteRoute(saved)) {
+                                popUpTo(OWNER_CAMPSITE_EDIT_PATTERN) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                    CampsiteEditScreen(form, CampsiteEditActions(
+                        onBack = { navController.popBackStack() },
+                        onRetry = edit::retry,
+                        onName = edit::setName,
+                        onLocationName = edit::setLocationName,
+                        onDescription = edit::setDescription,
+                        onToggleAmenity = edit::toggleAmenity,
+                        onTagInput = edit::setTagInput,
+                        onAddTag = edit::addTag,
+                        onRemoveTag = edit::removeTag,
+                        onMaxGuests = edit::setMaxGuests,
+                        onPrice = edit::setPrice,
+                        onLatitude = edit::setLatitude,
+                        onLongitude = edit::setLongitude,
+                        onLocating = edit::startLocating,
+                        onCurrentLocation = edit::setCurrentLocation,
+                        onLocationFailed = edit::locationFailed,
+                        onRules = edit::setRules,
+                        onCancellationPolicy = edit::setCancellationPolicy,
+                        onOpenFrom = edit::setOpenFrom,
+                        onOpenUntil = edit::setOpenUntil,
+                        onPhotoPicked = edit::startPhoto,
+                        onPhoto = edit::setPhoto,
+                        onRemovePhoto = edit::removePhoto,
+                        onSave = edit::save,
+                    ))
+                }
+            }
+            composable(OWNER_CAMPSITE_PATTERN, arguments = listOf(navArgument("campsiteId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val campsiteId = checkNotNull(entry.arguments?.getString("campsiteId"))
+                    val owned: OwnerCampsiteController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerCampsiteController(campsiteId, owners) }
+                    })
+                    val information by owned.state.collectAsStateWithLifecycle()
+                    // Reload on every return so edits saved in S13 appear.
+                    LifecycleResumeEffect(owned) {
+                        owned.refresh()
+                        onPauseOrDispose {}
+                    }
+                    OwnerCampsiteScreen(
+                        state = information,
+                        onBack = { navController.popBackStack() },
+                        onEdit = { navController.navigate(campsiteEditRoute(campsiteId)) { launchSingleTop = true } },
+                        onRetry = owned::refresh,
+                        onGenerateQr = owned::generateQr,
+                    )
+                }
+            }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->
                 composable(route) {
                     RequireAccount(state, controller) {
-                        PlaceholderScreen(title, if (TABS.any { it.route == route }) null else { { navController.popBackStack() } })
+                        val tab = (TABS + OWNER_TABS).any { it.route == route }
+                        PlaceholderScreen(title, if (tab) null else { { navController.popBackStack() } })
                     }
+                }
+            }
+        }
+        if (OWNER_TABS.any { it.route == currentRoute } || currentRoute == OWNER_CAMPSITE_PATTERN) {
+            NavigationBar(windowInsets = WindowInsets(0)) {
+                OWNER_TABS.forEach { tab ->
+                    NavigationBarItem(
+                        // S14 belongs to the Dashboard tab.
+                        selected = currentRoute == tab.route ||
+                            (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN),
+                        onClick = {
+                            navController.navigate(tab.route) {
+                                popUpTo(OWNER_DASHBOARD_ROUTE) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(painterResource(tab.icon), contentDescription = null) },
+                        label = { Text(tab.label) },
+                    )
                 }
             }
         }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shares only the QR codes that S14 writes to the app cache. -->
+<paths>
+    <cache-path name="qr" path="qr/" />
+</paths>
