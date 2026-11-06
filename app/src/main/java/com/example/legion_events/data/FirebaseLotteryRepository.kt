@@ -2,6 +2,7 @@ package com.example.legion_events.data
 
 import com.example.legion_events.model.Lottery
 import com.example.legion_events.model.MAX_WAITLIST_LIMIT
+import com.example.legion_events.model.WaitlistEntrant
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -51,8 +52,20 @@ class FirebaseLotteryRepository(
         return document.toLottery()
     }
 
-    override suspend fun getLotteriesForOwner(ownerId: String): List<Lottery> =
-        lotteries.whereEqualTo("ownerId", ownerId).get().await().documents.map { it.toLottery() }
+    override suspend fun getMyLotteries(): List<Lottery> {
+        val ownerId = checkNotNull(auth.currentUser) { "No user is signed in." }.uid
+        return lotteries.whereEqualTo("ownerId", ownerId).get().await().documents.map { it.toLottery() }
+    }
+
+    /** The equality filter on `lotteryId` lets the rules confirm the caller owns that lottery. */
+    override suspend fun getWaitlist(lotteryId: String): List<WaitlistEntrant> =
+        firestore.collection("waitlist").whereEqualTo("lotteryId", lotteryId).get().await().documents.map { document ->
+            WaitlistEntrant(
+                userId = document.getString("userId").orEmpty(),
+                status = document.getString("status").orEmpty(),
+                joinedAt = document.getTimestamp("joinedAt"),
+            )
+        }
 
     /** Fields the owner may set when creating or editing (US 02.04.01–02.04.07). */
     private fun Lottery.editableFields(): Map<String, Any> = mapOf(

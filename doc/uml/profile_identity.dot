@@ -2,79 +2,95 @@
 // Render with: dot -Tpng doc/uml/profile_identity.dot -o doc/uml/profile_identity.png
 digraph ProfileIdentity {
   graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
-         label="Profile and device identity (MVC)" labelloc=t fontsize=18];
+         label="Profile and device identity" labelloc=t fontsize=18];
   node  [shape=plain fontname="Liberation Sans" fontsize=10];
   edge  [fontname="Liberation Sans" fontsize=9];
 
   UserProfile [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>UserProfile</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ uid: String<BR/>+ name: String<BR/>+ email: String<BR/>+ phone: String<BR/>+ role: String  (user | admin)<BR/>+ disabled: Boolean<BR/>+ photoId: String?<BR/>+ fcmToken: String?<BR/>+ notificationsEnabled: Boolean<BR/>+ createdAt, updatedAt: Timestamp?</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ uid: String<BR/>+ name: String<BR/>+ email: String<BR/>+ phone: String<BR/>+ role: String<BR/>+ disabled: Boolean<BR/>+ photoId: String?<BR/>+ fcmToken: String?<BR/>+ notificationsEnabled: Boolean<BR/>+ createdAt: Timestamp?<BR/>+ updatedAt: Timestamp?</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
 
   UserRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#eeeeee"><I>«interface»</I><BR/><B>UserRepository</B></TD></TR>
-    <TR><TD ALIGN="LEFT" SIDES="T" BORDER="1">+ initializeUser(): UserProfile</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ initializeUser(): UserProfile</TD></TR></TABLE>>];
 
   ProfileRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#eeeeee"><I>«interface»</I><BR/><B>ProfileRepository</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getProfile(): UserProfile<BR/>+ updateContact(name, email, phone)<BR/>+ setNotificationsEnabled(enabled: Boolean)<BR/>+ deleteProfile()</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getProfile(): UserProfile<BR/>+ updateContact(name: String, email: String, phone: String)<BR/>+ setNotificationsEnabled(enabled: Boolean)<BR/>+ deleteProfile()</TD></TR></TABLE>>];
 
   FirebaseRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><B>FirebaseRepository</B></TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- auth: FirebaseAuth<BR/>- firestore: FirebaseFirestore</TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ initializeUser(): UserProfile<BR/>(campsite reads omitted)</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ initializeUser(): UserProfile</TD></TR></TABLE>>];
 
   FirebaseProfileRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><B>FirebaseProfileRepository</B></TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- auth: FirebaseAuth<BR/>- firestore: FirebaseFirestore</TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getProfile(): UserProfile<BR/>+ updateContact(name, email, phone)<BR/>+ setNotificationsEnabled(enabled)<BR/>+ deleteProfile()<BR/>- profileDocument(): DocumentReference</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getProfile(): UserProfile<BR/>+ updateContact(name: String, email: String, phone: String)<BR/>+ setNotificationsEnabled(enabled: Boolean)<BR/>+ deleteProfile()<BR/>- profileDocument(): DocumentReference</TD></TR></TABLE>>];
 
   WelcomePreferences [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><B>WelcomePreferences</B></TD></TR>
-    <TR><TD ALIGN="LEFT" SIDES="T" BORDER="1">- preferences: SharedPreferences</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- preferences: SharedPreferences</TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ hasSeenWelcome(): Boolean<BR/>+ markWelcomeSeen()</TD></TR></TABLE>>];
 
   OnboardingController [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#e8eef8"><I>«controller» ViewModel</I><BR/><B>OnboardingController</B></TD></TR>
-    <TR><TD ALIGN="LEFT" SIDES="T" BORDER="1">+ state: StateFlow&lt;OnboardingState&gt;</TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ retry()<BR/>+ restart()</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- repository: UserRepository<BR/>- mutableState: MutableStateFlow&lt;OnboardingState&gt;<BR/>+ state: StateFlow&lt;OnboardingState&gt;</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ retry()<BR/>+ restart()<BR/>- initialize()</TD></TR></TABLE>>];
 
   OnboardingState [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
-    <TR><TD><I>«sealed»</I><BR/><B>OnboardingState</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">Loading | Error(message)<BR/>Blocked | Ready(profile)</TD></TR></TABLE>>];
+    <TR><TD><I>«sealed interface»</I><BR/><B>OnboardingState</B></TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ Loading: OnboardingState<BR/>+ Blocked: OnboardingState<BR/>+ Error.message: String<BR/>+ Ready.profile: UserProfile</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
 
   ProfileController [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#e8eef8"><I>«controller» ViewModel</I><BR/><B>ProfileController</B></TD></TR>
-    <TR><TD ALIGN="LEFT" SIDES="T" BORDER="1">+ state: StateFlow&lt;ProfileState&gt;</TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ retry()<BR/>+ setName(), setEmail(), setPhone()<BR/>+ save()<BR/>+ setNotificationsEnabled(enabled)<BR/>+ requestDelete(), cancelDelete()<BR/>+ confirmDelete()</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- repository: ProfileRepository<BR/>- mutableState: MutableStateFlow&lt;ProfileState&gt;<BR/>+ state: StateFlow&lt;ProfileState&gt;</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ retry()<BR/>+ setName(name: String)<BR/>+ setEmail(email: String)<BR/>+ setPhone(phone: String)<BR/>+ save()<BR/>+ setNotificationsEnabled(enabled: Boolean)<BR/>+ requestDelete()<BR/>+ cancelDelete()<BR/>+ confirmDelete()</TD></TR></TABLE>>];
 
   ProfileState [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><I>«data»</I><BR/><B>ProfileState</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">name, email, phone + field errors<BR/>notificationsEnabled, admin<BR/>loading, saving, deleting, deleted<BR/>confirmingDelete, message</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ loading: Boolean<BR/>+ loadError: String?<BR/>+ name, email, phone: String<BR/>+ nameError, emailError, phoneError: String?<BR/>+ notificationsEnabled: Boolean<BR/>+ admin: Boolean<BR/>+ saving: Boolean<BR/>+ message: String?<BR/>+ confirmingDelete: Boolean<BR/>+ deleting: Boolean<BR/>+ deleted: Boolean</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
 
   AppNavigation [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#e8eef8"><I>«controller» composable</I><BR/><B>AppNavigation</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">routes S01 to S20 + policy<BR/>bottom bar: Explore, Lotteries,<BR/>Inbox, Bookings, Profile</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- controller: OnboardingController<BR/>- navController: NavHostController<BR/>- profiles: ProfileRepository<BR/>- welcome: WelcomePreferences?</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ AppNavigation()</TD></TR></TABLE>>];
 
   Views [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#f8f0e0"><I>«view» composables</I></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">OnboardingScreen<BR/>WelcomeScreen (S01)<BR/>ProfileScreen (S11)<BR/>PolicyScreen<BR/>PlaceholderScreen</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ OnboardingScreen(state, onRetry)<BR/>+ WelcomeScreen(onStart, onPolicy)<BR/>+ ProfileScreen(state, on… callbacks)<BR/>+ PolicyScreen(onBack)<BR/>+ PlaceholderScreen(title, onBack)</TD></TR></TABLE>>];
 
-  note [shape=note fontsize=9 style=filled fillcolor="#fffbe6" label="Views only render state and forward taps;\nthey never call Firestore.\nDeleting a profile does not yet remove\nwaitlist entries (needs WaitlistEntry)."];
 
-  // Realization (implements)
-  FirebaseRepository -> UserRepository [arrowhead=onormal style=dashed];
-  FirebaseProfileRepository -> ProfileRepository [arrowhead=onormal style=dashed];
-  // Dependencies
-  UserRepository -> UserProfile [arrowhead=vee style=dashed label="returns"];
-  ProfileRepository -> UserProfile [arrowhead=vee style=dashed label="returns"];
-  OnboardingController -> UserRepository [arrowhead=vee label="uses"];
-  OnboardingController -> OnboardingState [arrowhead=vee label="exposes"];
-  ProfileController -> ProfileRepository [arrowhead=vee label="uses"];
-  ProfileController -> ProfileState [arrowhead=vee label="exposes"];
-  AppNavigation -> OnboardingController [arrowhead=vee];
-  AppNavigation -> ProfileController [arrowhead=vee label="creates"];
-  AppNavigation -> WelcomePreferences [arrowhead=vee];
-  AppNavigation -> Views [arrowhead=vee label="shows"];
-  Views -> ProfileState [arrowhead=vee style=dashed label="renders"];
-  note -> Views [arrowhead=none style=dotted];
+  // Notation: extends (hollow triangle), one-way navigability (open arrow),
+  // aggregation (hollow diamond on the owner), composition (filled diamond on the owner).
+  // Multiplicities: taillabel = source end, headlabel = target end. Extends has none.
+  edge [labeldistance=1.8 labelangle=35];
+
+  // Extends: the Firebase classes implement the repository interfaces.
+  FirebaseRepository -> UserRepository [arrowhead=onormal];
+  FirebaseProfileRepository -> ProfileRepository [arrowhead=onormal];
+
+  // One-way navigability
+  UserRepository -> UserProfile [arrowhead=vee label="returns" taillabel="0..*" headlabel="1"];
+  ProfileRepository -> UserProfile [arrowhead=vee label="returns" taillabel="0..*" headlabel="1"];
+  OnboardingController -> UserRepository [arrowhead=vee label="uses" taillabel="0..*" headlabel="1"];
+  ProfileController -> ProfileRepository [arrowhead=vee label="uses" taillabel="0..*" headlabel="1"];
+  AppNavigation -> OnboardingController [arrowhead=vee label="observes" taillabel="1" headlabel="1"];
+  AppNavigation -> WelcomePreferences [arrowhead=vee label="reads" taillabel="0..*" headlabel="0..1"];
+  Views -> ProfileState [arrowhead=vee label="renders" taillabel="0..*" headlabel="1"];
+
+  // Composition: each controller owns its state; S11's back stack entry owns ProfileController.
+  OnboardingController -> OnboardingState [dir=back arrowtail=diamond label="exposes" taillabel="1" headlabel="1"];
+  ProfileController -> ProfileState [dir=back arrowtail=diamond label="exposes" taillabel="1" headlabel="1"];
+  AppNavigation -> ProfileController [dir=back arrowtail=diamond label="creates" taillabel="1" headlabel="0..1"];
+
+  // Aggregation: navigation shows the screens, which exist on their own.
+  AppNavigation -> Views [dir=back arrowtail=odiamond label="shows" taillabel="1" headlabel="1..*"];
+
 }

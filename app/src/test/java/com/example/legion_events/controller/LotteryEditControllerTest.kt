@@ -3,6 +3,7 @@ package com.example.legion_events.controller
 import com.example.legion_events.data.LotteryRepository
 import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Lottery
+import com.example.legion_events.model.WaitlistEntrant
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -300,6 +301,8 @@ class LotteryEditControllerTest {
             return checkNotNull(existing)
         }
 
-        override suspend fun getLotteriesForOwner(ownerId: String) = listOfNotNull(existing)
+        override suspend fun getMyLotteries() = listOfNotNull(existing)
+
+        override suspend fun getWaitlist(lotteryId: String) = emptyList<WaitlistEntrant>()
     }
 }

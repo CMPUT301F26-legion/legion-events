@@ -2,6 +2,7 @@ package com.example.legion_events.data
 
 
 import com.example.legion_events.model.Lottery
+import com.example.legion_events.model.WaitlistEntrant
 
 /** Gives lottery controllers access to lotteries without depending on Firebase. */
 interface LotteryRepository {
@@ -26,8 +27,16 @@ interface LotteryRepository {
     suspend fun getLottery(id: String): Lottery
 
     /**
-     * Reads every lottery the user created.
-     * @param ownerId The owner's user ID.
+     * Reads every lottery the signed-in user created, for the owner's Lotteries tab.
+     * @return The user's lotteries.
      */
-    suspend fun getLotteriesForOwner(ownerId: String): List<Lottery>
+    suspend fun getMyLotteries(): List<Lottery>
+
+    /**
+     * Reads every waitlist entry of one lottery, including withdrawn ones (US 02.09.01).
+     * Only the lottery's owner may read them.
+     * @param lotteryId The lottery document ID.
+     * @return The entries in no particular order.
+     */
+    suspend fun getWaitlist(lotteryId: String): List<WaitlistEntrant>
 }
