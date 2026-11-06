@@ -15,6 +15,7 @@ import com.example.legion_events.controller.bookingOfferRoute
 import com.example.legion_events.data.CampsiteDetailsRepository
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.LotteryRepository
+import com.example.legion_events.data.NotificationRepository
 import com.example.legion_events.data.OfferRepository
 import com.example.legion_events.data.OwnerCampsiteRepository
 import com.example.legion_events.data.ProfileRepository
@@ -22,6 +23,8 @@ import com.example.legion_events.data.UserRepository
 import com.example.legion_events.model.BookingOffer
 import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Lottery
+import com.example.legion_events.model.LotteryNotification
+import com.example.legion_events.model.LotteryResult
 import com.example.legion_events.model.Photo
 import com.example.legion_events.model.UserProfile
 import com.example.legion_events.model.WaitlistEntrant
@@ -145,7 +148,11 @@ class BookingOfferNavigationTest {
     }
 
     /** Builds the actual router with fake data and rejects calls to unrelated owner/lottery features. */
-    private fun open(offers: OfferRepository, darkTheme: Boolean = false) {
+    private fun open(
+        offers: OfferRepository,
+        darkTheme: Boolean = false,
+        notifications: NotificationRepository = NotificationRepository { flowOf(emptyList()) },
+    ) {
         lateinit var onboarding: OnboardingController
         compose.runOnUiThread {
             onboarding = OnboardingController(object : UserRepository {
@@ -203,10 +210,31 @@ class BookingOfferNavigationTest {
             navigation = rememberNavController()
             LegioneventsTheme(darkTheme = darkTheme) {
                 AppNavigation(onboarding, navigation, campsites, details, profiles,
-                    lotteries = lotteries, owners = owners, offers = offers)
+                    lotteries = lotteries, owners = owners, offers = offers, notifications = notifications)
             }
         }
         waitFor("Explore campsites")
+    }
+
+    /** Shows both draw results and routes only the winning result to its offer. */
+    @Test fun inboxShowsWinAndLossAndOpensWinningOffer() {
+        val offers = FakeOffers()
+        val offerId = checkNotNull(offers.offer).id
+        open(offers, notifications = NotificationRepository { userId ->
+            assertEquals("alice", userId)
+            flowOf(listOf(
+                LotteryNotification("win", LotteryResult.WON, offerId, Timestamp(2, 0)),
+                LotteryNotification("loss", LotteryResult.LOST, null, Timestamp(1, 0)),
+            ))
+        })
+
+        compose.onNodeWithText("Inbox").performClick()
+        waitFor("You won a campsite lottery")
+        compose.onNodeWithText("Lottery results are in").assertExists()
+        compose.onAllNodesWithText("View booking offer").assertCountEquals(1)
+        compose.onNodeWithText("View booking offer").performClick()
+        waitFor("Decline offer")
+        compose.runOnIdle { assertEquals(offerId, navigation.currentBackStackEntry?.arguments?.getString("offerId")) }
     }
 
     /** Waits until a controller's asynchronous result is reflected in the composed screen. */

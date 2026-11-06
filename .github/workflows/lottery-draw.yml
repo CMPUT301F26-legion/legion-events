@@ -28,10 +28,17 @@ jobs:
           cache: gradle
       - run: ./gradlew -p lottery-worker installDist
       - uses: google-github-actions/auth@v3
+        id: auth
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_LOTTERY_WORKER_SERVICE_ACCOUNT }}
       - run: ./lottery-worker/build/install/legion-lottery-worker/bin/legion-lottery-worker
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          LOTTERY_DRAW_ENABLED: 'true'
+      - name: Deliver lottery notifications
+        if: ${{ !cancelled() && steps.auth.outcome == 'success' && vars.LOTTERY_NOTIFICATIONS_ENABLED == 'true' }}
+        run: ./lottery-worker/build/install/legion-lottery-worker/bin/legion-lottery-worker deliver-notifications
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           LOTTERY_DRAW_ENABLED: 'true'

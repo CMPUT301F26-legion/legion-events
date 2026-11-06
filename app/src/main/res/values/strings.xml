@@ -8,4 +8,9 @@
     <string name="check_again">Check again</string>
     <string name="home_welcome">Welcome to Legion Events</string>
     <string name="home_ready">Your account is ready. No username or password needed.</string>
+    <string name="lottery_notification_channel">Lottery results</string>
+    <string name="lottery_won_title">You won a campsite lottery</string>
+    <string name="lottery_won_message">Your booking offer is ready to review.</string>
+    <string name="lottery_lost_title">Lottery results are in</string>
+    <string name="lottery_lost_message">You were not selected in this draw.</string>
 </resources>

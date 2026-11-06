@@ -106,3 +106,15 @@ own a pending, unanswered offer before its response deadline. The repository
 leaves the stored status at `pending` and sets `response` to `decline` and both
 `respondedAt` and `updatedAt` to server time. The app displays Declined based on
 the response. Retrying an already declined offer leaves its document unchanged.
+
+## Lottery notifications
+
+The backend publishes `notifications/{outboxEventId}` for each active recipient
+of a completed draw. It stores `toUserId` (Firebase Auth UID), `lotteryId`, `type`
+(`lottery_won` or `lottery_lost`), `offerId` (string or null), and `createdAt`
+(the draw event's Firestore timestamp). The app listens for documents addressed
+to the signed-in UID. Inbox results are available when push is off. The app
+stores its FCM registration in `users/{uid}.fcmToken`.
+
+`lotteryNotificationOutbox` is the backend delivery queue. See the [notification handoff guide](doc/lottery-notification-handoff.md)
+for delivery states, Firestore rules, and FCM setup.
