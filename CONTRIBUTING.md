@@ -43,8 +43,14 @@ Search text and filters remain on the Home back-stack entry. Keep new detail UI 
 the details screen and database reads in the repository. Photos use the schema's
 Base64 data and are decoded off the main thread as gallery items become visible.
 
-The search bar's QR scan button and the details screen's lottery-entry button are
-disabled placeholders. Neither requests permissions nor changes Firestore data.
+The search bar's QR button opens S05 (`QrScanScreen`). `QrScanController` validates
+results with `CampsiteQr.decode`, and the shared router replaces S05 with S04 after
+a successful scan. Back returns to the existing search and filters. The embedded
+ZXing camera requests camera permission only when scanning starts, accepts QR codes
+only, and saves no camera images. Its visible "Back to search" button cancels the
+scan and returns to the existing search. Invalid codes offer Retry; denied permission also
+offers app settings. Scanner state survives recreation to avoid duplicate launches.
+The details screen's lottery-entry button remains a disabled placeholder.
 
 ## Owner campsites
 

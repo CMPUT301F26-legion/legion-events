@@ -86,6 +86,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.zxing.core)
+    implementation(libs.zxing.embedded)
     implementation(libs.androidx.exifinterface)
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)

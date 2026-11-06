@@ -37,7 +37,7 @@ class CampsiteDetailsTest {
     @Test fun listingOpensDetailsAndBackPreservesSearchAfterRestoration() {
         val repository = FakeDetailsRepository()
         openSearch(repository)
-        compose.onNodeWithContentDescription("Scan campsite QR code (coming soon)").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Scan campsite QR code").assertIsEnabled()
         compose.onNodeWithText("Search campsites").performTextInput("Banff")
         compose.onNodeWithText("Search campsites").performImeAction()
         compose.onNodeWithText("4+ guests").performClick()

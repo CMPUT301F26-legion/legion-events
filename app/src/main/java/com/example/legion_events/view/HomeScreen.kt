@@ -33,6 +33,7 @@ import java.util.Locale
  * @param onSearch Changes the search text in the controller.
  * @param onFilter Changes the selected filter.
  * @param onRetry Reloads listings after a failed request.
+ * @param onScanQr Opens the campsite QR scanner from the search field.
  * @param onCampsiteClick Opens a campsite using its document ID.
  */
 @Composable
@@ -41,6 +42,7 @@ fun HomeScreen(
     onSearch: (String) -> Unit,
     onFilter: (CampsiteFilter) -> Unit,
     onRetry: () -> Unit,
+    onScanQr: () -> Unit,
     onCampsiteClick: (String) -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -65,9 +67,8 @@ fun HomeScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
                     trailingIcon = {
-                        // Reserved for QR search; no camera access or navigation is connected yet.
-                        IconButton(onClick = {}, enabled = false) {
-                            Icon(painterResource(R.drawable.ic_qr_code_scan), "Scan campsite QR code (coming soon)")
+                        IconButton(onClick = onScanQr) {
+                            Icon(painterResource(R.drawable.ic_qr_code_scan), "Scan campsite QR code")
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent,

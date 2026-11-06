@@ -4,8 +4,7 @@
  * Purpose: Shared router: onboarding, S01 welcome, every screen route (S01 to S20), and the bottom
  *   bar.
  * Role: Controller in MVC; also the navigation skeleton every team member registers screens in.
- * Outstanding issues: Some routes remain placeholders; each screen owner replaces theirs and
- *   adds arguments as needed.
+ * Outstanding issues: Screens still listed in PLACEHOLDER_SCREENS await implementation.
  */
 package com.example.legion_events.controller
 
@@ -40,6 +39,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
+import com.example.legion_events.view.QrScanScreen
 import com.example.legion_events.view.LotteryEditScreen
 import com.example.legion_events.view.LotteriesScreen
 import com.example.legion_events.view.LotteryManagementScreen
@@ -146,7 +146,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  * When you build one, remove it here and register it in [AppNavigation]. Add route arguments then too.
  */
 private val PLACEHOLDER_SCREENS = mapOf(
-    QR_SCAN_ROUTE to "Scan QR code",
     INBOX_ROUTE to "Notifications",
     RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
     BOOKINGS_ROUTE to "My reservations",
@@ -290,7 +289,8 @@ fun AppNavigation(
                         initializer { CampsiteListController(campsites, createSavedStateHandle()) }
                     })
                     val listings by search.state.collectAsStateWithLifecycle()
-                    HomeScreen(listings, search::search, search::filter, search::retry) { campsiteId ->
+                    HomeScreen(listings, search::search, search::filter, search::retry,
+                        onScanQr = { navController.navigate(QR_SCAN_ROUTE) { launchSingleTop = true } }) { campsiteId ->
                         navController.navigate("campsite/${Uri.encode(campsiteId)}") { launchSingleTop = true }
                     }
                 } else OnboardingScreen(state, controller::retry)
@@ -304,6 +304,31 @@ fun AppNavigation(
                     val information by detail.state.collectAsStateWithLifecycle()
                     CampsiteDetailsScreen(information, { navController.popBackStack() }, detail::retry, detail::retryPhotos)
                 } else OnboardingScreen(state, controller::retry)
+            }
+            composable(QR_SCAN_ROUTE) {
+                RequireAccount(state, controller) {
+                    val scan: QrScanController = viewModel(factory = viewModelFactory {
+                        initializer { QrScanController(createSavedStateHandle()) }
+                    })
+                    val scanning by scan.state.collectAsStateWithLifecycle()
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    LaunchedEffect(scan, lifecycleOwner, navController) {
+                        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                            scan.state.collect { result ->
+                                if (navController.currentDestination?.route == QR_SCAN_ROUTE) {
+                                    if (result.status == QrScanStatus.FOUND) {
+                                        navController.navigate("campsite/${Uri.encode(checkNotNull(result.campsiteId))}") {
+                                            popUpTo(QR_SCAN_ROUTE) { inclusive = true }
+                                            launchSingleTop = true
+                                        }
+                                    } else if (result.status == QrScanStatus.CANCELLED) navController.popBackStack()
+                                }
+                            }
+                        }
+                    }
+                    QrScanScreen(scanning, scan::scanStarted, scan::scanResult, scan::cameraFailed,
+                        scan::retry, { navController.popBackStack() })
+                }
             }
             composable(POLICY_ROUTE) {
                 PolicyScreen { navController.popBackStack() }
