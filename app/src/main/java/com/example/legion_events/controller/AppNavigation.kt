@@ -71,6 +71,12 @@ import com.example.legion_events.data.OfferRepository
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.WelcomePreferences
+import com.example.legion_events.data.FirebaseOwnerNoticeRepository
+import com.example.legion_events.data.FirebaseWaitlistRepository
+import com.example.legion_events.data.OwnerNoticeRepository
+import com.example.legion_events.data.WaitlistRepository
+import com.example.legion_events.view.CampsiteLotterySection
+import com.example.legion_events.view.OwnerNoticesScreen
 import kotlinx.coroutines.flow.filterIsInstance
 
 /** Route shown while the app opens or creates the user's account. */
@@ -155,7 +161,6 @@ private val PLACEHOLDER_SCREENS = mapOf(
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
-    OWNER_NOTIFICATIONS_ROUTE to "Owner notifications",
     ADMIN_DASHBOARD_ROUTE to "Admin dashboard",
     ADMIN_LOGS_ROUTE to "Admin logs",
 )
@@ -231,6 +236,8 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
  * @param offers Reads and declines the authenticated user's offers; tests inject a fake.
  * @param notifications Observes the authenticated user's inbox.
+ * @param waitlists Joins and leaves lottery waitlists for S04 and S06.
+ * @param notices Sends owner notices on S18 and delivers them to the inbox.
  * @param inboxRecipient Account UID from a pending lottery push tap.
  * @param onInboxRequestConsumed Clears a handled or invalid push tap.
  * @param onEnablePush Requests Android's notification permission when available.
@@ -247,6 +254,8 @@ fun AppNavigation(
     owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
     offers: OfferRepository = FirebaseOfferRepository.instance,
     notifications: NotificationRepository = FirebaseNotificationRepository.instance,
+    waitlists: WaitlistRepository = FirebaseWaitlistRepository.instance,
+    notices: OwnerNoticeRepository = FirebaseOwnerNoticeRepository.instance,
     inboxRecipient: String? = null,
     onInboxRequestConsumed: () -> Unit = {},
     onEnablePush: (() -> Unit)? = null,
@@ -322,7 +331,18 @@ fun AppNavigation(
                         initializer { CampsiteDetailsController(checkNotNull(entry.arguments?.getString("campsiteId")), details) }
                     })
                     val information by detail.state.collectAsStateWithLifecycle()
-                    CampsiteDetailsScreen(information, { navController.popBackStack() }, detail::retry, detail::retryPhotos)
+                    val join: CampsiteLotteryController = viewModel(factory = viewModelFactory {
+                        initializer { CampsiteLotteryController(checkNotNull(entry.arguments?.getString("campsiteId")), waitlists) }
+                    })
+                    val joining by join.state.collectAsStateWithLifecycle()
+                    CampsiteDetailsScreen(information, { navController.popBackStack() }, detail::retry, detail::retryPhotos) {
+                        CampsiteLotterySection(joining, join::join, join::retry) {
+                            navController.navigate(LOTTERIES_ROUTE) {
+                                popUpTo(HOME_ROUTE) { saveState = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
                 } else OnboardingScreen(state, controller::retry)
             }
             composable(QR_SCAN_ROUTE) {
@@ -355,7 +375,17 @@ fun AppNavigation(
             }
             composable(LOTTERIES_ROUTE) {
                 RequireAccount(state, controller) {
-                    LotteriesScreen {
+                    val mine: MyLotteriesController = viewModel(factory = viewModelFactory {
+                        initializer { MyLotteriesController(waitlists) }
+                    })
+                    val entries by mine.state.collectAsStateWithLifecycle()
+                    // Reload on every return so lotteries joined on S04 appear.
+                    LifecycleResumeEffect(mine) {
+                        mine.retry()
+                        onPauseOrDispose {}
+                    }
+                    LotteriesScreen(entries, mine::canLeave, mine::requestLeave, mine::cancelLeave,
+                        mine::confirmLeave, mine::retry) {
                         navController.navigate(BOOKING_OFFER_ROUTE) { launchSingleTop = true }
                     }
                 }
@@ -594,7 +624,7 @@ fun AppNavigation(
                     OnboardingScreen(state, controller::retry)
                 } else {
                     val inbox: InboxController = viewModel(key = "inbox-$userId", factory = viewModelFactory {
-                        initializer { InboxController(userId, notifications) }
+                        initializer { InboxController(userId, notifications, notices) }
                     })
                     val inboxState by inbox.state.collectAsStateWithLifecycle()
                     InboxScreen(
@@ -603,6 +633,15 @@ fun AppNavigation(
                         onOffer = { id -> navController.navigate(bookingOfferRoute(id)) { launchSingleTop = true } },
                         onEnablePush = onEnablePush,
                     )
+                }
+            }
+            composable(OWNER_NOTIFICATIONS_ROUTE) {
+                RequireAccount(state, controller) {
+                    val notes: OwnerNoticesController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerNoticesController(lotteries, owners::getMyCampsites, notices) }
+                    })
+                    val noticeState by notes.state.collectAsStateWithLifecycle()
+                    OwnerNoticesScreen(noticeState, notes::selectLottery, notes::setMessage, notes::send, notes::refresh)
                 }
             }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->

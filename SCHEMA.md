@@ -83,6 +83,58 @@ The app picks days, not times: registration opens at the start of its first day 
 closes at the start of the day after its last day; booking works the same way.
 An owner can edit a lottery only before registration opens and while nobody has joined.
 
+## Waitlist
+
+Entries are stored at `waitlist/{lotteryId}_{userId}`, one per user per lottery.
+
+| Field | Type |
+| --- | --- |
+| `lotteryId` | Lottery ID string |
+| `userId` | Entrant's Firebase Auth UID |
+| `status` | `joined`, `withdrawn`, or a draw result (`won`, `lost`) |
+| `joinedAt` | Server timestamp of the latest join |
+| `updatedAt` | Server timestamp |
+
+Joining (S04) creates the entry, or changes a `withdrawn` entry back to `joined`, and adds 1
+to the lottery's `entrantCount` in the same transaction. Leaving (S06) changes `joined` to
+`withdrawn` and subtracts 1. Both are allowed only while registration is open, and joining
+only while `entrantCount < waitlistLimit`. The deployed rules check all of this; a second
+join of the same lottery is rejected. The rules let users read only their own existing
+entry, so the app finds it with a `userId` query before the transaction.
+
+## Owner notices
+
+An owner's notice to a lottery waitlist (S18) is stored at `ownerNotices/{id}`.
+
+| Field | Type |
+| --- | --- |
+| `ownerId` | Sender's Firebase Auth UID; must own the lottery |
+| `lotteryId` | Lottery ID string |
+| `message` | String, 1 to 1000 characters |
+| `recipientIds` | UIDs of entrants whose status was `joined` when it was sent, 1 to 100 |
+| `createdAt`, `updatedAt` | Server timestamps |
+
+The owner lists notices by `ownerId`. Entrants read notices whose `recipientIds` contain their
+UID, shown in the S07 inbox; the inbox hides them while `notificationsEnabled` is false.
+Notices cannot be edited or deleted. Add this rule inside
+`match /databases/{database}/documents`:
+
+```text
+match /ownerNotices/{id} {
+  allow read: if mine(resource.data.ownerId)
+    || (activeUser() && request.auth.uid in resource.data.recipientIds) || admin();
+  allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
+    && request.resource.data.keys().hasAll(['ownerId','lotteryId','message','recipientIds','createdAt','updatedAt'])
+    && request.resource.data.keys().hasOnly(['ownerId','lotteryId','message','recipientIds','createdAt','updatedAt'])
+    && lottery(request.resource.data.lotteryId).ownerId == request.auth.uid
+    && text(request.resource.data.message, 1000) && request.resource.data.message.size() > 0
+    && request.resource.data.recipientIds is list
+    && request.resource.data.recipientIds.size() >= 1 && request.resource.data.recipientIds.size() <= 100
+    && request.resource.data.createdAt == request.time && updatedNow();
+  allow update, delete: if false;
+}
+```
+
 ## Booking offers
 
 Offers are stored at `offers/{id}`. Reservation rules expect the ID
