@@ -5,7 +5,7 @@ and nightly-price filters. See [CONTRIBUTING.md](CONTRIBUTING.md) for project co
 and [SCHEMA.md](SCHEMA.md) for account roles and listing fields.
 
 The [booking-offer guide](doc/booking-offers.md) describes the Part 6 offer repository,
-decline behavior, and tests.
+the screens under **Lotteries → Booking offers → View offers**, decline behavior, and tests.
 
 ## Generate the API documentation
 

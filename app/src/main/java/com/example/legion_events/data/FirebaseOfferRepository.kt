@@ -13,7 +13,7 @@ import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 
 /**
- * Reads and declines offers at bookingOffers/{id} for the signed-in entrant.
+ * Reads and declines offers at offers/{id} for the signed-in entrant.
  *
  * Offer creation belongs to the draw worker. Firestore rules must also enforce ownership,
  * permitted status changes, and deadlines using server time.
@@ -29,7 +29,7 @@ class FirebaseOfferRepository(
 ) : OfferRepository {
     /**
      * Reads an offer after checking that an account is signed in.
-     * @param offerId One document ID in the bookingOffers collection.
+     * @param offerId One document ID in the offers collection.
      * @return The owned offer, or null when Firestore reports that it does not exist.
      * @throws IllegalStateException If signed out or the saved offer is incomplete or invalid.
      * @throws SecurityException If the offer belongs to another user or Firestore denies access.
@@ -63,7 +63,7 @@ class FirebaseOfferRepository(
      * require no write. After commit, a server read retrieves the saved server timestamp.
      * A failed follow-up read can be retried without declining or updating the offer twice.
      *
-     * @param offerId One document ID in the bookingOffers collection.
+     * @param offerId One document ID in the offers collection.
      * @return The saved declined offer, including its server-provided updatedAt.
      * @throws IllegalStateException If signed out, missing, invalid, used, or expired.
      * @throws SecurityException If the offer belongs to another user or Firestore denies access.
@@ -79,12 +79,14 @@ class FirebaseOfferRepository(
 
                 if (offer.status == BookingOffer.STATUS_DECLINED) return@runTransaction
                 check(offer.status == BookingOffer.STATUS_OPEN) { "This offer cannot be declined." }
-                check(offer.expiresAt == null || offer.expiresAt > now()) { "This offer has expired." }
+                val expiresAt = checkNotNull(offer.expiresAt) { "This offer has no response deadline." }
+                check(expiresAt > now()) { "This offer has expired." }
 
                 transaction.update(
                     reference,
                     mapOf(
-                        "status" to BookingOffer.STATUS_DECLINED,
+                        "response" to "decline",
+                        "respondedAt" to FieldValue.serverTimestamp(),
                         "updatedAt" to FieldValue.serverTimestamp(),
                     ),
                 )
@@ -111,8 +113,15 @@ class FirebaseOfferRepository(
     private fun DocumentSnapshot.toOwnedOffer(userId: String): BookingOffer {
         val ownerId = requiredString("userId")
         if (ownerId != userId) throw SecurityException("This offer belongs to another user.")
-        val status = requiredString("status")
-        check(status in STATUSES) { "Offer has an invalid status." }
+        val status = when (val storedStatus = requiredString("status")) {
+            "pending" -> when (get("response")) {
+                null -> BookingOffer.STATUS_OPEN
+                "decline" -> BookingOffer.STATUS_DECLINED
+                else -> error("Offer has an invalid response.")
+            }
+            BookingOffer.STATUS_USED, BookingOffer.STATUS_DECLINED, BookingOffer.STATUS_EXPIRED -> storedStatus
+            else -> error("Offer has an invalid status.")
+        }
         return BookingOffer(
             id = id,
             lotteryId = requiredString("lotteryId"),
@@ -149,13 +158,7 @@ class FirebaseOfferRepository(
 
     /** Shared repository access and stored field values. */
     companion object {
-        private const val COLLECTION = "bookingOffers"
-        private val STATUSES = setOf(
-            BookingOffer.STATUS_OPEN,
-            BookingOffer.STATUS_USED,
-            BookingOffer.STATUS_DECLINED,
-            BookingOffer.STATUS_EXPIRED,
-        )
+        private const val COLLECTION = "offers"
 
         /** Repository using the app's existing default Firebase configuration. */
         val instance: FirebaseOfferRepository by lazy {
