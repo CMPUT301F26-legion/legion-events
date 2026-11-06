@@ -85,27 +85,24 @@ An owner can edit a lottery only before registration opens and while nobody has 
 
 ## Booking offers
 
-Offers are stored at `bookingOffers/{id}`. The draw worker creates one offer per
-winning user and lottery, reusing its document ID on retries. Creation belongs to
-the same atomic draw operation as the lottery results and `drawn` flag.
+Offers are stored at `offers/{id}`. Reservation rules expect the ID
+`<lotteryId>_<userId>`. The trusted draw worker creates one offer per winner in
+the same operation as the results and `winnersDrawn` flag.
 
 | Field | Type |
 | --- | --- |
-| Document ID | String, not an extra stored field |
+| Document ID | String, stored as the document key |
 | `lotteryId` | Lottery ID string |
 | `userId` | Winning entrant's Firebase Auth UID |
-| `status` | String: `open`, `used`, `declined`, or `expired`; initially `open` |
-| `expiresAt` | Timestamp, or null/missing when no response deadline is set |
+| `campsiteIds` | Array of offered campsite IDs used by reservation rules |
+| `status` | String, initially `pending` |
+| `expiresAt` | Timestamp for the response deadline |
+| `response` | Absent or null while unanswered, `decline` after a decline |
+| `respondedAt` | Server timestamp set when the user declines |
 | `createdAt`, `updatedAt` | Server timestamps |
 
-The referenced lottery supplies the offered campsite IDs and stay dates. An offer
-does not reserve nights. Its response deadline is separate from the lottery's
-`bookingStart` and `bookingEnd` stay dates.
-
-The app reads offers only for the signed-in user. Declining must atomically check
-ownership, an `open` status, and a response deadline that has not passed, then set
-`status` to `declined` and `updatedAt` to the server time. Repeating a decline on an
-already declined offer succeeds without changing it. Used or expired offers cannot
-be declined. Enforce these restrictions in the repository and Firestore rules;
-the rules are maintained separately. Notification records can reference the offer
-by its document ID.
+The app queries offers by the signed-in user's UID. To decline, the user must
+own a pending, unanswered offer before its response deadline. The repository
+leaves the stored status at `pending` and sets `response` to `decline` and both
+`respondedAt` and `updatedAt` to server time. The app displays Declined based on
+the response. Retrying an already declined offer leaves its document unchanged.

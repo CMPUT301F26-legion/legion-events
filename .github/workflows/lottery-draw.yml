@@ -1,0 +1,37 @@
+name: Lottery draw
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: lottery-draw
+  cancel-in-progress: false
+
+jobs:
+  draw:
+    if: ${{ vars.LOTTERY_DRAW_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - run: ./gradlew -p lottery-worker installDist
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_LOTTERY_WORKER_SERVICE_ACCOUNT }}
+      - run: ./lottery-worker/build/install/legion-lottery-worker/bin/legion-lottery-worker
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          LOTTERY_DRAW_ENABLED: 'true'
