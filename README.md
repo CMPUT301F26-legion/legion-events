@@ -38,9 +38,11 @@ generator's available tasks and the [onboarding notes](doc/onboarding.md) for ap
 
 - **Model:** Claude Opus 5.5 (Anthropic), through Claude Code in VS Code.
 - **Dates accessed:** October 30 to November 6, 2026.
-- **Prompts:** asked it to structure the user stories, review pull requests, write features
-  and tests, check code against the Firestore rules, resolve merge conflicts, and help update
+- **Prompts:** asked it to structure the user stories, write features and tests, review pull
+  requests, check code against the Firestore rules, resolve merge conflicts, and help update
   UML diagrams, CRC cards, and wiki pages.
-- **Used for:** the profile, onboarding, navigation, and lottery setup code and tests
-  (S15, S16, owner Lotteries tab), the lotteries section of `SCHEMA.md`, the UML diagrams
-  in `doc/uml`, and the CRC cards in `images/crc_cards`.
+- **Used for:** code and tests across the app (profile and onboarding, navigation, campsite
+  search and details, owner campsite screens, lottery setup and management, lottery draw and
+  booking offers), `SCHEMA.md`, the UML diagrams in `doc/uml`, and the CRC cards in
+  `images/crc_cards`.
+- Every team member reviewed and tested the AI-generated code before merging.
