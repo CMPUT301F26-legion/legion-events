@@ -39,6 +39,6 @@ generator's available tasks and the [onboarding notes](doc/onboarding.md) for ap
 - **Model:** Claude Opus 5.5 (Anthropic), through Claude Code in VS Code.
 - **Dates accessed:** October 30 to November 6, 2026.
 - **Prompts:** asked it to structure the user stories,
-  review some pull requests, and update the UML diagrams, CRC cards, and wiki pages.
+  review some pull requests, and help to update some UML diagrams, CRC cards, and wiki pages.
 - **Used for:** the profile, onboarding, and some navigation code and tests, the UML diagrams
   in `doc/uml`, and the CRC cards in `images/crc_cards`.
