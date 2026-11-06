@@ -32,8 +32,8 @@ interface OfferRepository {
     /**
      * Declines the signed-in user's open offer (US 01.04.03).
      *
-     * Implementations must check ownership, status, and any response deadline atomically with
-     * the update. Only status and the server-managed updatedAt may change. An already declined
+     * Implementations must check ownership, status, and response deadline atomically with
+     * the update. Only the decline response and server-managed timestamps may change. An already declined
      * offer is returned unchanged so a retry after a lost response is safe. Used or expired
      * offers, including open offers whose deadline has passed, cannot be declined.
      *

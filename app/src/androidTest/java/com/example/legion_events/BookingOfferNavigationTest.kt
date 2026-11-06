@@ -24,6 +24,7 @@ import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Lottery
 import com.example.legion_events.model.Photo
 import com.example.legion_events.model.UserProfile
+import com.example.legion_events.model.WaitlistEntrant
 import com.example.legion_events.ui.theme.LegioneventsTheme
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.flowOf
@@ -180,7 +181,9 @@ class BookingOfferNavigationTest {
             /** Offer screens use their own repository to load offers. */
             override suspend fun getLottery(id: String): Lottery = error("Unexpected lottery read")
             /** Owner lottery listings are outside these tests. */
-            override suspend fun getLotteriesForOwner(ownerId: String): List<Lottery> = error("Unexpected owner lotteries")
+            override suspend fun getMyLotteries(): List<Lottery> = error("Unexpected owner lotteries")
+            /** Owner waitlists are outside these tests. */
+            override suspend fun getWaitlist(lotteryId: String): List<WaitlistEntrant> = error("Unexpected waitlist read")
         }
         val owners = object : OwnerCampsiteRepository {
             /** Owner listings are outside these tests. */

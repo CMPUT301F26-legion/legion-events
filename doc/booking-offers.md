@@ -45,15 +45,14 @@ clock argument supplies device time and makes deadline tests deterministic.
 ## Stored data
 
 See [SCHEMA.md](../SCHEMA.md#booking-offers) for the field contract. Documents live
-at `bookingOffers/{offerId}`. The document ID becomes `BookingOffer.id`; it is not
+at `offers/{offerId}`. The document ID becomes `BookingOffer.id`; it is not
 an extra stored field. `userId` is the winner's Firebase Auth UID, not a profile
 name, email, or offer ID. Anonymous Firebase accounts have a UID too.
 
 `lotteryId` points to the lottery that supplies the offered campsites and booking
 window. Stay dates belong to the later reservation flow. `expiresAt` is a separate
-response deadline. Null or missing optional
-timestamps are accepted. Required text must be nonblank, status must be one of
-`open`, `used`, `declined`, or `expired`, and timestamp fields must contain timestamps.
+response deadline. The repository maps a Firestore `pending` offer to Open while
+its `response` is absent or null, and to Declined once `response` is `decline`.
 Invalid records fail instead of being treated as new open offers.
 
 The draw worker will create one offer for each winning user and lottery, using a
@@ -66,7 +65,7 @@ winners. Offer creation must be committed with the draw results by the worker.
 owned offer, or null if Firestore reports that the document does not exist. IDs
 must identify one document; blank IDs and slash-separated paths are rejected.
 
-`getOffersForCurrentUser()` queries `bookingOffers` with
+`getOffersForCurrentUser()` queries `offers` with
 `userId == auth.currentUser.uid`. It returns all matching statuses and an empty
 list when no offers match. Every returned document is also checked for ownership.
 These two reads use the SDK's default source behavior, which can serve cached
@@ -77,8 +76,8 @@ data when the server is unavailable.
 1. Confirm the document exists and belongs to the authenticated entrant.
 2. Validate its stored fields.
 3. If already declined, perform no write, even if its deadline has since passed.
-4. Otherwise require `open` status and either no deadline or `expiresAt > now`.
-5. Set only `status` to `declined` and `updatedAt` to a server timestamp.
+4. Otherwise require `pending` status, no response, and `expiresAt > now`.
+5. Set `response` to `decline` and `respondedAt` and `updatedAt` to server timestamps.
 6. After the transaction succeeds, read from `Source.SERVER` and return the saved offer.
 
 The checks run again if [Firestore retries the transaction](https://firebase.google.com/docs/firestore/manage-data/transactions).
@@ -103,10 +102,10 @@ an inaccessible offer as unavailable without revealing whether another user owns
 Rules and indexes are maintained separately from this app repository. The deployed
 offer rules must enforce:
 
-- Authentication and ownership for reads; list queries include the user's UID.
-- Only an owned `open` offer can change to `declined` through the client.
-- Updates change only `status` and `updatedAt`, preserving lottery and user IDs.
-- `updatedAt` equals `request.time`, and a response deadline has not passed according
+- Active account and ownership for entrant reads. List queries include the user's UID.
+- Only an owned, unanswered `pending` offer can be declined through the client.
+- Updates change only `response`, `respondedAt`, and `updatedAt`.
+- Both timestamps equal `request.time`, and the response deadline has not passed according
   to [request.time](https://firebase.google.com/docs/reference/rules/rules.firestore.Request#time).
   The device clock check is for app behavior, not authoritative enforcement.
 - Client creation and deletion of offers are denied; the trusted draw worker creates them.
@@ -154,6 +153,43 @@ For visual review, add `-Pandroid.testInstrumentationRunnerArguments.captureOffe
 to that test command. It saves light-mode overview/list/detail/empty-list and dark-mode
 detail PNGs in the debug app's cache, using only synthetic test offers. These previews
 are not production app data and should not be committed as source assets.
+
+### Run the Firebase decline integration test on a phone
+
+Use a debug app configured for a designated Firebase test project with the team's
+Firestore rules. Connect one phone with USB debugging enabled and disconnect
+other test devices. This opt-in test creates a separate anonymous test user and
+profile during setup. It declines only a seeded offer owned by that user.
+
+In PowerShell, set `$offerTestProject` to the configured test project's ID. Build
+and install both APKs, then run the setup method. Copy the
+`Booking offer test UID` from the instrumentation output.
+
+```powershell
+$offerTestProject = 'your-firebase-test-project-id'
+$offerTestClass = 'com.example.legion_events.BookingOfferFirebaseIntegrationTest'
+$offerTestRunner = 'com.example.legion_events.test/androidx.test.runner.AndroidJUnitRunner'
+$offerAdb = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
+.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest
+& $offerAdb install -r -t app/build/outputs/apk/debug/app-debug.apk
+& $offerAdb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+& $offerAdb shell am instrument -w -e class "${offerTestClass}#prepareTestUser" -e verifyFirebaseOfferDecline true -e offerTestProject $offerTestProject $offerTestRunner
+```
+
+In that project's Firestore console, create `offers/decline-test-01`. Set
+`userId` to the printed UID, `lotteryId` to a test lottery's ID, and `status` to
+`pending`. Leave `response` and `respondedAt` absent. Set `createdAt` and
+`updatedAt` to the current time as Firestore timestamps and `expiresAt` to a
+future timestamp. On the same device, run:
+
+```powershell
+& $offerAdb shell am instrument -w -e class "${offerTestClass}#decliningOwnedOfferPersistsAndRetryPreservesTimestamp" -e verifyFirebaseOfferDecline true -e offerTestProject $offerTestProject -e offerTestId decline-test-01 $offerTestRunner
+```
+
+The test checks that the owned open offer appears in the list, that a decline is
+saved with a new server timestamp, and that repeating the decline leaves the
+document unchanged. It leaves the fixture declined so you can verify it in the
+console. Seed a fresh `decline-test-*` document for each new run.
 
 ## Remaining integration work
 

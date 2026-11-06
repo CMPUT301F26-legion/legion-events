@@ -35,6 +35,7 @@ class FirebaseOfferRepositoryTest {
     private val currentTime = Timestamp(1_800_000_000, 0)
     private val createdAt = Timestamp(1_700_000_000, 0)
     private val savedAt = Timestamp(1_800_000_001, 0)
+    private val deadline = Timestamp(1_800_000_010, 0)
     private var attempts = listOf(transaction)
     private val repository = FirebaseOfferRepository(auth, firestore) { currentTime }
 
@@ -42,7 +43,7 @@ class FirebaseOfferRepositoryTest {
     @Before fun setUp() {
         `when`(auth.currentUser).thenReturn(user)
         `when`(user.uid).thenReturn("entrant")
-        `when`(firestore.collection("bookingOffers")).thenReturn(collection)
+        `when`(firestore.collection("offers")).thenReturn(collection)
         `when`(collection.document("offer")).thenReturn(reference)
         `when`(collection.whereEqualTo("userId", "entrant")).thenReturn(query)
         doAnswer { invocation ->
@@ -69,7 +70,7 @@ class FirebaseOfferRepositoryTest {
         val document = offer()
         `when`(reference.get()).thenReturn(Tasks.forResult(document))
         assertEquals(
-            BookingOffer("offer", "lottery", "entrant", createdAt = createdAt),
+            BookingOffer("offer", "lottery", "entrant", expiresAt = deadline, createdAt = createdAt),
             repository.getOffer("offer"),
         )
     }
@@ -91,6 +92,7 @@ class FirebaseOfferRepositoryTest {
         for (document in listOf(
             offer(ownerId = null), offer(ownerId = " "), offer(lotteryId = null),
             offer(lotteryId = ""), offer(status = null), offer(status = "unknown"),
+            offer(response = "unknown"),
         )) {
             `when`(reference.get()).thenReturn(Tasks.forResult(document))
             expectFailure(IllegalStateException::class.java) { repository.getOffer("offer") }
@@ -118,7 +120,12 @@ class FirebaseOfferRepositoryTest {
     @Test fun listingQueriesTheAuthenticatedUidAndIncludesAllStatuses() = runTest {
         val statuses = listOf("open", "used", "declined", "expired")
         val result = mock(QuerySnapshot::class.java)
-        val documents = statuses.map { offer(id = it, status = it) }
+        val documents = listOf(
+            offer(id = "open"),
+            offer(id = "used", status = "used"),
+            offer(id = "declined", response = "decline"),
+            offer(id = "expired", status = "expired"),
+        )
         `when`(result.documents).thenReturn(documents)
         `when`(query.get()).thenReturn(Tasks.forResult(result))
         val offers = repository.getOffersForCurrentUser()
@@ -159,9 +166,9 @@ class FirebaseOfferRepositoryTest {
         )
     }
 
-    @Test fun declineChangesOnlyStatusAndServerTimeAndReturnsTheCommittedOffer() = runTest {
+    @Test fun declineWritesOnlyTheResponseAndServerTimes() = runTest {
         val open = offer()
-        val saved = offer(status = "declined", updatedAt = savedAt)
+        val saved = offer(response = "decline", updatedAt = savedAt)
         `when`(transaction.get(reference)).thenReturn(open)
         `when`(reference.get(Source.SERVER)).thenReturn(
             Tasks.forResult(saved),
@@ -173,7 +180,11 @@ class FirebaseOfferRepositoryTest {
         assertEquals("lottery", declined.lotteryId)
         verify(transaction).update(
             reference,
-            mapOf("status" to "declined", "updatedAt" to FieldValue.serverTimestamp()),
+            mapOf(
+                "response" to "decline",
+                "respondedAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp(),
+            ),
         )
         verify(reference).get(Source.SERVER)
         verify(reference, never()).get()
@@ -182,7 +193,7 @@ class FirebaseOfferRepositoryTest {
     @Test fun aFutureResponseDeadlineAllowsDeclining() = runTest {
         val deadline = Timestamp(currentTime.seconds, 1)
         val open = offer(expiresAt = deadline)
-        val saved = offer(status = "declined", expiresAt = deadline, updatedAt = savedAt)
+        val saved = offer(response = "decline", expiresAt = deadline, updatedAt = savedAt)
         `when`(transaction.get(reference)).thenReturn(open)
         `when`(reference.get(Source.SERVER)).thenReturn(
             Tasks.forResult(saved),
@@ -193,7 +204,8 @@ class FirebaseOfferRepositoryTest {
     @Test fun usedExpiredUnknownAndPastDeadlineOffersCannotBeDeclined() = runTest {
         for (document in listOf(
             offer(status = "used"), offer(status = "expired"), offer(status = "unknown"),
-            offer(expiresAt = currentTime), offer(expiresAt = createdAt), offer(lotteryId = null),
+            offer(expiresAt = currentTime), offer(expiresAt = createdAt), offer(expiresAt = null),
+            offer(response = "unknown"), offer(lotteryId = null),
         )) {
             `when`(transaction.get(reference)).thenReturn(document)
             expectFailure(IllegalStateException::class.java) { repository.declineOffer("offer") }
@@ -203,7 +215,7 @@ class FirebaseOfferRepositoryTest {
     }
 
     @Test fun alreadyDeclinedOffersKeepTheirTimestampEvenAfterTheDeadline() = runTest {
-        val declined = offer(status = "declined", expiresAt = createdAt, updatedAt = savedAt)
+        val declined = offer(response = "decline", expiresAt = createdAt, updatedAt = savedAt)
         `when`(transaction.get(reference)).thenReturn(declined)
         `when`(reference.get(Source.SERVER)).thenReturn(Tasks.forResult(declined))
         repeat(2) { assertEquals(savedAt, repository.declineOffer("offer").updatedAt) }
@@ -211,7 +223,7 @@ class FirebaseOfferRepositoryTest {
     }
 
     @Test fun anotherUsersAlreadyDeclinedOfferStillFailsOwnership() = runTest {
-        val document = offer(ownerId = "other", status = "declined")
+        val document = offer(ownerId = "other", response = "decline")
         `when`(transaction.get(reference)).thenReturn(document)
         expectFailure(SecurityException::class.java) { repository.declineOffer("offer") }
         verify(transaction, never()).update(any(DocumentReference::class.java), anyMap<String, Any>())
@@ -239,7 +251,7 @@ class FirebaseOfferRepositoryTest {
 
     @Test fun aLostReadAfterCommitCanBeRetriedWithoutWritingAgain() = runTest {
         val open = offer()
-        val declined = offer(status = "declined", updatedAt = savedAt)
+        val declined = offer(response = "decline", updatedAt = savedAt)
         val unavailable = firestoreError("UNAVAILABLE")
         `when`(transaction.get(reference)).thenReturn(open, declined)
         `when`(reference.get(Source.SERVER)).thenReturn(
@@ -255,8 +267,9 @@ class FirebaseOfferRepositoryTest {
         id: String = "offer",
         ownerId: String? = "entrant",
         lotteryId: String? = "lottery",
-        status: String? = "open",
-        expiresAt: Timestamp? = null,
+        status: String? = "pending",
+        response: String? = null,
+        expiresAt: Timestamp? = deadline,
         updatedAt: Timestamp? = null,
     ): DocumentSnapshot = mock(DocumentSnapshot::class.java).also { document ->
         `when`(document.exists()).thenReturn(true)
@@ -264,6 +277,7 @@ class FirebaseOfferRepositoryTest {
         `when`(document.get("userId")).thenReturn(ownerId)
         `when`(document.get("lotteryId")).thenReturn(lotteryId)
         `when`(document.get("status")).thenReturn(status)
+        `when`(document.get("response")).thenReturn(response)
         `when`(document.get("expiresAt")).thenReturn(expiresAt)
         `when`(document.get("createdAt")).thenReturn(createdAt)
         `when`(document.get("updatedAt")).thenReturn(updatedAt)

@@ -96,7 +96,7 @@ internal const val BOOKING_OFFER_DETAILS_ROUTE = "booking_offer/{offerId}"
 
 /**
  * Builds the shared destination for a winning offer using only its document ID.
- * @param offerId A single bookingOffers document ID from the list or winning notification.
+ * @param offerId A single offers document ID from the list or winning notification.
  * @return Encoded internal navigation route.
  */
 internal fun bookingOfferRoute(offerId: String): String {
