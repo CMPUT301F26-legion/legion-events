@@ -1,0 +1,29 @@
+// UML class diagram: model overview (all slices)
+// Render with: dot -Tpng overview.dot -o overview.png
+digraph G {
+  graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
+         label="Model overview" labelloc=t fontsize=18];
+  node  [shape=plain fontname="Liberation Sans" fontsize=10];
+  edge  [fontname="Liberation Sans" fontsize=9 labeldistance=1.8 labelangle=35];
+  // Notation: extends (hollow triangle), one-way navigability (open arrow), association (plain line),
+  // aggregation (hollow diamond on the owner), composition (filled diamond on the owner).
+  // taillabel = source multiplicity, headlabel = target multiplicity. Extends has none.
+
+  UserProfile [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>UserProfile</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ uid: String<BR/>+ name, email, phone: String<BR/>+ role: String<BR/>+ photoId: String?<BR/>+ notificationsEnabled: Boolean</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  Campsite [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>Campsite</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ ownerId: String<BR/>+ name, locationName: String<BR/>+ maxGuests: Int<BR/>+ pricePerNight: Long<BR/>+ photoId: String?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  Photo [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>Photo</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ ownerId: String<BR/>+ targetType, targetId: String<BR/>+ imageBase64: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  Lottery [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>Lottery</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ ownerId: String<BR/>+ campsiteIds: List&lt;String&gt;<BR/>+ registration and booking windows<BR/>+ winnerCount, waitlistLimit: Int<BR/>+ status: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  WaitlistEntrant [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>WaitlistEntrant</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ userId: String<BR/>+ status: String<BR/>+ joinedAt: Timestamp?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  BookingOffer [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>BookingOffer</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ lotteryId: String<BR/>+ userId: String<BR/>+ status: String<BR/>+ expiresAt: Timestamp?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  CampsiteQr [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«object»</I><BR/><B>CampsiteQr</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ PREFIX: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ encode(campsiteId: String): String<BR/>+ decode(text: String): String?</TD></TR></TABLE>>];
+  UserProfile -> Campsite [arrowhead=none label="owns" taillabel="1" headlabel="0..*"];
+  UserProfile -> Lottery [arrowhead=none label="runs" taillabel="1" headlabel="0..*"];
+  Lottery -> Campsite [arrowhead=none label="includes" taillabel="0..*" headlabel="1..8"];
+  Lottery -> WaitlistEntrant [arrowhead=none label="waitlist" taillabel="1" headlabel="0..100"];
+  WaitlistEntrant -> UserProfile [arrowhead=none label="entrant" taillabel="0..*" headlabel="1"];
+  Lottery -> BookingOffer [arrowhead=none label="offers" taillabel="1" headlabel="0..*"];
+  BookingOffer -> UserProfile [arrowhead=none label="offered to" taillabel="0..*" headlabel="1"];
+  Campsite -> Photo [arrowhead=none label="cover" taillabel="1" headlabel="0..1"];
+  UserProfile -> Photo [arrowhead=none label="avatar" taillabel="1" headlabel="0..1"];
+  CampsiteQr -> Campsite [arrowhead=vee label="encodes id of" taillabel="0..*" headlabel="1"];
+}
