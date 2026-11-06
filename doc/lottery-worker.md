@@ -27,9 +27,9 @@ and skips the lottery. If a destination document already exists, the transaction
 fails without overwriting it. The worker attempts the remaining draws and reports
 the failed lottery so the next run can retry it.
 
-The `offers` contract matches `feature/offer-decline-ui`. Merge the offer UI
-changes before enabling the schedule for a database used by the app. The earlier
-`bookingOffers` repository reads a different collection and status format.
+The `offers` contract matches the app's booking-offer screens. Use an app build
+with that contract when testing the schedule against a Firebase project.
+[Booking offer behavior](booking-offers.md)
 
 ## Notification handoff
 
@@ -39,10 +39,9 @@ Each event contains `lotteryId`, `toUserId`, `offerId` (null for a loss),
 `type` (`lottery_won` or `lottery_lost`), `deliveryStatus: "pending"`, and server
 timestamps for `createdAt` and `updatedAt`.
 
-Person 5's notification service can consume these events independently of the
-draw. Reuse the event ID to deduplicate inbox entries and pass a winner's offer
-ID to `bookingOfferRoute(offerId)`. Check `notificationsEnabled` before sending
-a push. Inbox and push delivery require that consumer to be connected.
+The workflow can publish these events to Inbox and send FCM pushes through a
+separate step. Follow the [notification delivery setup](lottery-notification-handoff.md#enable-delivery)
+before enabling `LOTTERY_NOTIFICATIONS_ENABLED`.
 
 ## Local verification
 
@@ -241,8 +240,8 @@ deadline to verify that the worker skips it.
 2. Confirm the live app uses the `offers` repository contract and that the
    waitlist feature writes top-level `waitlist` documents with `lotteryId`,
    `userId`, and `status: "joined"`. The worker marks a due lottery with no joined
-   entries as drawn. Connect the notification consumer if inbox or push delivery
-   is part of the rollout.
+   entries as drawn. Complete the [notification setup](lottery-notification-handoff.md#enable-delivery)
+   if inbox and push delivery are part of the rollout.
 3. Repeat the Google Cloud setup for `legion-events-f529b`, or verify that the
    existing live identity has the same branch restriction and Firestore access.
    Update all three GitHub project and identity variables to their live values.

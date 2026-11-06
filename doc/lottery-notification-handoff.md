@@ -1,8 +1,8 @@
 # Lottery notification handoff for Person 5
 
-Part 6 saves the lottery outcome and queues a notification event. Part 5 owns the
-inbox notification and push delivery. The Firestore document is the handoff
-between the two, so the delivery code can run separately from the draw worker.
+The lottery worker saves each outcome and queues a notification event. A
+separate delivery step publishes it to the entrant's inbox and sends an optional
+push. Part 5 can build on this Firestore contract for the inbox.
 
 ## What `sendNotification()` does today
 
@@ -53,40 +53,63 @@ A loss for Bob would use `lotteryNotificationOutbox/draw-01_bob`,
 `type: "lottery_lost"`, and `offerId: null`. Use the stored `offerId` field to
 open an offer.
 
-## How Part 5 can connect delivery
+## How delivery works
 
-1. **Read committed events from trusted backend code.** Process pending outbox
-   documents. If the team uses a Firestore create trigger, listen on
-   `lotteryNotificationOutbox/{eventId}`. Plan to process any pending events
-   already present when the consumer is first deployed. Firestore trigger events
-   can arrive more than once, so handle repeated delivery of the same event ID.
-   [Firestore trigger behavior](https://firebase.google.com/docs/functions/firestore-events#limitations)
-2. **Create the recipient's inbox item.** Map the event into Part 5's inbox
-   schema with its recipient and win or loss message. Use the outbox event ID as
-   the inbox document ID or another uniqueness key. On retry, reuse the existing
-   inbox item and preserve user state such as whether it was read. Apply the
-   inbox's recipient access rules to the resulting record.
-3. **Wire the winner's offer.** Pass the stored `offerId` to
-   `bookingOfferRoute(offerId)` when the entrant opens the winning result from
-   the app. That route is supplied by `feature/offer-decline-ui`. Show the loss
-   as a result without an offer action.
-4. **Check push preferences at delivery time.** Load `users/{toUserId}` and
-   send through FCM only for an active profile with `notificationsEnabled`
-   enabled and a usable `fcmToken`. The Profile screen describes this switch as
-   a push preference, so keep the inbox result available when push is off or
-   there is no token. [Profile screen](../app/src/main/java/com/example/legion_events/view/ProfileScreen.kt) · [FCM Admin SDK](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk)
-5. **Track delivery independently of the draw.** Agree on the consumer's
-   delivery statuses and retry policy. Distinguish inbox creation from push
-   outcome so a push failure can be retried without creating a second inbox
-   item. A crash after FCM accepts a send but before the consumer records it can
-   cause a duplicate push on retry. The outbox guarantees one committed event
-   per entrant per draw, while delivery needs its own duplicate handling.
+1. **Publish the inbox item.** The `deliver-notifications` command sweeps
+   pending outbox events. It creates `notifications/{eventId}` for active
+   recipients and preserves existing records on retries. The inbox listens
+   for records addressed to the signed-in UID. A win opens `bookingOfferRoute(offerId)`.
+2. **Check push preferences.** The backend attempts FCM for an active profile
+   with `notificationsEnabled: true` and a token. The inbox item is available
+   when push is off or the user has no token. Android registers the FCM token
+   after onboarding and updates it when Firebase rotates it.
+3. **Deliver and retry.** A short Firestore lease prevents concurrent workers
+   from claiming the same push. `sent` means FCM accepted the request.
+   `skipped` covers events that need no push, have an unregistered token, or
+   belong to a missing or disabled profile. A failed attempt returns to `pending`.
+   A crash between sending and saving the outcome can repeat a push. Android uses
+   the event ID as its notification tag so a retry can replace the current entry.
+4. **Open the app.** Android checks the recipient UID and system permission
+   before displaying the push. Tapping it opens Inbox after account setup.
+
+[Delivery worker](../lottery-worker/src/main/kotlin/com/example/legion_events/worker/NotificationDelivery.kt) · [Android messaging service](../app/src/main/java/com/example/legion_events/data/LotteryMessagingService.kt) · [FCM Admin SDK](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk)
+
+## Enable delivery
+
+1. Configure the draw workflow for a team test project. Build the Android app
+   against that same Firebase project. [Automation setup](lottery-worker.md#set-up-the-github-actions-automation)
+2. Enable the Firebase Cloud Messaging API (`fcm.googleapis.com`) and grant the
+   worker service account `cloudmessaging.messages.create`, for example through
+   `roles/firebasecloudmessaging.admin`. [FCM IAM permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/firebasecloudmessaging)
+3. Add the recipient-only read rule below to the team's Firestore rules. Keep
+   the outbox backend-only. In `users/{uid}`, allow an authenticated active owner
+   to update `fcmToken` and `updatedAt` for registration while preserving the
+   existing profile update paths. Require a nonempty string token and
+   `updatedAt == request.time`. The Admin SDK writes through IAM.
+   [Firestore server security](https://docs.cloud.google.com/firestore/native/docs/security/iam)
+4. Set the GitHub repository variable `LOTTERY_NOTIFICATIONS_ENABLED` to `true`
+   when the rules, permission, and test client are ready. The draw workflow must
+   also be enabled. Delivery runs on the same schedule and processes pending
+   results from previous draws.
+
+Merge the inbox rule inside `match /databases/{database}/documents` and check
+that broader rules do not grant inbox writes or outbox access to clients.
+
+```text
+match /notifications/{eventId} {
+  allow get, list: if request.auth != null
+    && resource.data.toUserId == request.auth.uid
+    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false;
+}
+```
 
 ## How to verify the integration
 
-Use a Firestore emulator or a team-approved test project. The draw worker's
-emulator test already checks the event types, offer IDs, and result counts.
-For a cloud test fixture, follow the automation guide's two-entrant example.
+The emulator tests exercise inbox creation, push preferences, concurrent
+attempts, and retries with a fake sender. For a real push, install a test-project
+build on a device with Google Play services. Open Inbox to grant the Android
+notification permission and confirm the test profile has a token. Use test
+account UIDs in the two-entrant fixture and manually run the workflow.
 [Worker tests](../lottery-worker/src/test/kotlin/com/example/legion_events/worker/LotteryWorkerTest.kt) · [Test project setup](lottery-worker.md#4-verify-the-workflow-in-the-test-project)
 
 | Test | Expected result |

@@ -153,6 +153,85 @@ class LotteryWorkerTest {
         assertEquals("won", statusOf("waitlist/ready_bob"))
     }
 
+    /** Publishes actual draw events and sends pushes only to recipients who opted in. */
+    @Test
+    fun `draw results reach both inboxes and only enabled recipients receive pushes`() {
+        seedLottery("due", entrantCount = 2)
+        seedEntry("due", "alice")
+        seedEntry("due", "bob")
+        firestore.document("users/alice").create(mapOf("notificationsEnabled" to true, "fcmToken" to "alice-token")).get()
+        firestore.document("users/bob").create(mapOf("notificationsEnabled" to false, "fcmToken" to "bob-token")).get()
+        assertEquals(1, worker.drawDueLotteries(deadline))
+
+        val pushes = mutableListOf<LotteryPush>()
+        val delivery = NotificationDelivery(firestore) { pushes += it; true }
+        assertEquals(2, delivery.deliverPending())
+        assertEquals("alice-token", pushes.single().token)
+        assertEquals("due_alice", pushes.single().eventId)
+        val inbox = firestore.collection("notifications").get().get().documents
+        assertEquals(setOf("lottery_won", "lottery_lost"), inbox.map { it.getString("type") }.toSet())
+        for (item in inbox) {
+            val event = firestore.document("lotteryNotificationOutbox/${item.id}").get().get()
+            assertEquals(event.getString("toUserId"), item.getString("toUserId"))
+            assertEquals(event.getString("offerId"), item.getString("offerId"))
+            assertEquals(event.getTimestamp("createdAt"), item.getTimestamp("createdAt"))
+            assertFalse(item.contains("fcmToken"))
+            assertEquals(if (item.id == "due_alice") "sent" else "skipped", event.getString("deliveryStatus"))
+        }
+        assertEquals(0, delivery.deliverPending())
+        assertEquals(1, pushes.size)
+    }
+
+    /** A failed push can retry without overwriting the inbox record. */
+    @Test
+    fun `push failure keeps one inbox item and is retried independently`() {
+        seedLottery("due")
+        seedEntry("due", "alice")
+        firestore.document("users/alice").create(mapOf("notificationsEnabled" to true, "fcmToken" to "test-token")).get()
+        worker.drawDueLotteries(deadline)
+
+        val failing = NotificationDelivery(firestore) { error("Simulated push failure") }
+        assertThrows(IllegalStateException::class.java) { failing.deliverPending() }
+        val inbox = firestore.document("notifications/due_alice")
+        inbox.update("read", true).get()
+        val beforeRetry = inbox.get().get().data
+        val outbox = firestore.document("lotteryNotificationOutbox/due_alice")
+        assertEquals("pending", outbox.get().get().getString("deliveryStatus"))
+
+        assertEquals(1, NotificationDelivery(firestore) { true }.deliverPending())
+        assertEquals("sent", outbox.get().get().getString("deliveryStatus"))
+        assertEquals(beforeRetry, inbox.get().get().data)
+        assertEquals(1, firestore.collection("notifications").get().get().size())
+    }
+
+    /** While a worker owns a push claim, a concurrent sweep leaves it alone. */
+    @Test
+    fun `concurrent delivery does not send the same push twice`() {
+        seedLottery("due")
+        seedEntry("due", "alice")
+        firestore.document("users/alice").create(mapOf("notificationsEnabled" to true, "fcmToken" to "test-token")).get()
+        worker.drawDueLotteries(deadline)
+
+        val claimed = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        Executors.newSingleThreadExecutor().use { pool ->
+            val first = pool.submit<Int> {
+                NotificationDelivery(firestore) {
+                    claimed.countDown()
+                    assertTrue(finish.await(20, TimeUnit.SECONDS))
+                    true
+                }.deliverPending()
+            }
+            try {
+                assertTrue(claimed.await(15, TimeUnit.SECONDS))
+                assertEquals(0, NotificationDelivery(firestore) { error("Duplicate send") }.deliverPending())
+            } finally {
+                finish.countDown()
+            }
+            assertEquals(1, first.get(20, TimeUnit.SECONDS))
+        }
+    }
+
     /**
      * Creates a synthetic lottery for a draw test.
      *

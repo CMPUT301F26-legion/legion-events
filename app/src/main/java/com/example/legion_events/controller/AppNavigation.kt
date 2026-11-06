@@ -39,6 +39,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
+import com.example.legion_events.view.InboxScreen
 import com.example.legion_events.view.QrScanScreen
 import com.example.legion_events.view.LotteryEditScreen
 import com.example.legion_events.view.LotteriesScreen
@@ -59,6 +60,8 @@ import com.example.legion_events.view.BookingOffersScreen
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.CampsiteDetailsRepository
 import com.example.legion_events.data.FirebaseLotteryRepository
+import com.example.legion_events.data.FirebaseNotificationRepository
+import com.example.legion_events.data.NotificationRepository
 import com.example.legion_events.data.FirebaseOfferRepository
 import com.example.legion_events.data.FirebaseProfileRepository
 import com.example.legion_events.data.LotteryRepository
@@ -146,7 +149,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  * When you build one, remove it here and register it in [AppNavigation]. Add route arguments then too.
  */
 private val PLACEHOLDER_SCREENS = mapOf(
-    INBOX_ROUTE to "Notifications",
     RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
     BOOKINGS_ROUTE to "My reservations",
     RESERVATION_DETAILS_ROUTE to "Reservation details",
@@ -228,6 +230,10 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param lotteries Reads and saves lotteries.
  * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
  * @param offers Reads and declines the authenticated user's offers; tests inject a fake.
+ * @param notifications Observes the authenticated user's inbox.
+ * @param inboxRecipient Account UID from a pending lottery push tap.
+ * @param onInboxRequestConsumed Clears a handled or invalid push tap.
+ * @param onEnablePush Requests Android's notification permission when available.
  */
 @Composable
 fun AppNavigation(
@@ -240,11 +246,25 @@ fun AppNavigation(
     lotteries: LotteryRepository = FirebaseLotteryRepository.instance,
     owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
     offers: OfferRepository = FirebaseOfferRepository.instance,
+    notifications: NotificationRepository = FirebaseNotificationRepository.instance,
+    inboxRecipient: String? = null,
+    onInboxRequestConsumed: () -> Unit = {},
+    onEnablePush: (() -> Unit)? = null,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
     val currentRoute = current?.destination?.route
-    // Offer screens are part of Lotteries, including links opened from the future inbox.
+    val userId = (state as? OnboardingState.Ready)?.profile?.uid
+    LaunchedEffect(inboxRecipient, userId, currentRoute) {
+        if (inboxRecipient == null || userId == null || currentRoute == null) return@LaunchedEffect
+        if (inboxRecipient != userId) {
+            onInboxRequestConsumed()
+        } else if (currentRoute != ONBOARDING_ROUTE && welcome?.hasSeenWelcome() != false) {
+            navController.navigate(INBOX_ROUTE) { launchSingleTop = true }
+            onInboxRequestConsumed()
+        }
+    }
+    // Offer screens remain part of Lotteries when opened from the inbox.
     val entrantTab = when (currentRoute) {
         BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
         else -> currentRoute
@@ -566,6 +586,22 @@ fun AppNavigation(
                         onRetry = manage::refresh,
                         onEdit = { navController.navigate(lotteryEditRoute(lotteryId)) { launchSingleTop = true } },
                         onTab = manage::selectTab,
+                    )
+                }
+            }
+            composable(INBOX_ROUTE) {
+                if (userId == null) {
+                    OnboardingScreen(state, controller::retry)
+                } else {
+                    val inbox: InboxController = viewModel(key = "inbox-$userId", factory = viewModelFactory {
+                        initializer { InboxController(userId, notifications) }
+                    })
+                    val inboxState by inbox.state.collectAsStateWithLifecycle()
+                    InboxScreen(
+                        state = inboxState,
+                        onRetry = inbox::retry,
+                        onOffer = { id -> navController.navigate(bookingOfferRoute(id)) { launchSingleTop = true } },
+                        onEnablePush = onEnablePush,
                     )
                 }
             }
