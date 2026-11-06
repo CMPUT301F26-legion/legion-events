@@ -2,13 +2,13 @@
 // Render with: dot -Tpng doc/uml/profile_identity.dot -o doc/uml/profile_identity.png
 digraph ProfileIdentity {
   graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
-         label="Profile and device identity (MVC)" labelloc=t fontsize=18];
+         label="Profile and device identity" labelloc=t fontsize=18];
   node  [shape=plain fontname="Liberation Sans" fontsize=10];
   edge  [fontname="Liberation Sans" fontsize=9];
 
   UserProfile [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>UserProfile</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ uid: String<BR/>+ name: String<BR/>+ email: String<BR/>+ phone: String<BR/>+ role: String  (user | admin)<BR/>+ disabled: Boolean<BR/>+ photoId: String?<BR/>+ fcmToken: String?<BR/>+ notificationsEnabled: Boolean<BR/>+ createdAt: Timestamp?<BR/>+ updatedAt: Timestamp?</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ uid: String<BR/>+ name: String<BR/>+ email: String<BR/>+ phone: String<BR/>+ role: String<BR/>+ disabled: Boolean<BR/>+ photoId: String?<BR/>+ fcmToken: String?<BR/>+ notificationsEnabled: Boolean<BR/>+ createdAt: Timestamp?<BR/>+ updatedAt: Timestamp?</TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
 
   UserRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
@@ -24,7 +24,7 @@ digraph ProfileIdentity {
   FirebaseRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><B>FirebaseRepository</B></TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- auth: FirebaseAuth<BR/>- firestore: FirebaseFirestore</TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ initializeUser(): UserProfile<BR/>(campsite reads omitted)</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ initializeUser(): UserProfile</TD></TR></TABLE>>];
 
   FirebaseProfileRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><B>FirebaseProfileRepository</B></TD></TR>
@@ -43,7 +43,7 @@ digraph ProfileIdentity {
 
   OnboardingState [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD><I>«sealed interface»</I><BR/><B>OnboardingState</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">Loading<BR/>Error(message: String)<BR/>Blocked<BR/>Ready(profile: UserProfile)</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ Loading: OnboardingState<BR/>+ Blocked: OnboardingState<BR/>+ Error.message: String<BR/>+ Ready.profile: UserProfile</TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
 
   ProfileController [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
@@ -58,15 +58,14 @@ digraph ProfileIdentity {
 
   AppNavigation [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#e8eef8"><I>«controller» composable</I><BR/><B>AppNavigation</B></TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">controller: OnboardingController<BR/>navController: NavHostController<BR/>profiles: ProfileRepository<BR/>welcome: WelcomePreferences?<BR/>(campsite, lottery, and owner repositories omitted)</TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ AppNavigation()<BR/>  routes S01 to S20 + policy<BR/>  bottom bar: Explore, Lotteries, Inbox, Bookings, Profile</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- controller: OnboardingController<BR/>- navController: NavHostController<BR/>- profiles: ProfileRepository<BR/>- welcome: WelcomePreferences?</TD></TR>
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ AppNavigation()</TD></TR></TABLE>>];
 
   Views [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
     <TR><TD BGCOLOR="#f8f0e0"><I>«view» composables</I></TD></TR>
     <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR>
-    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ OnboardingScreen(state, onRetry)<BR/>+ WelcomeScreen(onStart, onPolicy)  (S01)<BR/>+ ProfileScreen(state, on… callbacks)  (S11)<BR/>+ PolicyScreen(onBack)<BR/>+ PlaceholderScreen(title, onBack)</TD></TR></TABLE>>];
+    <TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ OnboardingScreen(state, onRetry)<BR/>+ WelcomeScreen(onStart, onPolicy)<BR/>+ ProfileScreen(state, on… callbacks)<BR/>+ PolicyScreen(onBack)<BR/>+ PlaceholderScreen(title, onBack)</TD></TR></TABLE>>];
 
-  note [shape=note fontsize=9 style=filled fillcolor="#fffbe6" label="Views only render state and forward taps;\nthey never call Firestore.\nDeleting a profile does not yet remove\nwaitlist entries (needs WaitlistEntry)."];
 
   // Notation: extends (hollow triangle), one-way navigability (open arrow),
   // aggregation (hollow diamond on the owner), composition (filled diamond on the owner).
@@ -94,5 +93,4 @@ digraph ProfileIdentity {
   // Aggregation: navigation shows the screens, which exist on their own.
   AppNavigation -> Views [dir=back arrowtail=odiamond label="shows" taillabel="1" headlabel="1..*"];
 
-  note -> Views [arrowhead=none style=dotted];
 }

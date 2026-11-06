@@ -1,0 +1,21 @@
+// UML class diagram: booking offers (Person 6)
+// Render with: dot -Tpng booking_offers.dot -o booking_offers.png
+digraph G {
+  graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
+         label="Booking offers" labelloc=t fontsize=18];
+  node  [shape=plain fontname="Liberation Sans" fontsize=10];
+  edge  [fontname="Liberation Sans" fontsize=9 labeldistance=1.8 labelangle=35];
+  // Notation: extends (hollow triangle), one-way navigability (open arrow), association (plain line),
+  // aggregation (hollow diamond on the owner), composition (filled diamond on the owner).
+  // taillabel = source multiplicity, headlabel = target multiplicity. Extends has none.
+
+  BookingOffer [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>BookingOffer</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ lotteryId: String<BR/>+ userId: String<BR/>+ status: String<BR/>+ expiresAt: Timestamp?<BR/>+ createdAt: Timestamp?<BR/>+ updatedAt: Timestamp?<BR/>+ STATUS_OPEN, STATUS_USED,<BR/>  STATUS_DECLINED, STATUS_EXPIRED: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  Lottery [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>Lottery</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  UserProfile [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>UserProfile</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ uid: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  OfferRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#eeeeee"><I>«interface»</I><BR/><B>OfferRepository</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getOffer(offerId: String): BookingOffer?<BR/>+ getOffersForCurrentUser(): List&lt;BookingOffer&gt;<BR/>+ declineOffer(offerId: String): BookingOffer</TD></TR></TABLE>>];
+  FirebaseOfferRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><B>FirebaseOfferRepository</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- auth: FirebaseAuth<BR/>- firestore: FirebaseFirestore<BR/>- now: () -&gt; Timestamp<BR/>- COLLECTION = "bookingOffers"<BR/>- STATUSES: Set&lt;String&gt;</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getOffer(offerId: String): BookingOffer?<BR/>+ getOffersForCurrentUser(): List&lt;BookingOffer&gt;<BR/>+ declineOffer(offerId: String): BookingOffer<BR/>- currentUserId(): String<BR/>- offerDocument(offerId: String): DocumentReference<BR/>- DocumentSnapshot.toOwnedOffer(userId): BookingOffer<BR/>- withOfferAccess(operation): T</TD></TR></TABLE>>];
+  FirebaseOfferRepository -> OfferRepository [arrowhead=onormal];
+  OfferRepository -> BookingOffer [arrowhead=vee label="returns / declines" taillabel="0..*" headlabel="0..*"];
+  BookingOffer -> Lottery [arrowhead=none label="from" taillabel="0..*" headlabel="1"];
+  BookingOffer -> UserProfile [arrowhead=none label="offered to" taillabel="0..*" headlabel="1"];
+}
