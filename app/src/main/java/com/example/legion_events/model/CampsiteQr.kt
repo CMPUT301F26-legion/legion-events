@@ -1,5 +1,9 @@
 package com.example.legion_events.model
 
+
+
+
+
 /**
  * The text stored in a campsite QR code (S14) and read by the QR scanner (S05).
  *
