@@ -52,4 +52,9 @@ digraph G {
   Views -> QrCodeImage [arrowhead=vee label="calls" taillabel="0..*" headlabel="1"];
   Views -> PhotoEncoder [arrowhead=vee label="calls" taillabel="0..*" headlabel="1"];
   Views -> DeviceLocation [arrowhead=vee label="calls" taillabel="0..*" headlabel="1"];
+
+  // Callbacks S13 sends to its controller, bundled so the screen takes one parameter.
+  CampsiteEditActions [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«data»</I><BR/><B>CampsiteEditActions</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ onBack, onRetry, onAddTag, onLocating: () -&gt; Unit<BR/>+ onPhotoPicked, onRemovePhoto, onSave: () -&gt; Unit<BR/>+ onName, onLocationName, onDescription: (String) -&gt; Unit<BR/>+ onToggleAmenity, onTagInput, onRemoveTag: (String) -&gt; Unit<BR/>+ onMaxGuests, onPrice, onLatitude, onLongitude: (String) -&gt; Unit<BR/>+ onRules, onCancellationPolicy, onOpenFrom, onOpenUntil: (String) -&gt; Unit<BR/>+ onCurrentLocation: (Double, Double) -&gt; Unit<BR/>+ onLocationFailed: (String) -&gt; Unit<BR/>+ onPhoto: (String?) -&gt; Unit</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  Views -> CampsiteEditActions [arrowhead=vee label="calls" taillabel="0..*" headlabel="1"];
+  CampsiteEditActions -> CampsiteEditController [arrowhead=vee label="forwards to" taillabel="0..*" headlabel="1"];
 }
