@@ -1,5 +1,5 @@
 // UML class diagram: owner lottery setup (Person 4)
-// Render with: dot -Tpng lottery_setup.dot -o lottery_setup.png
+// Render with: python3 render.py lottery_setup.dot lottery_setup.png  (needs Graphviz and Google Chrome)
 digraph G {
   graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
          label="Lottery setup and management" labelloc=t fontsize=18];

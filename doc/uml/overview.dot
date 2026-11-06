@@ -1,5 +1,5 @@
 // UML class diagram: model overview (all slices)
-// Render with: dot -Tpng overview.dot -o overview.png
+// Render with: python3 render.py overview.dot overview.png  (needs Graphviz and Google Chrome)
 digraph G {
   graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
          label="Model overview" labelloc=t fontsize=18];
