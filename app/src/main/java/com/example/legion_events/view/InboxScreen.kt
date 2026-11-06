@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.InboxState
 import com.example.legion_events.model.LotteryNotification
+import com.example.legion_events.model.OwnerNotice
 import java.text.DateFormat
 
 /** Shows loading, retry, empty, or populated inbox state with optional push permission and offer actions. */
@@ -38,7 +39,7 @@ fun InboxScreen(
     ) {
         item {
             Text("Inbox", style = MaterialTheme.typography.headlineMedium)
-            Text("Your campsite lottery results.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Your campsite lottery results and owner notices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (onEnablePush != null) {
             item { OutlinedButton(onClick = onEnablePush) { Text("Allow push notifications") } }
@@ -53,6 +54,10 @@ fun InboxScreen(
                 if (state.notifications.isEmpty()) item { Text("No lottery results yet.") }
                 items(state.notifications, key = { it.id }) { notification ->
                     LotteryResultCard(notification, onOffer)
+                }
+                if (state.notices.isNotEmpty()) {
+                    item { Text("Notices from owners", style = MaterialTheme.typography.titleMedium) }
+                    items(state.notices, key = { "notice-" + it.id }) { notice -> OwnerNoticeCard(notice) }
                 }
             }
         }
@@ -73,6 +78,24 @@ private fun LotteryResultCard(notification: LotteryNotification, onOffer: (Strin
             )
             notification.offerId?.let { offerId ->
                 Button(onClick = { onOffer(offerId) }) { Text("View booking offer") }
+            }
+        }
+    }
+}
+
+/** Displays one notice an owner sent to a waitlist the entrant joined (US 02.10.01). */
+@Composable
+private fun OwnerNoticeCard(notice: OwnerNotice) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Notice from a campsite owner", style = MaterialTheme.typography.titleMedium)
+            Text(notice.message)
+            notice.createdAt?.let {
+                Text(
+                    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(it.toDate()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

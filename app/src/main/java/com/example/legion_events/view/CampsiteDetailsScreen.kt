@@ -30,6 +30,7 @@ import java.util.Locale
  * @param onBack Returns to the existing search screen.
  * @param onRetry Reloads an unavailable or failed listing.
  * @param onRetryPhotos Reloads photos while keeping campsite information visible.
+ * @param lotterySection Join controls for the campsite's open lotteries (US 01.01.06), shown below its name.
  */
 @Composable
 fun CampsiteDetailsScreen(
@@ -37,6 +38,7 @@ fun CampsiteDetailsScreen(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onRetryPhotos: () -> Unit,
+    lotterySection: @Composable () -> Unit = {},
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -62,6 +64,7 @@ fun CampsiteDetailsScreen(
                         Text(site.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                         Text(site.locationName, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    item { lotterySection() }
                     item {
                         when {
                             state.photosLoading -> Text("Loading photos…")
