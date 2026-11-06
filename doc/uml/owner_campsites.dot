@@ -1,5 +1,5 @@
 // UML class diagram: owner campsites (Person 3)
-// Render with: dot -Tpng owner_campsites.dot -o owner_campsites.png
+// Render with: python3 render.py owner_campsites.dot owner_campsites.png  (needs Graphviz and Google Chrome)
 digraph G {
   graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
          label="Owner campsites" labelloc=t fontsize=18];

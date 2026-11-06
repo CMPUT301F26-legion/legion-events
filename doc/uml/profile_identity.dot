@@ -1,5 +1,5 @@
 // UML class diagram: profile and device identity (Person 1, US 01.07.03, 01.08.01, 01.09.01, 01.10.01, 01.11.01).
-// Render with: dot -Tpng doc/uml/profile_identity.dot -o doc/uml/profile_identity.png
+// Render with: python3 render.py profile_identity.dot profile_identity.png  (needs Graphviz and Google Chrome)
 digraph ProfileIdentity {
   graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
          label="Profile and device identity" labelloc=t fontsize=18];

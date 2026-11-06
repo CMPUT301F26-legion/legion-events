@@ -1,0 +1,25 @@
+// UML class diagram: lottery draw worker (Person 6)
+// Render with: python3 render.py lottery_worker.dot lottery_worker.png  (needs Graphviz and Google Chrome)
+digraph G {
+  graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
+         label="Lottery draw worker" labelloc=t fontsize=18];
+  node  [shape=plain fontname="Liberation Sans" fontsize=10];
+  edge  [fontname="Liberation Sans" fontsize=9 labeldistance=1.8 labelangle=35];
+  // Notation: extends (hollow triangle), one-way navigability (open arrow), association (plain line),
+  // aggregation (hollow diamond on the owner), composition (filled diamond on the owner).
+  // taillabel = source multiplicity, headlabel = target multiplicity. Extends has none.
+
+  Main [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«utility» Main.kt</I><BR/><B>Main</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ main()</TD></TR></TABLE>>];
+  LotteryWorker [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8eef8"><I>«worker»</I><BR/><B>LotteryWorker</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- firestore: Firestore<BR/>- MAX_WAITLIST_LIMIT = 100</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ drawDueLotteries(cutoff: Timestamp): Int<BR/>- drawLottery(reference: DocumentReference, cutoff: Timestamp): Boolean<BR/>- DocumentSnapshot.isDue(cutoff: Timestamp): Boolean</TD></TR></TABLE>>];
+  NotificationOutbox [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«utility» NotificationOutbox.kt</I><BR/><B>NotificationOutbox</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">~ sendNotification(transaction: Transaction, firestore: Firestore, lotteryId: String, toUserId: String, offerId: String?)</TD></TR></TABLE>>];
+  Lottery [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>Lottery</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ campsiteIds: List&lt;String&gt;<BR/>+ registrationEndAt: Timestamp<BR/>+ bookingEndAt: Timestamp<BR/>+ winnerCount: Int<BR/>+ status: String<BR/>+ winnersDrawn: Boolean</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  WaitlistEntrant [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>WaitlistEntrant</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ userId: String<BR/>+ status: String<BR/>+ joinedAt: Timestamp?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  BookingOffer [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>BookingOffer</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ lotteryId: String<BR/>+ userId: String<BR/>+ status: String<BR/>+ expiresAt: Timestamp?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  Main -> LotteryWorker [arrowhead=vee label="creates" taillabel="1" headlabel="1"];
+  LotteryWorker -> Lottery [arrowhead=vee label="draws" taillabel="0..*" headlabel="0..*"];
+  LotteryWorker -> WaitlistEntrant [arrowhead=vee label="marks won / lost" taillabel="0..*" headlabel="0..*"];
+  LotteryWorker -> BookingOffer [arrowhead=vee label="creates" taillabel="0..*" headlabel="0..*"];
+  LotteryWorker -> NotificationOutbox [arrowhead=vee label="calls" taillabel="1" headlabel="1"];
+  Lottery -> WaitlistEntrant [arrowhead=none label="waitlist" taillabel="1" headlabel="0..100"];
+  Lottery -> BookingOffer [arrowhead=none label="offers" taillabel="1" headlabel="0..*"];
+}
