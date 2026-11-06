@@ -1,7 +1,7 @@
 /*
  * LotteryManagementScreen.kt
  *
- * Purpose: S16: one lottery's status, counts, and waiting list (US 02.04.06, 02.09.01).
+ * Purpose: S16: one lottery's status, counts, waiting list, and winners (US 02.04.06, 02.05.01, 02.09.01).
  * Role: View in MVC; renders LotteryManagementState.
  * Outstanding issues: None.
  */
@@ -82,7 +82,7 @@ fun LotteryManagementScreen(
                             Tab(state.tab == ManagementTab.WAITLIST, { onTab(ManagementTab.WAITLIST) },
                                 text = { Text("Waiting list (${state.waitlist.size})") })
                             Tab(state.tab == ManagementTab.WINNERS, { onTab(ManagementTab.WINNERS) },
-                                text = { Text("Winners") })
+                                text = { Text(if (lottery.winnersDrawn) "Winners (${state.winners.size})" else "Winners") })
                         }
                     }
                     when (state.tab) {
@@ -92,16 +92,33 @@ fun LotteryManagementScreen(
                                 Button(onClick = onRetry) { Text("Retry") }
                             }
                             state.waitlist.isEmpty() -> item {
-                                Text("Nobody has joined yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    if (lottery.winnersDrawn) "Everyone who joined was picked." else "Nobody has joined yet.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                             else -> items(state.waitlist, key = { it.position }) { WaitlistRowItem(it) }
                         }
-                        ManagementTab.WINNERS -> item {
-                            Text(
-                                if (lottery.winnersDrawn) "Winners have been drawn. Their booking status will appear here."
-                                else "Winners are drawn automatically when registration closes.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        ManagementTab.WINNERS -> when {
+                            !lottery.winnersDrawn -> item {
+                                Text("Winners are drawn automatically when registration closes.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            state.waitlistError != null -> item {
+                                Text(state.waitlistError, color = MaterialTheme.colorScheme.error)
+                                Button(onClick = onRetry) { Text("Retry") }
+                            }
+                            state.winners.isEmpty() -> item {
+                                Text("Nobody joined, so there are no winners.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            else -> {
+                                // The draw picks everyone when fewer joined than there are winner spots (F7 6b).
+                                if (state.winners.size < lottery.winnerCount) item {
+                                    Text("Only ${state.winners.size} joined for ${lottery.winnerCount} spots, so everyone won.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                items(state.winners, key = { "won-" + it.position }) { WaitlistRowItem(it) }
+                            }
                         }
                     }
                 }
