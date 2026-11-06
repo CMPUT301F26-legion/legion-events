@@ -41,6 +41,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.LotteryEditScreen
+import com.example.legion_events.view.LotteriesScreen
+import com.example.legion_events.view.LotteryManagementScreen
+import com.example.legion_events.view.OwnerLotteriesScreen
 import com.example.legion_events.view.CampsiteDetailsScreen
 import com.example.legion_events.view.CampsiteEditActions
 import com.example.legion_events.view.CampsiteEditScreen
@@ -51,13 +54,17 @@ import com.example.legion_events.view.PlaceholderScreen
 import com.example.legion_events.view.PolicyScreen
 import com.example.legion_events.view.ProfileScreen
 import com.example.legion_events.view.WelcomeScreen
+import com.example.legion_events.view.BookingOfferScreen
+import com.example.legion_events.view.BookingOffersScreen
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.CampsiteDetailsRepository
 import com.example.legion_events.data.FirebaseLotteryRepository
+import com.example.legion_events.data.FirebaseOfferRepository
 import com.example.legion_events.data.FirebaseProfileRepository
 import com.example.legion_events.data.LotteryRepository
 import com.example.legion_events.data.FirebaseOwnerCampsiteRepository
 import com.example.legion_events.data.OwnerCampsiteRepository
+import com.example.legion_events.data.OfferRepository
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.WelcomePreferences
@@ -82,8 +89,21 @@ internal const val QR_SCAN_ROUTE = "qr_scan"
 internal const val LOTTERIES_ROUTE = "lotteries"
 /** S07: notification inbox. */
 internal const val INBOX_ROUTE = "inbox"
-/** S08: choose a campsite and dates from a booking offer. */
+/** S08 entry: list owned offers; campsite/date selection remains a later booking feature. */
 internal const val BOOKING_OFFER_ROUTE = "booking_offer"
+/** One owned offer, opened by the list or a winning notification. */
+internal const val BOOKING_OFFER_DETAILS_ROUTE = "booking_offer/{offerId}"
+
+/**
+ * Builds the shared destination for a winning offer using only its document ID.
+ * @param offerId A single bookingOffers document ID from the list or winning notification.
+ * @return Encoded internal navigation route.
+ */
+internal fun bookingOfferRoute(offerId: String): String {
+    require(offerId.isNotBlank() && '/' !in offerId) { "A single offer document ID is required." }
+    return "booking_offer/${Uri.encode(offerId)}"
+}
+
 /** S09: reservation confirmation. */
 internal const val RESERVATION_CONFIRMATION_ROUTE = "reservation_confirmation"
 /** S10: the entrant's reservations. */
@@ -108,8 +128,10 @@ internal const val OWNER_CAMPSITE_PATTERN = "$OWNER_CAMPSITE_ROUTE/{campsiteId}"
 internal const val LOTTERY_EDIT_ROUTE = "owner/lottery_edit"
 /** S15 with an optional `lotteryId`: missing creates a lottery, present edits that one. */
 internal const val LOTTERY_EDIT_PATTERN = "$LOTTERY_EDIT_ROUTE?lotteryId={lotteryId}"
-/** S16: lottery management. */
+/** Owner Lotteries tab: the owner's lotteries, leading to S15 and S16. */
 internal const val LOTTERY_MANAGEMENT_ROUTE = "owner/lottery"
+/** S16 for one lottery; only its document ID is saved in the navigation arguments. */
+internal const val LOTTERY_DETAILS_PATTERN = "$LOTTERY_MANAGEMENT_ROUTE/{lotteryId}"
 /** S17: owner reservations. */
 internal const val OWNER_RESERVATIONS_ROUTE = "owner/reservations"
 /** S18: owner notifications. */
@@ -125,15 +147,12 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  */
 private val PLACEHOLDER_SCREENS = mapOf(
     QR_SCAN_ROUTE to "Scan QR code",
-    LOTTERIES_ROUTE to "My lotteries",
     INBOX_ROUTE to "Notifications",
-    BOOKING_OFFER_ROUTE to "Choose campsite & dates",
     RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
     BOOKINGS_ROUTE to "My reservations",
     RESERVATION_DETAILS_ROUTE to "Reservation details",
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-    LOTTERY_MANAGEMENT_ROUTE to "Lottery management",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
     OWNER_NOTIFICATIONS_ROUTE to "Owner notifications",
     ADMIN_DASHBOARD_ROUTE to "Admin dashboard",
@@ -173,6 +192,21 @@ private val OWNER_TABS = listOf(
 private fun ownerCampsiteRoute(campsiteId: String) = "$OWNER_CAMPSITE_ROUTE/${Uri.encode(campsiteId)}"
 
 /**
+ * Opens S15.
+ * @param lotteryId The lottery to edit, or null to create one.
+ * @return The route to navigate to.
+ */
+private fun lotteryEditRoute(lotteryId: String?) =
+    if (lotteryId == null) LOTTERY_EDIT_ROUTE else "$LOTTERY_EDIT_ROUTE?lotteryId=${Uri.encode(lotteryId)}"
+
+/**
+ * Opens S16 for a lottery.
+ * @param lotteryId The lottery document ID.
+ * @return The route to navigate to.
+ */
+private fun lotteryDetailsRoute(lotteryId: String) = "$LOTTERY_MANAGEMENT_ROUTE/${Uri.encode(lotteryId)}"
+
+/**
  * Opens S13.
  * @param campsiteId The campsite to edit, or null to add one.
  * @return The route to navigate to.
@@ -194,6 +228,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param welcome Remembers whether S01 was shown; null skips S01.
  * @param lotteries Reads and saves lotteries.
  * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
+ * @param offers Reads and declines the authenticated user's offers; tests inject a fake.
  */
 @Composable
 fun AppNavigation(
@@ -205,10 +240,16 @@ fun AppNavigation(
     welcome: WelcomePreferences? = null,
     lotteries: LotteryRepository = FirebaseLotteryRepository.instance,
     owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
+    offers: OfferRepository = FirebaseOfferRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
     val currentRoute = current?.destination?.route
+    // Offer screens are part of Lotteries, including links opened from the future inbox.
+    val entrantTab = when (currentRoute) {
+        BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
+        else -> currentRoute
+    }
     Column {
         NavHost(navController = navController, startDestination = ONBOARDING_ROUTE, modifier = Modifier.weight(1f)) {
             composable(ONBOARDING_ROUTE) {
@@ -266,6 +307,42 @@ fun AppNavigation(
             }
             composable(POLICY_ROUTE) {
                 PolicyScreen { navController.popBackStack() }
+            }
+            composable(LOTTERIES_ROUTE) {
+                RequireAccount(state, controller) {
+                    LotteriesScreen {
+                        navController.navigate(BOOKING_OFFER_ROUTE) { launchSingleTop = true }
+                    }
+                }
+            }
+            composable(BOOKING_OFFER_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: BookingOffersController = viewModel(factory = viewModelFactory {
+                        initializer { BookingOffersController(offers) }
+                    })
+                    val information by list.state.collectAsStateWithLifecycle()
+                    // Returning from a decline reloads the list with its saved status.
+                    LifecycleResumeEffect(list) {
+                        list.retry()
+                        onPauseOrDispose {}
+                    }
+                    BookingOffersScreen(information, { navController.popBackStack() }, list::retry) { offerId ->
+                        navController.navigate(bookingOfferRoute(offerId)) { launchSingleTop = true }
+                    }
+                }
+            }
+            composable(
+                BOOKING_OFFER_DETAILS_ROUTE,
+                arguments = listOf(navArgument("offerId") { type = NavType.StringType }),
+            ) { entry ->
+                RequireAccount(state, controller) {
+                    val offer: BookingOfferController = viewModel(factory = viewModelFactory {
+                        initializer { BookingOfferController(checkNotNull(entry.arguments?.getString("offerId")), offers) }
+                    })
+                    val information by offer.state.collectAsStateWithLifecycle()
+                    BookingOfferScreen(information, { navController.popBackStack() }, offer::retry,
+                        offer::requestDecline, offer::confirmDecline, offer::cancelDecline)
+                }
             }
             composable(PROFILE_ROUTE) {
                 RequireAccount(state, controller) {
@@ -398,10 +475,15 @@ fun AppNavigation(
                         initializer { LotteryEditController(entry.arguments?.getString("lotteryId"), lotteries, owners::getMyCampsites) }
                     })
                     val form by edit.state.collectAsStateWithLifecycle()
+                    val editingExisting = entry.arguments?.getString("lotteryId") != null
                     LaunchedEffect(form.savedLotteryId) {
-                        if (form.savedLotteryId != null) {
-                            // Replace S15 with S16 so Back does not reopen the saved form.
-                            navController.navigate(LOTTERY_MANAGEMENT_ROUTE) {
+                        val saved = form.savedLotteryId ?: return@LaunchedEffect
+                        if (editingExisting) {
+                            // S16 is below this form and reloads when it resumes.
+                            navController.popBackStack()
+                        } else {
+                            // Replace S15 with S16 so Back returns to the Lotteries tab, not the saved form.
+                            navController.navigate(lotteryDetailsRoute(saved)) {
                                 popUpTo(LOTTERY_EDIT_PATTERN) { inclusive = true }
                                 launchSingleTop = true
                             }
@@ -422,6 +504,46 @@ fun AppNavigation(
                     )
                 }
             }
+            composable(LOTTERY_MANAGEMENT_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: OwnerLotteriesController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerLotteriesController(lotteries, owners::getMyCampsites) }
+                    })
+                    val listings by list.state.collectAsStateWithLifecycle()
+                    // Reload on every return so lotteries created or edited in S15 appear.
+                    LifecycleResumeEffect(list) {
+                        list.refresh()
+                        onPauseOrDispose {}
+                    }
+                    OwnerLotteriesScreen(
+                        state = listings,
+                        onRetry = list::refresh,
+                        onLotteryClick = { id -> navController.navigate(lotteryDetailsRoute(id)) { launchSingleTop = true } },
+                        onCreateLottery = { navController.navigate(lotteryEditRoute(null)) { launchSingleTop = true } },
+                    )
+                }
+            }
+            composable(LOTTERY_DETAILS_PATTERN, arguments = listOf(navArgument("lotteryId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val lotteryId = checkNotNull(entry.arguments?.getString("lotteryId"))
+                    val manage: LotteryManagementController = viewModel(factory = viewModelFactory {
+                        initializer { LotteryManagementController(lotteryId, lotteries, owners::getMyCampsites) }
+                    })
+                    val information by manage.state.collectAsStateWithLifecycle()
+                    // Reload on every return so edits saved in S15 appear.
+                    LifecycleResumeEffect(manage) {
+                        manage.refresh()
+                        onPauseOrDispose {}
+                    }
+                    LotteryManagementScreen(
+                        state = information,
+                        onBack = { navController.popBackStack() },
+                        onRetry = manage::refresh,
+                        onEdit = { navController.navigate(lotteryEditRoute(lotteryId)) { launchSingleTop = true } },
+                        onTab = manage::selectTab,
+                    )
+                }
+            }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->
                 composable(route) {
                     RequireAccount(state, controller) {
@@ -431,13 +553,15 @@ fun AppNavigation(
                 }
             }
         }
-        if (OWNER_TABS.any { it.route == currentRoute } || currentRoute == OWNER_CAMPSITE_PATTERN) {
+        if (OWNER_TABS.any { it.route == currentRoute } || currentRoute == OWNER_CAMPSITE_PATTERN ||
+            currentRoute == LOTTERY_DETAILS_PATTERN) {
             NavigationBar(windowInsets = WindowInsets(0)) {
                 OWNER_TABS.forEach { tab ->
                     NavigationBarItem(
                         // S14 belongs to the Dashboard tab.
                         selected = currentRoute == tab.route ||
-                            (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN),
+                            (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN) ||
+                            (tab.route == LOTTERY_MANAGEMENT_ROUTE && currentRoute == LOTTERY_DETAILS_PATTERN),
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(OWNER_DASHBOARD_ROUTE) { saveState = true }
@@ -451,12 +575,12 @@ fun AppNavigation(
                 }
             }
         }
-        if (TABS.any { it.route == currentRoute }) {
+        if (TABS.any { it.route == entrantTab }) {
             // The activity's Scaffold already pads for the system navigation bar.
             NavigationBar(windowInsets = WindowInsets(0)) {
                 TABS.forEach { tab ->
                     NavigationBarItem(
-                        selected = currentRoute == tab.route,
+                        selected = entrantTab == tab.route,
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(HOME_ROUTE) { saveState = true }
