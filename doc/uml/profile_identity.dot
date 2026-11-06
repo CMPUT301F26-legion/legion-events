@@ -93,4 +93,16 @@ digraph ProfileIdentity {
   // Aggregation: navigation shows the screens, which exist on their own.
   AppNavigation -> Views [dir=back arrowtail=odiamond label="shows" taillabel="1" headlabel="1..*"];
 
+
+  // Entry point, the create-only profile write, and sign-in failures.
+  MainActivity [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«activity»</I><BR/><B>MainActivity</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- inboxRecipient: String?<BR/>- showPushPermission: Boolean</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"># onCreate(savedInstanceState: Bundle?)<BR/># onNewIntent(intent: Intent)<BR/># onResume()<BR/>- refreshPushPermission()</TD></TR></TABLE>>];
+  FirestoreProfileCreator [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><B>FirestoreProfileCreator</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ createIfAbsent(user: FirebaseUser, projectId: String, fields: Map&lt;String, Any?&gt;)<BR/>~ createRequest(database: String, uid: String, fields: Map&lt;String, Any?&gt;): Map&lt;String, Any&gt;</TD></TR></TABLE>>];
+  UserInitializationException [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«exception»</I><BR/><B>UserInitializationException</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ message: String<BR/>+ cause: Throwable?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  AccountDisabledException [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«exception»</I><BR/><B>AccountDisabledException</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  MainActivity -> OnboardingController [arrowhead=vee label="creates" taillabel="1" headlabel="1"];
+  MainActivity -> WelcomePreferences [arrowhead=vee label="creates" taillabel="1" headlabel="1"];
+  MainActivity -> AppNavigation [arrowhead=vee label="shows" taillabel="1" headlabel="1"];
+  FirebaseRepository -> FirestoreProfileCreator [arrowhead=vee label="creates profile with" taillabel="1" headlabel="1"];
+  FirebaseRepository -> UserInitializationException [arrowhead=vee label="throws" taillabel="1" headlabel="0..1"];
+  FirebaseRepository -> AccountDisabledException [arrowhead=vee label="throws" taillabel="1" headlabel="0..1"];
 }
