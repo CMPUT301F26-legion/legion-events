@@ -89,10 +89,48 @@ class LotteryManagementControllerTest {
             entry("gone", "withdrawn", "2026-11-01"),
             entry("early", "joined", "2026-11-02"),
             entry("unknown", "joined", null),
-        ))
+        ), "joined")
         assertEquals(listOf(1, 2, 3), rows.map { it.position })
         assertEquals(listOf(day("2026-11-02"), day("2026-11-03"), null), rows.map { it.joinedAt })
         assertEquals("Entrant 1", rows.first().label)
+    }
+
+    @Test
+    fun entrantKeepsTheSameLabelInBothLists() {
+        val entries = listOf(
+            entry("first", "lost", "2026-11-01"),
+            entry("second", "won", "2026-11-02"),
+            entry("gone", "withdrawn", "2026-11-02"),
+            entry("third", "lost", "2026-11-03"),
+        )
+        assertEquals(listOf("Entrant 2"), waitlistRows(entries, "won").map { it.label })
+        assertEquals(listOf("Entrant 1", "Entrant 3"), waitlistRows(entries, "lost").map { it.label })
+        assertEquals(listOf(1, 2), waitlistRows(entries, "lost").map { it.position })
+    }
+
+    @Test
+    fun afterDrawWaitlistShowsNotPickedAndWinnersShowsPicked() = runTest(dispatcher) {
+        val repository = FakeRepository().apply {
+            lotteries = listOf(lottery("L1", "2026-10-01", "2026-10-10").copy(winnersDrawn = true))
+            waitlist = listOf(entry("a", "won", "2026-10-02"), entry("b", "lost", "2026-10-03"), entry("c", "won", "2026-10-04"))
+        }
+        with(manage(repository).state.value) {
+            assertEquals(LotteryBadge.DRAWN, badge)
+            assertEquals(listOf("Entrant 1", "Entrant 3"), winners.map { it.label })
+            assertEquals(listOf("Entrant 2"), waitlist.map { it.label })
+        }
+    }
+
+    @Test
+    fun beforeDrawThereAreNoWinners() = runTest(dispatcher) {
+        val repository = FakeRepository().apply {
+            lotteries = listOf(lottery("L1", "2026-12-01", "2026-12-11"))
+            waitlist = listOf(entry("a", "joined", "2026-11-02"))
+        }
+        with(manage(repository).state.value) {
+            assertTrue(winners.isEmpty())
+            assertEquals(1, waitlist.size)
+        }
     }
 
     @Test

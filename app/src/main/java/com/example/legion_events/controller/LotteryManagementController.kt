@@ -1,9 +1,10 @@
 /*
  * LotteryManagementController.kt
  *
- * Purpose: Loads one lottery and its waiting list for S16 (US 02.04.06, 02.09.01).
+ * Purpose: Loads one lottery, its waiting list, and its winners for S16 (US 02.04.06, 02.05.01, 02.09.01).
  * Role: Controller in MVC; LotteryManagementScreen renders its state and LotteryRepository supplies the data.
- * Outstanding issues: Entrants are shown by position, because owners cannot read entrant profiles.
+ * Outstanding issues: Entrants are shown by position, because owners cannot read entrant profiles;
+ * winners' booking status needs the offers data.
  */
 package com.example.legion_events.controller
 
@@ -24,25 +25,35 @@ import java.util.Date
 /** The two lists on S16. */
 enum class ManagementTab { WAITLIST, WINNERS }
 
+/** Waitlist status the draw gives entrants it picks. */
+internal const val STATUS_WON = "won"
+/** Waitlist status the draw gives entrants it does not pick. */
+internal const val STATUS_LOST = "lost"
+
 /**
- * One row of the S16 waiting list.
- * @property position 1-based place in joining order.
- * @property label What to call the entrant.
+ * One row of an S16 list.
+ * @property position 1-based place within its list.
+ * @property label What to call the entrant; the same entrant keeps the same label in both lists.
  * @property joinedAt When they joined, or null if unknown.
  */
 data class WaitlistRow(val position: Int, val label: String, val joinedAt: Timestamp?)
 
 /**
- * Turns waitlist entries into S16 rows: only entrants still waiting, earliest first.
+ * Turns waitlist entries into the rows of one S16 list, earliest joiner first.
+ * Entrants are numbered by joining order among everyone who did not withdraw, so "Entrant 3"
+ * means the same person on the waiting list and the winners list.
  * Owners cannot read entrants' profiles under the current Firestore rules, so rows are numbered
  * instead of named. If entries later store a display name, change [label] here only.
  * @param entries Every entry of one lottery.
- * @return The rows in joining order.
+ * @param status The status to list: `joined` before the draw, then `won` or `lost`.
+ * @return The matching rows in joining order.
  */
-internal fun waitlistRows(entries: List<WaitlistEntrant>): List<WaitlistRow> =
-    entries.filter { it.status == "joined" }
+internal fun waitlistRows(entries: List<WaitlistEntrant>, status: String): List<WaitlistRow> {
+    val entrants = entries.filter { it.status != WaitlistEntrant.STATUS_WITHDRAWN }
         .sortedWith(compareBy(nullsLast<Timestamp>()) { it.joinedAt })
-        .mapIndexed { index, entry -> WaitlistRow(index + 1, label(index), entry.joinedAt) }
+    return entrants.withIndex().filter { it.value.status == status }
+        .mapIndexed { position, (order, entry) -> WaitlistRow(position + 1, label(order), entry.joinedAt) }
+}
 
 /** The display name of the entrant at [index] in joining order. */
 private fun label(index: Int) = "Entrant ${index + 1}"
@@ -55,8 +66,9 @@ private fun label(index: Int) = "Entrant ${index + 1}"
  * @property title Its display name, from its campsites.
  * @property badge Its state right now.
  * @property editBlockedReason Why Edit is unavailable, or null when the owner can edit (US 02.04.06).
- * @property waitlist Entrants still waiting, in joining order (US 02.09.01).
- * @property waitlistError Why the waiting list could not be loaded, or null.
+ * @property waitlist Entrants still waiting before the draw, or those not picked after it (US 02.09.01).
+ * @property winners Entrants the draw picked; empty before the draw (US 02.05.01).
+ * @property waitlistError Why the entries could not be loaded, or null.
  * @property tab The list being shown.
  */
 data class LotteryManagementState(
@@ -67,6 +79,7 @@ data class LotteryManagementState(
     val badge: LotteryBadge? = null,
     val editBlockedReason: String? = null,
     val waitlist: List<WaitlistRow> = emptyList(),
+    val winners: List<WaitlistRow> = emptyList(),
     val waitlistError: String? = null,
     val tab: ManagementTab = ManagementTab.WAITLIST,
 )
@@ -109,22 +122,26 @@ class LotteryManagementController(
                     emptyMap()
                 }
                 // A waitlist failure still shows the lottery itself.
-                val waitlist = try {
-                    Result.success(waitlistRows(repository.getWaitlist(lotteryId)))
+                val entries = try {
+                    Result.success(repository.getWaitlist(lotteryId))
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
                     Result.failure(error)
                 }
                 val time = now()
+                val all = entries.getOrDefault(emptyList())
+                // After the draw nobody is "joined" any more: the waiting list shows who was not picked.
+                val waiting = if (lottery.winnersDrawn) STATUS_LOST else WaitlistEntrant.STATUS_JOINED
                 LotteryManagementState(
                     loading = false,
                     lottery = lottery,
                     title = lotteryTitle(lottery, names),
                     badge = lotteryBadge(lottery, time.time),
                     editBlockedReason = lockReason(lottery, time),
-                    waitlist = waitlist.getOrDefault(emptyList()),
-                    waitlistError = if (waitlist.isFailure) "Could not load the waiting list. Tap Retry to try again." else null,
+                    waitlist = waitlistRows(all, waiting),
+                    winners = waitlistRows(all, STATUS_WON),
+                    waitlistError = if (entries.isFailure) "Could not load the waiting list. Tap Retry to try again." else null,
                     tab = tab,
                 )
             } catch (cancelled: CancellationException) {
