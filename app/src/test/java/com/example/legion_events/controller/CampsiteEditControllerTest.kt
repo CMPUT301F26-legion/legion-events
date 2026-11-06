@@ -1,3 +1,10 @@
+/*
+ * CampsiteEditControllerTest.kt
+ *
+ * Purpose: Unit tests for CampsiteEditController form validation and saving (US 02.01.01 to 02.01.03).
+ * Role: Uses FakeOwnerCampsiteRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

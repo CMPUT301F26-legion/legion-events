@@ -1,3 +1,10 @@
+/*
+ * PhotoDecoder.kt
+ *
+ * Purpose: Decodes stored Base64 photos into display-sized bitmaps.
+ * Role: Data layer helper used by campsite views.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import android.graphics.Bitmap

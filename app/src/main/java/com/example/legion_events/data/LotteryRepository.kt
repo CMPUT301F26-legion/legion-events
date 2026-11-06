@@ -1,3 +1,10 @@
+/*
+ * LotteryRepository.kt
+ *
+ * Purpose: Contract for creating, editing, and reading lotteries and their waiting lists (US 02.04.01 to 02.04.07, 02.09.01).
+ * Role: Data layer in MVC; FirebaseLotteryRepository implements it.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 

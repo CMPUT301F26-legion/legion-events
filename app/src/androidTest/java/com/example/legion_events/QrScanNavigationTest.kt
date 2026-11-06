@@ -1,3 +1,10 @@
+/*
+ * QrScanNavigationTest.kt
+ *
+ * Purpose: Intent tests for S05 QR scanning into campsite details (US 01.12.01).
+ * Role: Drives the real router with controlled scanner results and fake reads.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import android.app.Activity

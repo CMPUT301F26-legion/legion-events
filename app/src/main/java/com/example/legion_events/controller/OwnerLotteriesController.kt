@@ -1,3 +1,10 @@
+/*
+ * OwnerLotteriesController.kt
+ *
+ * Purpose: Lists the owner's lotteries for the owner Lotteries tab.
+ * Role: Controller in MVC; OwnerLotteriesScreen renders its state and LotteryRepository supplies the data.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

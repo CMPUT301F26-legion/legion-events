@@ -1,3 +1,10 @@
+/*
+ * CampsiteListControllerTest.kt
+ *
+ * Purpose: Unit tests for CampsiteListController search and filters (US 01.01.01, 01.01.03).
+ * Role: Uses a fake CampsiteRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.SavedStateHandle

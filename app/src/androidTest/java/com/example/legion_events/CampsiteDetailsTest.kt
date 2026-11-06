@@ -1,3 +1,10 @@
+/*
+ * CampsiteDetailsTest.kt
+ *
+ * Purpose: Intent tests for S04 campsite details (US 01.01.05).
+ * Role: Drives CampsiteDetailsScreen with fake data; no real listings change.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import android.graphics.Bitmap

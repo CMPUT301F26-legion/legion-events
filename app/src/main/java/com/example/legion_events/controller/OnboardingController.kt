@@ -1,3 +1,10 @@
+/*
+ * OnboardingController.kt
+ *
+ * Purpose: Opens or creates the device account when the app starts (US 01.09.01).
+ * Role: Controller in MVC; OnboardingScreen renders its state and UserRepository opens the account.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

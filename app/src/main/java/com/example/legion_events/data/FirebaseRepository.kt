@@ -1,3 +1,10 @@
+/*
+ * FirebaseRepository.kt
+ *
+ * Purpose: Firestore implementation of account setup, campsite search, and campsite details.
+ * Role: Data layer in MVC; implements UserRepository, CampsiteRepository, and CampsiteDetailsRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile

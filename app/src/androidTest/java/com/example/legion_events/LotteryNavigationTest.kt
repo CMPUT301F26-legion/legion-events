@@ -1,3 +1,10 @@
+/*
+ * LotteryNavigationTest.kt
+ *
+ * Purpose: Intent tests for the owner lottery screens: Lotteries tab, S15, and S16 (US 02.04.01, 02.04.05, 02.04.06, 02.09.01).
+ * Role: Drives the real router with fake repositories.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import androidx.compose.ui.test.assertIsDisplayed

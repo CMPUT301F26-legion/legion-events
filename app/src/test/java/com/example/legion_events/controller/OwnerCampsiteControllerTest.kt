@@ -1,3 +1,10 @@
+/*
+ * OwnerCampsiteControllerTest.kt
+ *
+ * Purpose: Unit tests for OwnerCampsiteController (US 02.01.04, 02.02.01).
+ * Role: Uses FakeOwnerCampsiteRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

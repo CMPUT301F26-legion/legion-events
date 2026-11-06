@@ -1,3 +1,10 @@
+/*
+ * DeviceLocation.kt
+ *
+ * Purpose: Reads the device's location to fill in campsite coordinates on S13.
+ * Role: Data layer helper used by CampsiteEditScreen.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import android.Manifest

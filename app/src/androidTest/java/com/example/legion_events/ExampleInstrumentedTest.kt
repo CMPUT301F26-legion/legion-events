@@ -1,3 +1,10 @@
+/*
+ * ExampleInstrumentedTest.kt
+ *
+ * Purpose: Android Studio sample instrumented test that checks the app package name.
+ * Role: Template test kept as a device sanity check.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import androidx.test.platform.app.InstrumentationRegistry

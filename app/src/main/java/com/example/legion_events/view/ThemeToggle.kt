@@ -1,3 +1,10 @@
+/*
+ * ThemeToggle.kt
+ *
+ * Purpose: The light/dark appearance switch.
+ * Role: View in MVC; forwards changes to ThemeController.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.*

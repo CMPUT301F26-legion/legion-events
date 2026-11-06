@@ -1,3 +1,10 @@
+/*
+ * ThemeController.kt
+ *
+ * Purpose: Holds the app-wide light or dark appearance and saves changes.
+ * Role: Controller in MVC; ThemeToggle changes it and ThemePreferences stores it.
+ * Outstanding issues: Font size and button size (WOW accessibility) are a later part.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

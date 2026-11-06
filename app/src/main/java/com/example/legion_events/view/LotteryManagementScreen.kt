@@ -1,3 +1,10 @@
+/*
+ * LotteryManagementScreen.kt
+ *
+ * Purpose: S16: one lottery's status, counts, and waiting list (US 02.04.06, 02.09.01).
+ * Role: View in MVC; renders LotteryManagementState.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.background

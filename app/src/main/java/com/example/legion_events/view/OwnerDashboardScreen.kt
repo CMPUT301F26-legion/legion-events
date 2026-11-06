@@ -1,3 +1,10 @@
+/*
+ * OwnerDashboardScreen.kt
+ *
+ * Purpose: S12: the owner's campsites with lottery badges (US 02.03.01).
+ * Role: View in MVC; renders OwnerDashboardState.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.BorderStroke

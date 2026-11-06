@@ -1,3 +1,10 @@
+/*
+ * LotteryEditControllerTest.kt
+ *
+ * Purpose: Unit tests for LotteryEditController validation and saving (US 02.04.01 to 02.04.07).
+ * Role: Uses a fake LotteryRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import com.example.legion_events.data.LotteryRepository

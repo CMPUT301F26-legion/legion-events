@@ -1,3 +1,10 @@
+/*
+ * Theme.kt
+ *
+ * Purpose: The app's Material theme with its light and dark color schemes.
+ * Role: Shared theme used by every view.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme

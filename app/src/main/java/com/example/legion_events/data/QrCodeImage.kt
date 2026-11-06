@@ -1,3 +1,10 @@
+/*
+ * QrCodeImage.kt
+ *
+ * Purpose: Draws a campsite's QR code as a bitmap for S14 (US 02.02.01).
+ * Role: Data layer helper used by OwnerCampsiteScreen.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import android.content.Context

@@ -1,3 +1,10 @@
+/*
+ * ThemeSelectionTest.kt
+ *
+ * Purpose: Intent tests for the light/dark appearance switch.
+ * Role: Drives ThemeToggle and the app theme.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import android.content.Context

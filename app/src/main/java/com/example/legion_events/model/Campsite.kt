@@ -1,3 +1,10 @@
+/*
+ * Campsite.kt
+ *
+ * Purpose: A campsite listing stored at `campsites/{id}`.
+ * Role: Model in MVC; shared by search, details, and owner screens.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.model
 
 import com.google.firebase.firestore.GeoPoint

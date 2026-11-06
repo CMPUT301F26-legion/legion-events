@@ -1,3 +1,10 @@
+/*
+ * FakeOwnerCampsiteRepository.kt
+ *
+ * Purpose: In-memory OwnerCampsiteRepository and test lotteries shared by the owner controller tests.
+ * Role: Test double; no Firebase access.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import com.example.legion_events.data.OwnerCampsiteRepository

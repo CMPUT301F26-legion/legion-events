@@ -1,3 +1,10 @@
+/*
+ * FirestoreProfileCreatorTest.kt
+ *
+ * Purpose: Unit tests for the REST request FirestoreProfileCreator builds.
+ * Role: Checks the request body only; no network access.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import org.junit.Assert.assertEquals

@@ -1,3 +1,10 @@
+/*
+ * QrCaptureActivity.kt
+ *
+ * Purpose: The camera screen used by S05, with a visible cancel button (US 01.12.01).
+ * Role: View; extends the ZXing CaptureActivity, which manages the camera.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import android.app.Activity

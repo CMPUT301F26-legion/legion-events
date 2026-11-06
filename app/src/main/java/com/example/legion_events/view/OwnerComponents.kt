@@ -1,3 +1,10 @@
+/*
+ * OwnerComponents.kt
+ *
+ * Purpose: Small composables shared by the owner screens: back arrow, lottery badge, stat tile, cover photo.
+ * Role: View helpers in MVC.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import android.graphics.Bitmap

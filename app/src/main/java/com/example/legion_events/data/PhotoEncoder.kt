@@ -1,3 +1,10 @@
+/*
+ * PhotoEncoder.kt
+ *
+ * Purpose: Shrinks and compresses a picked image into the Base64 JPEG the schema stores.
+ * Role: Data layer helper used by CampsiteEditScreen.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import android.content.ContentResolver

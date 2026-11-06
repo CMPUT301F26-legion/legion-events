@@ -1,3 +1,10 @@
+/*
+ * NewProfileContractTest.kt
+ *
+ * Purpose: Checks that new profiles have exactly the fields the security rules require.
+ * Role: Unit test of FirebaseRepository.newProfileFields.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.google.firebase.firestore.FieldValue

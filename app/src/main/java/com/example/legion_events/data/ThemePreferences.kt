@@ -1,3 +1,10 @@
+/*
+ * ThemePreferences.kt
+ *
+ * Purpose: Stores the device's chosen light or dark appearance.
+ * Role: Data layer in MVC; used by ThemeController.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import android.content.SharedPreferences

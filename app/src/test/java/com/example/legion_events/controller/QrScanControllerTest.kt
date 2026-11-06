@@ -1,3 +1,10 @@
+/*
+ * QrScanControllerTest.kt
+ *
+ * Purpose: Unit tests for QrScanController validation, retry, and restoration (US 01.12.01).
+ * Role: No camera or Firebase needed.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.SavedStateHandle

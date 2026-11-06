@@ -1,3 +1,10 @@
+/*
+ * LotteryEditScreen.kt
+ *
+ * Purpose: S15: the create/edit lottery form (US 02.04.01 to 02.04.07).
+ * Role: View in MVC; renders LotteryEditState and forwards input to LotteryEditController.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.*

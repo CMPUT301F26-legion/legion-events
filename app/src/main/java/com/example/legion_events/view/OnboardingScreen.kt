@@ -1,3 +1,10 @@
+/*
+ * OnboardingScreen.kt
+ *
+ * Purpose: Shows account setup progress, errors with Retry, or a disabled-account message (US 01.09.01).
+ * Role: View in MVC; renders OnboardingState.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.Arrangement

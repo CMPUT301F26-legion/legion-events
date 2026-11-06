@@ -1,3 +1,10 @@
+/*
+ * HomeScreen.kt
+ *
+ * Purpose: S02/S03: campsite search with guest and price filters, and the QR scan entry (US 01.01.01, 01.01.03, 01.01.04).
+ * Role: View in MVC; renders CampsiteListState.
+ * Outstanding issues: Location and date filters (US 01.01.02) are a later part.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.BorderStroke

@@ -1,3 +1,10 @@
+/*
+ * CampsiteEditScreen.kt
+ *
+ * Purpose: S13: the add/edit campsite form (US 02.01.01 to 02.01.03).
+ * Role: View in MVC; renders CampsiteEditState and forwards input to CampsiteEditController.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import android.Manifest

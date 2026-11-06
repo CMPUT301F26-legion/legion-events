@@ -1,3 +1,10 @@
+/*
+ * LotteryFormat.kt
+ *
+ * Purpose: Formats lottery periods and join dates for display.
+ * Role: View helper shared by lottery screens.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import com.google.firebase.Timestamp

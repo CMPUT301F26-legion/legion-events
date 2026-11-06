@@ -1,3 +1,10 @@
+/*
+ * CampsiteDetailsControllerTest.kt
+ *
+ * Purpose: Unit tests for CampsiteDetailsController (US 01.01.05).
+ * Role: Uses a fake CampsiteDetailsRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

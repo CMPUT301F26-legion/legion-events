@@ -1,3 +1,10 @@
+/*
+ * OwnerCampsiteController.kt
+ *
+ * Purpose: Loads one of the owner's campsites, its photo, and its QR code for S14 (US 02.01.04, 02.02.01).
+ * Role: Controller in MVC; OwnerCampsiteScreen renders its state and OwnerCampsiteRepository supplies the data.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel
