@@ -1,3 +1,10 @@
+/*
+ * Lottery.kt
+ *
+ * Purpose: An owner's lottery stored at `lotteries/{id}`.
+ * Role: Model in MVC; shared by owner lottery screens, waitlists, and the draw worker.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.model
 
 import com.google.firebase.Timestamp

@@ -1,3 +1,10 @@
+/*
+ * OnboardingNavigationTest.kt
+ *
+ * Purpose: Intent tests for account setup, S01 welcome, and onboarding retry (US 01.09.01).
+ * Role: Drives the real router with a fake UserRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import androidx.compose.runtime.mutableStateOf

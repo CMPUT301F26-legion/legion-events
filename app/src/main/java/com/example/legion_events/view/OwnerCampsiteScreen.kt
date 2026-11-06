@@ -1,3 +1,10 @@
+/*
+ * OwnerCampsiteScreen.kt
+ *
+ * Purpose: S14: one of the owner's campsites with its QR code (US 02.01.04, 02.02.01).
+ * Role: View in MVC; renders OwnerCampsiteState.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import android.content.ActivityNotFoundException

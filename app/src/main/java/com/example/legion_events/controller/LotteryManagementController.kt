@@ -1,3 +1,10 @@
+/*
+ * LotteryManagementController.kt
+ *
+ * Purpose: Loads one lottery and its waiting list for S16 (US 02.04.06, 02.09.01).
+ * Role: Controller in MVC; LotteryManagementScreen renders its state and LotteryRepository supplies the data.
+ * Outstanding issues: Entrants are shown by position, because owners cannot read entrant profiles.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

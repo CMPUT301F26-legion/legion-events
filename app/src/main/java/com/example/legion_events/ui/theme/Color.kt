@@ -1,3 +1,10 @@
+/*
+ * Color.kt
+ *
+ * Purpose: The app's light and dark color values.
+ * Role: Shared theme used by every view.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.ui.theme
 
 import androidx.compose.ui.graphics.Color

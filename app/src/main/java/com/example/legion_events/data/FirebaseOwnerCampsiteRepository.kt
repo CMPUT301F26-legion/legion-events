@@ -1,3 +1,10 @@
+/*
+ * FirebaseOwnerCampsiteRepository.kt
+ *
+ * Purpose: Firestore implementation of OwnerCampsiteRepository for the owner's campsites and cover photos.
+ * Role: Data layer in MVC; used by the S12 to S14 controllers.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import android.util.Log

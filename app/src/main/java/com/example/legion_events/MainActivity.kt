@@ -1,3 +1,10 @@
+/*
+ * MainActivity.kt
+ *
+ * Purpose: Starts the app, applies the theme, and hosts the Compose navigation.
+ * Role: Android entry point; creates the controllers AppNavigation needs and handles push notification taps.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import android.Manifest

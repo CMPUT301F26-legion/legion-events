@@ -1,3 +1,10 @@
+/*
+ * UserRepository.kt
+ *
+ * Purpose: Contract for opening the device account and its profile (US 01.09.01).
+ * Role: Data layer in MVC; FirebaseRepository implements it.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile

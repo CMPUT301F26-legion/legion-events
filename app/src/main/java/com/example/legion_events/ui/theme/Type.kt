@@ -1,3 +1,10 @@
+/*
+ * Type.kt
+ *
+ * Purpose: The app's text styles.
+ * Role: Shared theme used by every view.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.ui.theme
 
 import androidx.compose.material3.Typography

@@ -43,6 +43,21 @@ generator's available tasks and the [onboarding notes](doc/onboarding.md) for ap
   UML diagrams, CRC cards, and wiki pages.
 - **Used for:** code and tests across the app (profile and onboarding, navigation, campsite
   search and details, owner campsite screens, lottery setup and management, lottery draw and
-  booking offers), `SCHEMA.md`, the UML diagrams in `doc/uml`, and the CRC cards in
+  booking offers, waitlist join and leave, owner notices), `SCHEMA.md`, the UML diagrams in `doc/uml`, and the CRC cards in
   `images/crc_cards`.
 - Every team member reviewed and tested the AI-generated code before merging.
+
+## Third-party libraries
+
+Besides Kotlin, Android, Jetpack Compose, AndroidX, and Firebase (Authentication,
+Firestore, Cloud Messaging, and the Admin SDK in `lottery-worker/`), the project uses:
+
+| Library | Version | Used for | License |
+| --- | --- | --- | --- |
+| [ZXing core](https://github.com/zxing/zxing) (`com.google.zxing:core`) | 3.5.3 | Drawing campsite QR codes (S14) | Apache 2.0 |
+| [ZXing Android Embedded](https://github.com/journeyapps/zxing-android-embedded) (`com.journeyapps:zxing-android-embedded`) | 4.3.0 | Scanning campsite QR codes (S05) | Apache 2.0 |
+| [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) (`-play-services`, `-test`) | see `gradle/libs.versions.toml` | Awaiting Firebase tasks; testing controllers | Apache 2.0 |
+| [JUnit 4](https://junit.org/junit4/) | 4.13.2 | Unit tests | EPL 1.0 |
+| [Mockito](https://site.mockito.org/) | 5.20.0 | Unit tests | MIT |
+| [Dokka](https://github.com/Kotlin/dokka) | 2.2.0 | Generating the API documentation | Apache 2.0 |
+

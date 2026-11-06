@@ -1,3 +1,10 @@
+/*
+ * OwnerDashboardControllerTest.kt
+ *
+ * Purpose: Unit tests for OwnerDashboardController and lottery badges (US 02.03.01).
+ * Role: Uses FakeOwnerCampsiteRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

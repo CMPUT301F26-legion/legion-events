@@ -1,3 +1,10 @@
+/*
+ * CampsiteSearchTest.kt
+ *
+ * Purpose: Intent tests for S02/S03 campsite search and filters (US 01.01.01, 01.01.03, 01.01.04).
+ * Role: Drives HomeScreen with fake listings.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import androidx.compose.ui.test.*

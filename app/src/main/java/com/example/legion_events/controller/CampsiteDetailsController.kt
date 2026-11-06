@@ -1,3 +1,10 @@
+/*
+ * CampsiteDetailsController.kt
+ *
+ * Purpose: Loads one campsite and its photos for S04 campsite details (US 01.01.05, 01.12.01).
+ * Role: Controller in MVC; CampsiteDetailsScreen renders its state and CampsiteDetailsRepository supplies the data.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

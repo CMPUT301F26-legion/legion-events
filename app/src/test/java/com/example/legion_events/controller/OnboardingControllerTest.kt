@@ -1,3 +1,10 @@
+/*
+ * OnboardingControllerTest.kt
+ *
+ * Purpose: Unit tests for OnboardingController account setup and errors (US 01.09.01).
+ * Role: Uses a fake UserRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

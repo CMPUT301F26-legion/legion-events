@@ -1,3 +1,10 @@
+/*
+ * OwnerLotteriesScreen.kt
+ *
+ * Purpose: The owner's Lotteries tab: every lottery they created, leading to S15 and S16.
+ * Role: View in MVC; renders OwnerLotteriesState.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.BorderStroke

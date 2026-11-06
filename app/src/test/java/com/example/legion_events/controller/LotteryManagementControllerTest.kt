@@ -1,3 +1,10 @@
+/*
+ * LotteryManagementControllerTest.kt
+ *
+ * Purpose: Unit tests for the owner's Lotteries tab and S16 controllers (US 02.04.06, 02.09.01).
+ * Role: Uses fake repositories.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import com.example.legion_events.data.LotteryRepository

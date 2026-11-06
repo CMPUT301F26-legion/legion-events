@@ -1,3 +1,10 @@
+/*
+ * CampsiteDetailsRepository.kt
+ *
+ * Purpose: Contract for reading one campsite and its photos (US 01.01.05).
+ * Role: Data layer in MVC; FirebaseRepository implements it.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.Campsite

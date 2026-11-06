@@ -1,3 +1,10 @@
+/*
+ * FirebaseLotteryRepository.kt
+ *
+ * Purpose: Firestore implementation of LotteryRepository for `lotteries/{id}` and its waiting list.
+ * Role: Data layer in MVC; used by the owner lottery controllers.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.Lottery

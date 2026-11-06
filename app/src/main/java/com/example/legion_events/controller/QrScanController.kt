@@ -1,3 +1,10 @@
+/*
+ * QrScanController.kt
+ *
+ * Purpose: Tracks the S05 QR scan and accepts only valid campsite codes (US 01.12.01).
+ * Role: Controller in MVC; QrScanScreen renders its state; CampsiteQr validates codes.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.SavedStateHandle

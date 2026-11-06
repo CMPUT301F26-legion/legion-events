@@ -1,3 +1,10 @@
+/*
+ * CampsiteDetailsScreen.kt
+ *
+ * Purpose: S04: shows a campsite, its photos, and its lottery section (US 01.01.05, 01.01.06).
+ * Role: View in MVC; renders CampsiteDetailsState.
+ * Outstanding issues: The location map (S04b) is a later part.
+ */
 package com.example.legion_events.view
 
 import android.graphics.Bitmap

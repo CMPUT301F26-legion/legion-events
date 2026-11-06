@@ -1,3 +1,10 @@
+/*
+ * OwnerDashboardController.kt
+ *
+ * Purpose: Loads the owner's campsites with their lottery badges and cover photos for S12 (US 02.03.01).
+ * Role: Controller in MVC; OwnerDashboardScreen renders its state and OwnerCampsiteRepository supplies the data.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

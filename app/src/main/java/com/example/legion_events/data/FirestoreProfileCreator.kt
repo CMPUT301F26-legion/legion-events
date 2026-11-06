@@ -1,3 +1,10 @@
+/*
+ * FirestoreProfileCreator.kt
+ *
+ * Purpose: Creates a missing user profile through Firestore's REST API when rules deny reading it first.
+ * Role: Data layer helper used by FirebaseRepository during account setup (US 01.09.01).
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.google.firebase.auth.FirebaseUser

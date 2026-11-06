@@ -1,3 +1,10 @@
+/*
+ * OwnerCampsiteNavigationTest.kt
+ *
+ * Purpose: Intent tests for the owner campsite screens S12 to S14 (US 02.01.01 to 02.03.01).
+ * Role: Drives the real router with a fake OwnerCampsiteRepository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import androidx.compose.ui.test.assertIsDisplayed

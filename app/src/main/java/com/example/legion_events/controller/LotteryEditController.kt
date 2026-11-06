@@ -1,3 +1,10 @@
+/*
+ * LotteryEditController.kt
+ *
+ * Purpose: Holds the S15 create/edit lottery form, validates it, and saves the lottery (US 02.04.01 to 02.04.07).
+ * Role: Controller in MVC; LotteryEditScreen renders its state and LotteryRepository saves it.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

@@ -1,3 +1,10 @@
+/*
+ * FirebaseRegistrationIntegrationTest.kt
+ *
+ * Purpose: Opt-in live check of device account and profile creation (US 01.09.01).
+ * Role: Integration test against a configured Firebase test project; skipped otherwise.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import android.os.Bundle

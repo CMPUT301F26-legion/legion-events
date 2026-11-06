@@ -1,3 +1,10 @@
+/*
+ * ExampleUnitTest.kt
+ *
+ * Purpose: Android Studio sample unit test.
+ * Role: Template test kept as a build sanity check.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import org.junit.Test

@@ -1,3 +1,10 @@
+/*
+ * QrScanScreen.kt
+ *
+ * Purpose: S05: launches the QR camera and shows invalid-code and permission recovery states (US 01.12.01).
+ * Role: View in MVC; renders QrScanState.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import android.content.ActivityNotFoundException

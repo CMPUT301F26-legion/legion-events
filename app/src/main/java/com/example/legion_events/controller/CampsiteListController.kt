@@ -1,3 +1,10 @@
+/*
+ * CampsiteListController.kt
+ *
+ * Purpose: Searches and filters active campsites for S02/S03 (US 01.01.01, 01.01.03, 01.01.04).
+ * Role: Controller in MVC; HomeScreen renders its state and CampsiteRepository streams the listings.
+ * Outstanding issues: Location and date filters (US 01.01.02) are a later part.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.SavedStateHandle

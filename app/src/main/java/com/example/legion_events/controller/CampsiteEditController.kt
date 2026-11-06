@@ -1,3 +1,10 @@
+/*
+ * CampsiteEditController.kt
+ *
+ * Purpose: Holds the S13 add/edit campsite form, validates it, and saves the campsite and cover photo (US 02.01.01 to 02.01.03).
+ * Role: Controller in MVC; CampsiteEditScreen renders its state and OwnerCampsiteRepository saves it.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel
