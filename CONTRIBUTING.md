@@ -91,6 +91,20 @@ not treat winning offers as the user's full entry history. Offer views use the
 shared theme, outlined cards, and Back arrow, with decline/reload actions above
 the bottom navigation. Keep notification navigation compatible with direct offer links.
 
+## Active reservations
+
+The **Bookings** tab opens S10's Active tab (US 01.06.01). A stay is active while
+its status is `confirmed` and checkout is in the future, including stays in progress.
+`ReservationsController` filters and orders owned bookings and removes them at checkout.
+S10b (`ReservationDetailsScreen`) receives only a reservation ID through `AppNavigation`.
+Both routes use `ReservationRepository`, implemented by `FirebaseReservationRepository`.
+The list refreshes on resume and offers Refresh/Retry. Details check ownership again.
+
+Booking dates, guests, rules acceptance, and total price come from the saved reservation.
+Current campsite names and areas are optional display labels; inaccessible listings do
+not hide reservations. This flow reads data only. Past reservations, cancellation,
+CSV export, and ratings are separate stories.
+
 ## Theme
 
 The app-wide **Dark mode** switch selects light or dark appearance. Light is the

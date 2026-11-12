@@ -17,6 +17,7 @@ import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.LotteryRepository
 import com.example.legion_events.data.NotificationRepository
 import com.example.legion_events.data.OfferRepository
+import com.example.legion_events.data.OwnerNoticeRepository
 import com.example.legion_events.data.OwnerCampsiteRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.UserRepository
@@ -26,6 +27,7 @@ import com.example.legion_events.model.Lottery
 import com.example.legion_events.model.LotteryNotification
 import com.example.legion_events.model.LotteryResult
 import com.example.legion_events.model.Photo
+import com.example.legion_events.model.OwnerNotice
 import com.example.legion_events.model.UserProfile
 import com.example.legion_events.model.WaitlistEntrant
 import com.example.legion_events.ui.theme.LegioneventsTheme
@@ -205,12 +207,20 @@ class BookingOfferNavigationTest {
             override suspend fun saveCampsite(campsite: Campsite, coverJpegBase64: String?): String =
                 error("Unexpected campsite save")
         }
+        val notices = object : OwnerNoticeRepository {
+            /** Owner notice writes are outside these offer tests. */
+            override suspend fun sendNotification(lotteryId: String, message: String): Int = error("Unexpected notice write")
+            /** Owner notice history is outside these offer tests. */
+            override suspend fun getSentNotices(): List<OwnerNotice> = error("Unexpected sent-notice read")
+            /** Inbox lottery results must not wait on a real Firestore notice subscription. */
+            override fun observeReceived(userId: String) = flowOf(emptyList<OwnerNotice>())
+        }
         restoration = StateRestorationTester(compose)
         restoration.setContent {
             navigation = rememberNavController()
             LegioneventsTheme(darkTheme = darkTheme) {
                 AppNavigation(onboarding, navigation, campsites, details, profiles,
-                    lotteries = lotteries, owners = owners, offers = offers, notifications = notifications)
+                    lotteries = lotteries, owners = owners, offers = offers, notifications = notifications, notices = notices)
             }
         }
         waitFor("Explore campsites")
