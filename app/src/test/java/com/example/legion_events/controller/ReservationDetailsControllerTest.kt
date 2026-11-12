@@ -1,3 +1,10 @@
+/*
+ * ReservationDetailsControllerTest.kt
+ *
+ * Purpose: Verify owned detail loading, missing records, and retry after access failures.
+ * Role: Local JVM tests for the reservation details controller using a fake repository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

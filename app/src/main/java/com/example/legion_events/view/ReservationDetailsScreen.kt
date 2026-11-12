@@ -1,3 +1,10 @@
+/*
+ * ReservationDetailsScreen.kt
+ *
+ * Purpose: Display an owned reservation's saved booking details on S10b.
+ * Role: View in MVC; renders detail state and forwards Retry and navigation actions.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.*
@@ -45,13 +52,13 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
                     else -> {
                         val reservation = entry.reservation
                         item {
-                            Text(entry.campsiteName ?: "Campsite ${reservation.campsiteId}",
+                            Text(entry.campsiteName ?: "Campsite unavailable",
                                 style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             entry.locationName?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                         item {
                             Text("Reservation ${reservation.id}", style = MaterialTheme.typography.titleMedium)
-                            Text("Status: ${reservation.status}")
+                            Text("Status: ${reservationStatusText(reservation.status)}")
                             if (reservation.cancellationRequested) Text("Cancellation requested")
                         }
                         item {

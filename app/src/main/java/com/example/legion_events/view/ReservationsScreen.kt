@@ -1,3 +1,10 @@
+/*
+ * ReservationsScreen.kt
+ *
+ * Purpose: Display the entrant's active reservations and open a selected booking.
+ * Role: View in MVC; renders S10 state and forwards refresh and navigation actions.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.BorderStroke
@@ -68,8 +75,8 @@ private fun ReservationCard(entry: ReservationEntry, onClick: () -> Unit) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Confirmed", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-            Text(entry.campsiteName ?: "Campsite ${reservation.campsiteId}",
+            Text(reservationStatusText(reservation.status), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            Text(entry.campsiteName ?: "Campsite unavailable",
                 style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             entry.locationName?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Text("Check-in: ${reservationDateText(reservation.startDate)}")

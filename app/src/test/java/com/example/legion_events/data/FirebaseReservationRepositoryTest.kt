@@ -1,3 +1,10 @@
+/*
+ * FirebaseReservationRepositoryTest.kt
+ *
+ * Purpose: Verify reservation ownership, document mapping, and read failures.
+ * Role: Local JVM tests for the data layer using mocked Firebase SDK boundaries.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.google.android.gms.tasks.Tasks
@@ -101,10 +108,22 @@ class FirebaseReservationRepositoryTest {
         assertEquals(Timestamp(100, 0), entry.reservation.startDate)
     }
 
-    @Test fun permissionAndNetworkFailuresPropagateForTheControllerToHandle() = runTest {
+    @Test fun deniedDetailReadsAreUnavailableWhileDeniedListsStillFail() = runTest {
         val denied = mock(FirebaseFirestoreException::class.java)
+        `when`(denied.code).thenReturn(FirebaseFirestoreException.Code.PERMISSION_DENIED)
+        `when`(booking.get()).thenReturn(Tasks.forException(denied))
+        assertNull(repository.getReservation("booking"))
+        verify(campsite, never()).get()
         `when`(query.get()).thenReturn(Tasks.forException(denied))
         assertSame(denied, failure<FirebaseFirestoreException> { repository.getMyReservations() })
+    }
+
+    @Test fun detailNetworkFailuresStillPropagateSoRetryRemainsAvailable() = runTest {
+        val unavailable = mock(FirebaseFirestoreException::class.java)
+        `when`(unavailable.code).thenReturn(FirebaseFirestoreException.Code.UNAVAILABLE)
+        `when`(booking.get()).thenReturn(Tasks.forException(unavailable))
+        assertSame(unavailable, failure<FirebaseFirestoreException> { repository.getReservation("booking") })
+        verify(campsite, never()).get()
     }
 
     @Test fun anAccountChangeDuringAReadDoesNotReturnThePreviousUsersData() = runTest {

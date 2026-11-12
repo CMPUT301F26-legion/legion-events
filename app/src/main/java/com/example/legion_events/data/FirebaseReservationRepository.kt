@@ -1,3 +1,10 @@
+/*
+ * FirebaseReservationRepository.kt
+ *
+ * Purpose: Read owned reservations and optional campsite labels from Firestore.
+ * Role: Data layer in MVC; enforces UID-scoped, read-only reservation access.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.Reservation
@@ -29,11 +36,20 @@ class FirebaseReservationRepository(
         return reservations.map { ReservationEntry(it, labels[it.campsiteId]?.first, labels[it.campsiteId]?.second) }
     }
 
-    /** Checks document ownership before reading booking details or looking up its campsite. */
+    /**
+     * Checks ownership before returning booking details or looking up its campsite.
+     * Missing and forbidden documents are both unavailable because the rules also deny missing reads.
+     */
     override suspend fun getReservation(reservationId: String): ReservationEntry? {
         require(reservationId.isNotBlank() && '/' !in reservationId) { "A single reservation ID is required." }
         val userId = currentUserId()
-        val document = firestore.collection("reservations").document(reservationId).get().await()
+        val document = try {
+            firestore.collection("reservations").document(reservationId).get().await()
+        } catch (error: FirebaseFirestoreException) {
+            checkAccount(userId)
+            if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) return null
+            throw error
+        }
         checkAccount(userId)
         if (!document.exists()) return null
         val reservation = document.toOwnedReservation(userId)

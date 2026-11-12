@@ -1,3 +1,10 @@
+/*
+ * ReservationNavigationTest.kt
+ *
+ * Purpose: Verify S10 and S10b navigation, loading, retry, and account checks.
+ * Role: Android UI tests using the shared router and fake accounts and reservations.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events
 
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +57,8 @@ class ReservationNavigationTest {
         waitFor("Total: $65.50 CAD")
         compose.onNodeWithText("Bookings").assertIsSelected()
         compose.onNodeWithText("Guests: 4").assertIsDisplayed()
+        compose.onNodeWithText("Status: Confirmed").assertIsDisplayed()
+        compose.onNodeWithText("Status: confirmed").assertDoesNotExist()
         compose.runOnIdle {
             assertEquals(upcoming.reservation.id, navigation.currentBackStackEntry?.arguments?.getString("reservationId"))
         }
@@ -89,6 +98,21 @@ class ReservationNavigationTest {
         compose.onNodeWithText("Retry").performClick()
         waitFor("This reservation is not available for this account.")
         compose.onNodeWithText("View campsite").assertDoesNotExist()
+    }
+
+    @Test fun missingCampsiteLabelsShowAnUnavailableMessageWithoutHidingTheBooking() {
+        val repository = FakeReservations().apply {
+            entries = listOf(upcoming.copy(campsiteName = null, locationName = null))
+        }
+        open(repository)
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("View reservation")
+        compose.onNodeWithText("Campsite unavailable").assertIsDisplayed()
+        compose.onNodeWithText("Campsite pine").assertDoesNotExist()
+        compose.onNodeWithText("View reservation").performClick()
+        waitFor("Total: $65.50 CAD")
+        compose.onNodeWithText("Campsite unavailable").assertIsDisplayed()
+        compose.onNodeWithText("Campsite pine").assertDoesNotExist()
     }
 
     @Test fun restoredBookingsWaitForTheCurrentAccountCheck() {

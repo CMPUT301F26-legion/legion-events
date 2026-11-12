@@ -1,3 +1,10 @@
+/*
+ * ReservationsController.kt
+ *
+ * Purpose: Load and refresh active reservations for S10 (US 01.06.01).
+ * Role: Controller in MVC; filters bookings and removes stays at checkout.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

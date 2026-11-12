@@ -1,3 +1,10 @@
+/*
+ * Reservation.kt
+ *
+ * Purpose: Represent saved booking data and determine active stays for US 01.06.01.
+ * Role: Model in MVC; keeps reservation fields and the checkout boundary.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.model
 
 import com.google.firebase.Timestamp

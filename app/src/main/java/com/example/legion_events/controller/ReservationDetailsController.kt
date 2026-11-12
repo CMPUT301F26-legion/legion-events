@@ -1,3 +1,10 @@
+/*
+ * ReservationDetailsController.kt
+ *
+ * Purpose: Load one owned reservation for S10b and handle Retry.
+ * Role: Controller in MVC; supplies reservation detail state through the repository.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModel

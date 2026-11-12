@@ -1,3 +1,10 @@
+/*
+ * ReservationsControllerTest.kt
+ *
+ * Purpose: Verify active filtering, checkout expiry, retries, and request cancellation.
+ * Role: Local JVM tests for the reservations controller using synthetic booking data.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.controller
 
 import androidx.lifecycle.ViewModelProvider

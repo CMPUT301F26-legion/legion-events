@@ -1,3 +1,10 @@
+/*
+ * ReservationRepository.kt
+ *
+ * Purpose: Define reads for the signed-in entrant's reservations and optional campsite labels.
+ * Role: Data contract in MVC; separates reservation controllers from Firebase.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.data
 
 import com.example.legion_events.model.Reservation
@@ -19,6 +26,6 @@ interface ReservationRepository {
     /** Returns the entrant's reservations; controllers select the active or other requested period. */
     suspend fun getMyReservations(): List<ReservationEntry>
 
-    /** Returns one owned reservation, or null if missing; refuses access to another entrant's record. */
+    /** Returns one owned reservation, or null if missing or forbidden; never returns another entrant's record. */
     suspend fun getReservation(reservationId: String): ReservationEntry?
 }
