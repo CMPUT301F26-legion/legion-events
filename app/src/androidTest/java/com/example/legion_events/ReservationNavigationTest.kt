@@ -1,7 +1,7 @@
 /*
  * ReservationNavigationTest.kt
  *
- * Purpose: Verify S10 and S10b navigation, loading, retry, and account checks.
+ * Purpose: Verify S10's stay tabs, S10b navigation, loading, retry, and account checks.
  * Role: Android UI tests using the shared router and fake accounts and reservations.
  * Outstanding issues: None.
  */
@@ -88,6 +88,61 @@ class ReservationNavigationTest {
         waitFor("View reservation")
     }
 
+    @Test fun pastTabOpensFinishedStaysAndSurvivesRestorationAndReturningFromDetails() {
+        val repository = FakeReservations().apply {
+            entries = listOf(upcoming, entry("finished", time - 7200, time - 3600, name = "Past camp"),
+                entry("cancelled", time - 7200, time - 3600, "cancelled", "Cancelled camp"))
+        }
+        open(repository)
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Pine Ridge")
+        val reads = compose.runOnIdle { repository.listReads }
+        compose.onNodeWithText("Past").performClick()
+        waitFor("Past camp")
+        compose.onNodeWithText("Past").assertIsSelected()
+        compose.onNodeWithText("Pine Ridge").assertDoesNotExist()
+        compose.onNodeWithText("Cancelled camp").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(reads, repository.listReads) }
+        restoration.emulateSavedInstanceStateRestore()
+        waitFor("Past camp")
+        compose.onNodeWithText("Past").assertIsSelected()
+        compose.onNodeWithText("View reservation").performClick()
+        waitFor("Total: $65.50 CAD")
+        compose.onNodeWithText("Past camp").assertIsDisplayed()
+        compose.onNodeWithText("Bookings").assertIsSelected()
+        compose.runOnIdle {
+            assertEquals("finished", navigation.currentBackStackEntry?.arguments?.getString("reservationId"))
+        }
+        compose.onNodeWithContentDescription("Back").performClick()
+        waitFor("View reservation")
+        compose.onNodeWithText("Past").assertIsSelected()
+        compose.onNodeWithText("Active").performClick()
+        waitFor("Pine Ridge")
+        compose.onNodeWithText("Past camp").assertDoesNotExist()
+    }
+
+    @Test fun pastLoadingErrorRetryAndEmptyStatesWorkInDarkMode() {
+        val pending = CompletableDeferred<List<ReservationEntry>>()
+        val repository = FakeReservations().apply { load = { pending.await() } }
+        open(repository, dark = true)
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Loading reservations…")
+        compose.onNodeWithText("Past").performClick()
+        pending.completeExceptionally(IllegalStateException("Unavailable"))
+        waitFor("Could not load your reservations. Check your connection and retry.")
+        compose.onNodeWithText("Past").assertIsSelected()
+        compose.runOnIdle { repository.load = { listOf(upcoming) } }
+        compose.onNodeWithText("Retry").performClick()
+        waitFor("No past reservations")
+        compose.onNodeWithText("Pine Ridge").assertDoesNotExist()
+        compose.runOnIdle {
+            repository.load = { listOf(entry("finished", time - 7200, time - 3600, name = "Past camp")) }
+        }
+        compose.onNodeWithText("Refresh").performClick()
+        waitFor("Past camp")
+        compose.onNodeWithText("Past").assertIsSelected()
+    }
+
     @Test fun failedOrMissingDirectLinksShowNoReservationData() {
         val repository = FakeReservations().apply { failDetail = true }
         open(repository)
@@ -168,7 +223,11 @@ class ReservationNavigationTest {
         var load: suspend () -> List<ReservationEntry> = { entries }
         var failDetail = false
         var detailReads = 0
-        override suspend fun getMyReservations() = load()
+        var listReads = 0
+        override suspend fun getMyReservations(): List<ReservationEntry> {
+            listReads++
+            return load()
+        }
         override suspend fun getReservation(reservationId: String): ReservationEntry? {
             detailReads++
             if (failDetail) throw SecurityException("Unavailable to this account")

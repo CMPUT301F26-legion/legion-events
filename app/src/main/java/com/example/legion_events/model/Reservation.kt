@@ -1,7 +1,7 @@
 /*
  * Reservation.kt
  *
- * Purpose: Represent saved booking data and determine active stays for US 01.06.01.
+ * Purpose: Represent saved bookings and determine active and past stays (US 01.06.01/02).
  * Role: Model in MVC; keeps reservation fields and the checkout boundary.
  * Outstanding issues: None.
  */
@@ -46,6 +46,9 @@ data class Reservation(
 ) {
     /** Returns true for upcoming or ongoing confirmed stays, strictly before checkout. */
     fun isActive(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate > at
+
+    /** Returns true for confirmed stays at or after checkout, without changing their saved status. */
+    fun isPast(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate <= at
 
     companion object {
         /** Stored status of an accepted booking that has not been cancelled or rejected. */

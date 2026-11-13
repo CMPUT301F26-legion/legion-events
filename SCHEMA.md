@@ -176,6 +176,10 @@ cannot choose another entrant's identity. Firestore rules must enforce ownership
 | `createdAt`, `updatedAt` | Server timestamps |
 
 Active means `status == "confirmed"` and `endDate > now`, including ongoing stays.
+Past means `status == "confirmed"` and `endDate <= now`, ordered by latest checkout
+and then document ID. Finished stays retain their saved `confirmed` status; no
+`completed` status or checkout write is needed. Cancelled, rejected, pending, and
+unknown statuses are excluded from both periods.
 Checkout is excluded from the occupied nights. A pending cancellation request alone
 does not change the saved status. S10 and S10b perform no writes to reservations,
 offers, or `bookedNights`. Names and areas are optional reads from `campsites/{id}`;
