@@ -178,7 +178,7 @@ class FirebaseOwnerCampsiteRepository(
  * Maps a campsite document for its owner. Missing numbers read as zero so an incomplete
  * listing can still be opened and fixed in S13.
  */
-private fun DocumentSnapshot.toOwnedCampsite() = Campsite(
+internal fun DocumentSnapshot.toOwnedCampsite() = Campsite(
     id = id,
     ownerId = getString("ownerId").orEmpty(),
     name = getString("name").orEmpty(),

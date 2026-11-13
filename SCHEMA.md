@@ -196,3 +196,20 @@ stores its FCM registration in `users/{uid}.fcmToken`.
 
 `lotteryNotificationOutbox` is the backend delivery queue. See the [notification handoff guide](doc/lottery-notification-handoff.md)
 for delivery states, Firestore rules, and FCM setup.
+
+## Admin moderation
+
+S19 is for profiles with `role == "admin"`. The deployed rules let an admin read every
+`users/{uid}` and `campsites/{id}`, including removed ones, and never allow deleting either.
+"Remove" therefore hides the document:
+
+| Action | Write |
+| --- | --- |
+| Remove a campsite (US 03.01.01) | `campsites/{id}`: `active: false`, `updatedAt` server timestamp |
+| Remove a profile (US 03.02.01) | `users/{uid}`: `disabled: true`, `updatedAt` server timestamp |
+| Remove an owner (US 03.07.01) | One batch: the profile write above, plus the campsite write for each of the owner's active campsites |
+
+These are the only fields the admin rules allow besides the optional `moderationReason`, which
+the app does not write. Search shows only `active == true` campsites, and a disabled profile is
+blocked at the next app launch. An owner's S13 edits never write `active`, so a removed listing
+stays removed. Admin accounts are not removed from S19; roles are changed only in the console.
