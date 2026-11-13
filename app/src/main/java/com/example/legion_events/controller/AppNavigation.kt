@@ -81,6 +81,11 @@ import com.example.legion_events.data.ReservationRepository
 import com.example.legion_events.data.FirebaseReservationRepository
 import com.example.legion_events.view.CampsiteLotterySection
 import com.example.legion_events.view.OwnerNoticesScreen
+import com.example.legion_events.view.AdminCampsiteScreen
+import com.example.legion_events.view.AdminCampsitesScreen
+import com.example.legion_events.view.AdminProfilesScreen
+import com.example.legion_events.data.AdminRepository
+import com.example.legion_events.data.FirebaseAdminRepository
 import kotlinx.coroutines.flow.filterIsInstance
 
 /** Route shown while the app opens or creates the user's account. */
@@ -158,8 +163,12 @@ internal const val LOTTERY_DETAILS_PATTERN = "$LOTTERY_MANAGEMENT_ROUTE/{lottery
 internal const val OWNER_RESERVATIONS_ROUTE = "owner/reservations"
 /** S18: owner notifications. */
 internal const val OWNER_NOTIFICATIONS_ROUTE = "owner/notifications"
-/** S19: admin dashboard. */
+/** S19: admin dashboard, opening on its Campsites tab. */
 internal const val ADMIN_DASHBOARD_ROUTE = "admin"
+/** S19 Profiles tab. */
+internal const val ADMIN_PROFILES_ROUTE = "admin/profiles"
+/** S19 campsite details for one campsite; only its document ID is saved in the navigation arguments. */
+internal const val ADMIN_CAMPSITE_PATTERN = "admin/campsite/{campsiteId}"
 /** S20: admin logs. */
 internal const val ADMIN_LOGS_ROUTE = "admin/logs"
 
@@ -172,7 +181,6 @@ private val PLACEHOLDER_SCREENS = mapOf(
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
-    ADMIN_DASHBOARD_ROUTE to "Admin dashboard",
     ADMIN_LOGS_ROUTE to "Admin logs",
 )
 
@@ -199,6 +207,13 @@ private val OWNER_TABS = listOf(
     Tab(LOTTERY_MANAGEMENT_ROUTE, "Lotteries", R.drawable.ic_nav_lotteries),
     Tab(OWNER_RESERVATIONS_ROUTE, "Reservations", R.drawable.ic_nav_bookings),
     Tab(OWNER_NOTIFICATIONS_ROUTE, "Notices", R.drawable.ic_nav_inbox),
+)
+
+/** Admin bottom-bar tabs in mockup order, shown on S19 and S20. */
+private val ADMIN_TABS = listOf(
+    Tab(ADMIN_DASHBOARD_ROUTE, "Campsites", R.drawable.ic_nav_explore),
+    Tab(ADMIN_PROFILES_ROUTE, "Profiles", R.drawable.ic_nav_profile),
+    Tab(ADMIN_LOGS_ROUTE, "Logs", R.drawable.ic_nav_inbox),
 )
 
 /**
@@ -253,6 +268,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param onInboxRequestConsumed Clears a handled or invalid push tap.
  * @param onEnablePush Requests Android's notification permission when available.
  * @param reservations Reads the authenticated entrant's saved bookings.
+ * @param admin Reads and moderates every campsite and profile on S19.
  */
 @Composable
 fun AppNavigation(
@@ -272,6 +288,7 @@ fun AppNavigation(
     onInboxRequestConsumed: () -> Unit = {},
     onEnablePush: (() -> Unit)? = null,
     reservations: ReservationRepository = FirebaseReservationRepository.instance,
+    admin: AdminRepository = FirebaseAdminRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -685,10 +702,46 @@ fun AppNavigation(
                     OwnerNoticesScreen(noticeState, notes::selectLottery, notes::setMessage, notes::send, notes::refresh)
                 }
             }
+            composable(ADMIN_DASHBOARD_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: AdminCampsitesController = viewModel(factory = viewModelFactory {
+                        initializer { AdminCampsitesController(admin) }
+                    })
+                    val listings by list.state.collectAsStateWithLifecycle()
+                    // Reload on every return so a listing removed in its details shows as removed.
+                    LifecycleResumeEffect(list) {
+                        list.refresh()
+                        onPauseOrDispose {}
+                    }
+                    AdminCampsitesScreen(listings, { navController.popBackStack() }, list::setQuery, list::refresh) { id ->
+                        navController.navigate("admin/campsite/${Uri.encode(id)}") { launchSingleTop = true }
+                    }
+                }
+            }
+            composable(ADMIN_CAMPSITE_PATTERN, arguments = listOf(navArgument("campsiteId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val detail: AdminCampsiteController = viewModel(factory = viewModelFactory {
+                        initializer { AdminCampsiteController(checkNotNull(entry.arguments?.getString("campsiteId")), admin, details) }
+                    })
+                    val information by detail.state.collectAsStateWithLifecycle()
+                    AdminCampsiteScreen(information, { navController.popBackStack() }, detail::refresh,
+                        detail::requestRemove, detail::confirmRemove, detail::cancelRemove)
+                }
+            }
+            composable(ADMIN_PROFILES_ROUTE) {
+                RequireAccount(state, controller) {
+                    val people: AdminProfilesController = viewModel(factory = viewModelFactory {
+                        initializer { AdminProfilesController(admin) }
+                    })
+                    val profileState by people.state.collectAsStateWithLifecycle()
+                    AdminProfilesScreen(profileState, { navController.popBackStack() }, people::setQuery, people::refresh,
+                        people::requestRemoveProfile, people::requestRemoveOwner, people::confirmRemove, people::cancelRemove)
+                }
+            }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->
                 composable(route) {
                     RequireAccount(state, controller) {
-                        val tab = (TABS + OWNER_TABS).any { it.route == route }
+                        val tab = (TABS + OWNER_TABS + ADMIN_TABS).any { it.route == route }
                         PlaceholderScreen(title, if (tab) null else { { navController.popBackStack() } })
                     }
                 }
@@ -706,6 +759,26 @@ fun AppNavigation(
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(OWNER_DASHBOARD_ROUTE) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(painterResource(tab.icon), contentDescription = null) },
+                        label = { Text(tab.label) },
+                    )
+                }
+            }
+        }
+        if (ADMIN_TABS.any { it.route == currentRoute } || currentRoute == ADMIN_CAMPSITE_PATTERN) {
+            NavigationBar(windowInsets = WindowInsets(0)) {
+                ADMIN_TABS.forEach { tab ->
+                    NavigationBarItem(
+                        // Campsite details belong to the Campsites tab.
+                        selected = currentRoute == tab.route ||
+                            (tab.route == ADMIN_DASHBOARD_ROUTE && currentRoute == ADMIN_CAMPSITE_PATTERN),
+                        onClick = {
+                            navController.navigate(tab.route) {
+                                popUpTo(ADMIN_DASHBOARD_ROUTE) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
