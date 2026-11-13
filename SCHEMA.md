@@ -159,6 +159,28 @@ leaves the stored status at `pending` and sets `response` to `decline` and both
 `respondedAt` and `updatedAt` to server time. The app displays Declined based on
 the response. Retrying an already declined offer leaves its document unchanged.
 
+## Reservations
+
+Bookings are stored at `reservations/{id}`. The entrant list queries `userId` using
+the current Firebase Auth UID. Direct detail reads also verify `userId`; clients
+cannot choose another entrant's identity. Firestore rules must enforce ownership.
+
+| Field | Type |
+| --- | --- |
+| `lotteryId`, `offerId`, `campsiteId`, `userId`, `ownerId` | String document IDs |
+| `startDate`, `endDate` | Firestore Timestamps for check-in and checkout |
+| `guestCount` | Positive integer |
+| `totalPrice` | Nonnegative integer CAD cents |
+| `rulesAccepted`, `cancellationRequested` | Booleans |
+| `status` | String; active stays use `confirmed` |
+| `createdAt`, `updatedAt` | Server timestamps |
+
+Active means `status == "confirmed"` and `endDate > now`, including ongoing stays.
+Checkout is excluded from the occupied nights. A pending cancellation request alone
+does not change the saved status. S10 and S10b perform no writes to reservations,
+offers, or `bookedNights`. Names and areas are optional reads from `campsites/{id}`;
+they do not replace the booking's saved dates, guest count, or total price.
+
 ## Lottery notifications
 
 The backend publishes `notifications/{outboxEventId}` for each active recipient

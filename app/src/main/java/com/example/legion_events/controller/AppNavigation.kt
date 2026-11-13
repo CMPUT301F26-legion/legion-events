@@ -41,6 +41,8 @@ import com.example.legion_events.R
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.InboxScreen
 import com.example.legion_events.view.QrScanScreen
+import com.example.legion_events.view.ReservationsScreen
+import com.example.legion_events.view.ReservationDetailsScreen
 import com.example.legion_events.view.LotteryEditScreen
 import com.example.legion_events.view.LotteriesScreen
 import com.example.legion_events.view.LotteryManagementScreen
@@ -75,6 +77,8 @@ import com.example.legion_events.data.FirebaseOwnerNoticeRepository
 import com.example.legion_events.data.FirebaseWaitlistRepository
 import com.example.legion_events.data.OwnerNoticeRepository
 import com.example.legion_events.data.WaitlistRepository
+import com.example.legion_events.data.ReservationRepository
+import com.example.legion_events.data.FirebaseReservationRepository
 import com.example.legion_events.view.CampsiteLotterySection
 import com.example.legion_events.view.OwnerNoticesScreen
 import kotlinx.coroutines.flow.filterIsInstance
@@ -119,6 +123,15 @@ internal const val RESERVATION_CONFIRMATION_ROUTE = "reservation_confirmation"
 internal const val BOOKINGS_ROUTE = "bookings"
 /** S10b: one reservation's details. */
 internal const val RESERVATION_DETAILS_ROUTE = "reservation_details"
+/** S10b for one owned booking; only its document ID is saved in navigation state. */
+internal const val RESERVATION_DETAILS_PATTERN = "$RESERVATION_DETAILS_ROUTE/{reservationId}"
+
+/** Builds a details route from one reservation ID, preserving spaces and URI punctuation. */
+internal fun reservationDetailsRoute(reservationId: String): String {
+    require(reservationId.isNotBlank() && '/' !in reservationId) { "A single reservation ID is required." }
+    return "$RESERVATION_DETAILS_ROUTE/${Uri.encode(reservationId)}"
+}
+
 /** S10c: rate a completed stay. */
 internal const val RATE_STAY_ROUTE = "rate_stay"
 /** S11b: accessibility settings. */
@@ -156,8 +169,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  */
 private val PLACEHOLDER_SCREENS = mapOf(
     RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
-    BOOKINGS_ROUTE to "My reservations",
-    RESERVATION_DETAILS_ROUTE to "Reservation details",
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
@@ -241,6 +252,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param inboxRecipient Account UID from a pending lottery push tap.
  * @param onInboxRequestConsumed Clears a handled or invalid push tap.
  * @param onEnablePush Requests Android's notification permission when available.
+ * @param reservations Reads the authenticated entrant's saved bookings.
  */
 @Composable
 fun AppNavigation(
@@ -259,6 +271,7 @@ fun AppNavigation(
     inboxRecipient: String? = null,
     onInboxRequestConsumed: () -> Unit = {},
     onEnablePush: (() -> Unit)? = null,
+    reservations: ReservationRepository = FirebaseReservationRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -273,9 +286,10 @@ fun AppNavigation(
             onInboxRequestConsumed()
         }
     }
-    // Offer screens remain part of Lotteries when opened from the inbox.
+    // Detail screens keep their parent tab selected, including direct links from other screens.
     val entrantTab = when (currentRoute) {
         BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
+        RESERVATION_DETAILS_PATTERN -> BOOKINGS_ROUTE
         else -> currentRoute
     }
     Column {
@@ -417,6 +431,33 @@ fun AppNavigation(
                     val information by offer.state.collectAsStateWithLifecycle()
                     BookingOfferScreen(information, { navController.popBackStack() }, offer::retry,
                         offer::requestDecline, offer::confirmDecline, offer::cancelDecline)
+                }
+            }
+            composable(BOOKINGS_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: ReservationsController = viewModel(factory = viewModelFactory {
+                        initializer { ReservationsController(reservations) }
+                    })
+                    val bookings by list.state.collectAsStateWithLifecycle()
+                    LifecycleResumeEffect(list) {
+                        list.refresh()
+                        onPauseOrDispose {}
+                    }
+                    ReservationsScreen(bookings, list::refresh) { id ->
+                        navController.navigate(reservationDetailsRoute(id)) { launchSingleTop = true }
+                    }
+                }
+            }
+            composable(RESERVATION_DETAILS_PATTERN,
+                arguments = listOf(navArgument("reservationId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val detail: ReservationDetailsController = viewModel(factory = viewModelFactory {
+                        initializer { ReservationDetailsController(checkNotNull(entry.arguments?.getString("reservationId")), reservations) }
+                    })
+                    val booking by detail.state.collectAsStateWithLifecycle()
+                    ReservationDetailsScreen(booking, { navController.popBackStack() }, detail::retry) { campsiteId ->
+                        navController.navigate("campsite/${Uri.encode(campsiteId)}") { launchSingleTop = true }
+                    }
                 }
             }
             composable(PROFILE_ROUTE) {
