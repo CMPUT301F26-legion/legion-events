@@ -1,12 +1,13 @@
 /*
  * ReservationsControllerTest.kt
  *
- * Purpose: Verify active filtering, checkout expiry, retries, and request cancellation.
+ * Purpose: Verify stay periods, tab restoration, checkout, retries, and request cancellation.
  * Role: Local JVM tests for the reservations controller using synthetic booking data.
  * Outstanding issues: None.
  */
 package com.example.legion_events.controller
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -26,7 +27,7 @@ import org.junit.Before
 import org.junit.Test
 import java.util.Date
 
-/** Tests active-period decisions and request lifecycle using synthetic owned bookings. */
+/** Tests stay-period decisions and request lifecycle using synthetic owned bookings. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReservationsControllerTest {
     private val dispatcher = StandardTestDispatcher()
@@ -57,6 +58,68 @@ class ReservationsControllerTest {
         assertFalse(reservation.copy(status = "cancelled").isActive(Timestamp(at, 0)))
     }
 
+    @Test fun pastIncludesOnlyFinishedConfirmedStaysInLatestCheckoutOrder() = runTest(dispatcher) {
+        val entries = listOf(
+            entry("older", at - 40, at - 20), entry("b", at - 20, at), entry("a", at - 10, at),
+            entry("ongoing", at - 10, at + 10), entry("upcoming", at + 10, at + 20),
+            entry("cancelled", at - 20, at - 10, "cancelled"),
+            entry("rejected", at - 20, at - 10, "rejected"),
+            entry("pending", at - 20, at - 10, "pending"),
+            entry("unknown", at - 20, at - 10, "unknown"),
+        )
+        val controller = controller(FakeReservations { entries })
+        controller.refresh()
+        runCurrent()
+        assertEquals(listOf("a", "b", "older"), controller.state.value.pastEntries.map { it.reservation.id })
+        assertEquals(listOf("ongoing", "upcoming"), controller.state.value.entries.map { it.reservation.id })
+    }
+
+    @Test fun pastStartsExactlyAtCheckoutWithoutChangingTheSavedStatus() {
+        val reservation = entry("stay", at - 10, at).reservation.copy(cancellationRequested = true)
+        assertFalse(reservation.isPast(Timestamp(at - 1, 999_999_999)))
+        assertTrue(reservation.isPast(Timestamp(at, 0)))
+        assertFalse(reservation.isActive(Timestamp(at, 0)))
+        assertEquals("confirmed", reservation.status)
+        assertFalse(reservation.copy(status = "cancelled").isPast(Timestamp(at, 0)))
+    }
+
+    @Test fun selectingPastSurvivesRefreshFailureRetryAndControllerRestoration() = runTest(dispatcher) {
+        var reads = 0
+        var fail = false
+        val repository = FakeReservations {
+            reads++
+            if (fail) error("Unavailable")
+            listOf(entry("past", at - 20, at - 10))
+        }
+        val savedState = SavedStateHandle()
+        val controller = controller(repository, savedState)
+        controller.refresh()
+        runCurrent()
+        controller.selectTab(ReservationTab.PAST)
+        assertEquals(1, reads)
+        assertEquals(ReservationTab.PAST, controller.state.value.selectedTab)
+        fail = true
+        controller.refresh()
+        assertEquals(ReservationTab.PAST, controller.state.value.selectedTab)
+        assertTrue(controller.state.value.pastEntries.isEmpty())
+        runCurrent()
+        assertNotNull(controller.state.value.error)
+        assertEquals(ReservationTab.PAST, controller.state.value.selectedTab)
+        fail = false
+        controller.refresh()
+        runCurrent()
+        assertEquals("past", controller.state.value.pastEntries.single().reservation.id)
+        assertEquals(ReservationTab.PAST, controller.state.value.selectedTab)
+        val restoredState = SavedStateHandle(mapOf("reservationTab" to savedState.get<String>("reservationTab")))
+        store.clear()
+        val restored = controller(repository, restoredState)
+        assertEquals(ReservationTab.PAST, restored.state.value.selectedTab)
+        assertTrue(restored.state.value.pastEntries.isEmpty())
+        restored.refresh()
+        runCurrent()
+        assertEquals("past", restored.state.value.pastEntries.single().reservation.id)
+    }
+
     @Test fun loadingAndFailureDoNotExposeStaleEntriesAndRetryRecovers() = runTest(dispatcher) {
         val pending = CompletableDeferred<List<ReservationEntry>>()
         var load: suspend () -> List<ReservationEntry> = { pending.await() }
@@ -81,15 +144,19 @@ class ReservationsControllerTest {
         assertTrue(controller.state.value.entries.isEmpty())
     }
 
-    @Test fun checkoutRemovesAStayWithoutAnotherDatabaseRequest() = runTest(dispatcher) {
+    @Test fun checkoutMovesAStayToPastWithoutAnotherDatabaseRequest() = runTest(dispatcher) {
         var reads = 0
         val controller = controller(FakeReservations { reads++; listOf(entry("ending", at - 1, at + 1)) })
         controller.refresh()
         runCurrent()
         assertEquals(1, controller.state.value.entries.size)
+        assertTrue(controller.state.value.pastEntries.isEmpty())
+        controller.selectTab(ReservationTab.PAST)
         advanceTimeBy(1000)
         runCurrent()
         assertTrue(controller.state.value.entries.isEmpty())
+        assertEquals("ending", controller.state.value.pastEntries.single().reservation.id)
+        assertEquals(ReservationTab.PAST, controller.state.value.selectedTab)
         assertEquals(1, reads)
     }
 
@@ -110,9 +177,9 @@ class ReservationsControllerTest {
     }
 
     /** Creates a lifecycle-owned controller with a clock that follows coroutine test time. */
-    private fun controller(repository: ReservationRepository): ReservationsController =
+    private fun controller(repository: ReservationRepository, savedState: SavedStateHandle = SavedStateHandle()): ReservationsController =
         ViewModelProvider.create(store, viewModelFactory {
-            initializer { ReservationsController(repository) { Timestamp(Date(at * 1000 + dispatcher.scheduler.currentTime)) } }
+            initializer { ReservationsController(repository, savedState) { Timestamp(Date(at * 1000 + dispatcher.scheduler.currentTime)) } }
         })[ReservationsController::class]
 
     /** Builds a saved booking independently of the device's date. */

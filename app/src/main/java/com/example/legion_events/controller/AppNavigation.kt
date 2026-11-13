@@ -436,14 +436,14 @@ fun AppNavigation(
             composable(BOOKINGS_ROUTE) {
                 RequireAccount(state, controller) {
                     val list: ReservationsController = viewModel(factory = viewModelFactory {
-                        initializer { ReservationsController(reservations) }
+                        initializer { ReservationsController(reservations, createSavedStateHandle()) }
                     })
                     val bookings by list.state.collectAsStateWithLifecycle()
                     LifecycleResumeEffect(list) {
                         list.refresh()
                         onPauseOrDispose {}
                     }
-                    ReservationsScreen(bookings, list::refresh) { id ->
+                    ReservationsScreen(bookings, list::refresh, list::selectTab) { id ->
                         navController.navigate(reservationDetailsRoute(id)) { launchSingleTop = true }
                     }
                 }
