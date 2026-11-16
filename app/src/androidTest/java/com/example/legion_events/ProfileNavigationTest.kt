@@ -29,6 +29,8 @@ import com.example.legion_events.data.OwnerCampsiteRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.UserRepository
 import com.example.legion_events.data.WelcomePreferences
+import com.example.legion_events.data.AdminRepository
+import com.example.legion_events.data.ModeratedCampsite
 import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Lottery
 import com.example.legion_events.model.Photo
@@ -49,6 +51,17 @@ class ProfileNavigationTest {
     private val campsites = object : CampsiteRepository {
         override fun observeCampsites() = flowOf(emptyList<Campsite>())
     }
+    /** S19 reads nothing in these tests; the admin flows are in AdminNavigationTest. */
+    private val admin = object : AdminRepository {
+        override suspend fun getCampsites() = emptyList<ModeratedCampsite>()
+        override suspend fun getCampsite(campsiteId: String): ModeratedCampsite? = null
+        override suspend fun getProfiles() = emptyList<UserProfile>()
+        override suspend fun getProfile(userId: String): UserProfile? = null
+        override suspend fun removeCampsite(campsiteId: String) = error("Unexpected removal")
+        override suspend fun removeProfile(userId: String) = error("Unexpected removal")
+        override suspend fun removeOwner(userId: String): Int = error("Unexpected removal")
+    }
+
     private val owners = object : OwnerCampsiteRepository {
         override suspend fun getMyCampsites() = emptyList<Campsite>()
         override suspend fun getMyCampsite(campsiteId: String): Campsite? = null
@@ -182,7 +195,7 @@ class ProfileNavigationTest {
             navigation = rememberNavController()
             LegioneventsTheme {
                 AppNavigation(controller, navigation, campsites, profiles = profiles,
-                    welcome = WelcomePreferences(preferences), owners = owners)
+                    welcome = WelcomePreferences(preferences), owners = owners, admin = admin)
             }
         }
         compose.waitUntil(5_000) {
