@@ -1,7 +1,7 @@
 /*
  * ReservationDetailsControllerTest.kt
  *
- * Purpose: Verify owned detail loading, missing records, and retry after access failures.
+ * Purpose: Verify owned detail reads and confirmation exports, failures, and retries.
  * Role: Local JVM tests for the reservation details controller using a fake repository.
  * Outstanding issues: None.
  */
@@ -69,6 +69,92 @@ class ReservationDetailsControllerTest {
         assertFalse(controller.state.value.loading)
         assertNull(controller.state.value.entry)
         assertNull(controller.state.value.error)
+    }
+
+    @Test fun exportRechecksTheOwnedRecordAndUsesItsLatestSavedValues() = runTest(dispatcher) {
+        var reads = 0
+        var saved = entry
+        val controller = controller(repository { reads++; saved })
+        runCurrent()
+        saved = entry.copy(reservation = entry.reservation.copy(totalPrice = 12345))
+        var csv: String? = null
+        controller.exportConfirmation { csv = it }
+        assertTrue(controller.state.value.exporting)
+        runCurrent()
+        assertEquals(2, reads)
+        assertTrue(checkNotNull(csv).contains("\"123.45\""))
+        assertEquals("Confirmation CSV saved.", controller.state.value.exportNotice)
+        assertFalse(controller.state.value.exporting)
+    }
+
+    @Test fun loadingAndDuplicateExportRequestsDoNotWriteExtraReceipts() = runTest(dispatcher) {
+        val pending = CompletableDeferred<ReservationEntry?>()
+        val controller = controller(repository { pending.await() })
+        var writes = 0
+        controller.exportConfirmation { writes++ }
+        runCurrent()
+        assertEquals(0, writes)
+        pending.complete(entry)
+        runCurrent()
+        val writing = CompletableDeferred<Unit>()
+        controller.exportConfirmation { writes++; writing.await() }
+        runCurrent()
+        controller.exportConfirmation { writes++ }
+        controller.retry()
+        runCurrent()
+        assertEquals(1, writes)
+        assertTrue(controller.state.value.exporting)
+        writing.complete(Unit)
+        runCurrent()
+        assertFalse(controller.state.value.exporting)
+    }
+
+    @Test fun deletedAndNewlyCancelledReservationsAreNotExported() = runTest(dispatcher) {
+        var saved: ReservationEntry? = entry
+        val controller = controller(repository { saved })
+        runCurrent()
+        saved = entry.copy(reservation = entry.reservation.copy(status = "cancelled"))
+        controller.exportConfirmation { fail("A cancelled booking must not be exported") }
+        runCurrent()
+        assertEquals("cancelled", controller.state.value.entry?.reservation?.status)
+        assertFalse(controller.state.value.exporting)
+        saved = entry
+        controller.retry()
+        runCurrent()
+        saved = null
+        controller.exportConfirmation { fail("A deleted booking must not be exported") }
+        runCurrent()
+        assertNull(controller.state.value.entry)
+        assertFalse(controller.state.value.exporting)
+    }
+
+    @Test fun accessFailuresNeverWriteAndFileFailuresCanBeRetried() = runTest(dispatcher) {
+        var denied = false
+        val controller = controller(repository { if (denied) throw SecurityException("Not owned") else entry })
+        runCurrent()
+        denied = true
+        controller.exportConfirmation { fail("An inaccessible booking must not be exported") }
+        runCurrent()
+        assertEquals("Could not save the confirmation CSV. Try downloading again.", controller.state.value.exportNotice)
+        assertFalse(controller.state.value.exporting)
+        denied = false
+        controller.exportConfirmation { throw java.io.IOException("No space") }
+        runCurrent()
+        assertFalse(controller.state.value.exporting)
+        assertEquals(entry, controller.state.value.entry)
+        var writes = 0
+        controller.exportConfirmation { writes++ }
+        runCurrent()
+        assertEquals(1, writes)
+        assertEquals("Confirmation CSV saved.", controller.state.value.exportNotice)
+    }
+
+    @Test fun missingSaveHandlerShowsAUsefulMessageWithoutChangingTheBooking() = runTest(dispatcher) {
+        val controller = controller(repository { entry })
+        runCurrent()
+        controller.reportSaveUnavailable()
+        assertEquals("No app can save documents on this device.", controller.state.value.exportNotice)
+        assertEquals(entry, controller.state.value.entry)
     }
 
     /** Creates an entry-scoped controller that loads only the route's reservation ID. */

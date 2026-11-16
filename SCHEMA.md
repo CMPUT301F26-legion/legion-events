@@ -181,9 +181,12 @@ and then document ID. Finished stays retain their saved `confirmed` status; no
 `completed` status or checkout write is needed. Cancelled, rejected, pending, and
 unknown statuses are excluded from both periods.
 Checkout is excluded from the occupied nights. A pending cancellation request alone
-does not change the saved status. S10 and S10b perform no writes to reservations,
+does not change the saved status. S09, S10, and S10b perform no writes to reservations,
 offers, or `bookedNights`. Names and areas are optional reads from `campsites/{id}`;
 they do not replace the booking's saved dates, guest count, or total price.
+Confirmation CSV export rechecks ownership and requires the saved status to be
+`confirmed`. Receipts are saved to the user-selected document on the device;
+no receipt collection or additional Firestore fields are created.
 
 ## Lottery notifications
 
