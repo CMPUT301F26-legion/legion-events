@@ -106,8 +106,30 @@ The list refreshes on resume and offers Refresh/Retry. Details check ownership a
 
 Booking dates, guests, rules acceptance, and total price come from the saved reservation.
 Current campsite names and areas are optional display labels; inaccessible listings do
-not hide reservations. This flow reads data only. Cancellation, CSV export, and
-ratings are separate stories.
+not hide reservations. This flow reads data only. Cancellation and ratings are
+separate stories.
+
+### Confirmation and CSV
+
+S10b offers **View confirmation** and **Download confirmation CSV** for confirmed
+bookings, including past stays. S09 (`ReservationConfirmationScreen`) shows the
+saved booking number, campsite, dates, guests, and total. Booking creation should
+call `reservationConfirmationRoute(reservationId)` after the reservation is saved;
+pass only its ID. S09 checks ownership and status before showing confirmation.
+
+`ReservationDetailsController` supports both screens and rechecks the owned booking
+before each export. `Reservation.confirmationCsv` formats the receipt;
+`writeReservationCsv` writes UTF-8 on the IO dispatcher. The shared router opens
+Android's Save dialog (`text/csv`), so no storage permission is needed. Cancelling
+does nothing; a failed save leaves Download available to retry. A recreated screen
+does not repeat a save automatically.
+
+The CSV contains the reservation and campsite IDs, optional current listing name
+and area, UTC check-in and checkout, guests, exact CAD total, currency, saved status,
+and rules acceptance. Dates use millisecond precision and checkout remains excluded.
+Cells are quoted, quotes are escaped, and formula-like text is exported as text.
+No profile information is included. This story uses the downloadable CSV option;
+it does not publish booking notifications or create reservations.
 
 ## Theme
 

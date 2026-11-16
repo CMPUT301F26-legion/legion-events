@@ -8,7 +8,10 @@
  */
 package com.example.legion_events.controller
 
+import android.content.ActivityNotFoundException
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,7 +22,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.createSavedStateHandle
@@ -43,6 +50,7 @@ import com.example.legion_events.view.InboxScreen
 import com.example.legion_events.view.QrScanScreen
 import com.example.legion_events.view.ReservationsScreen
 import com.example.legion_events.view.ReservationDetailsScreen
+import com.example.legion_events.view.ReservationConfirmationScreen
 import com.example.legion_events.view.LotteryEditScreen
 import com.example.legion_events.view.LotteriesScreen
 import com.example.legion_events.view.LotteryManagementScreen
@@ -78,6 +86,7 @@ import com.example.legion_events.data.FirebaseWaitlistRepository
 import com.example.legion_events.data.OwnerNoticeRepository
 import com.example.legion_events.data.WaitlistRepository
 import com.example.legion_events.data.ReservationRepository
+import com.example.legion_events.data.writeReservationCsv
 import com.example.legion_events.data.FirebaseReservationRepository
 import com.example.legion_events.view.CampsiteLotterySection
 import com.example.legion_events.view.OwnerNoticesScreen
@@ -124,6 +133,14 @@ internal fun bookingOfferRoute(offerId: String): String {
 
 /** S09: reservation confirmation. */
 internal const val RESERVATION_CONFIRMATION_ROUTE = "reservation_confirmation"
+/** S09 for one saved booking; the repository checks ownership and confirmation status. */
+internal const val RESERVATION_CONFIRMATION_PATTERN = "$RESERVATION_CONFIRMATION_ROUTE/{reservationId}"
+
+/** Builds S09's route from the saved reservation ID; booking creation can use this after success. */
+internal fun reservationConfirmationRoute(reservationId: String): String {
+    require(reservationId.isNotBlank() && '/' !in reservationId) { "A single reservation ID is required." }
+    return "$RESERVATION_CONFIRMATION_ROUTE/${Uri.encode(reservationId)}"
+}
 /** S10: the entrant's reservations. */
 internal const val BOOKINGS_ROUTE = "bookings"
 /** S10b: one reservation's details. */
@@ -177,7 +194,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  * When you build one, remove it here and register it in [AppNavigation]. Add route arguments then too.
  */
 private val PLACEHOLDER_SCREENS = mapOf(
-    RESERVATION_CONFIRMATION_ROUTE to "Reservation confirmation",
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
     OWNER_RESERVATIONS_ROUTE to "Owner reservations",
@@ -306,7 +322,7 @@ fun AppNavigation(
     // Detail screens keep their parent tab selected, including direct links from other screens.
     val entrantTab = when (currentRoute) {
         BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
-        RESERVATION_DETAILS_PATTERN -> BOOKINGS_ROUTE
+        RESERVATION_DETAILS_PATTERN, RESERVATION_CONFIRMATION_PATTERN -> BOOKINGS_ROUTE
         else -> currentRoute
     }
     Column {
@@ -472,9 +488,34 @@ fun AppNavigation(
                         initializer { ReservationDetailsController(checkNotNull(entry.arguments?.getString("reservationId")), reservations) }
                     })
                     val booking by detail.state.collectAsStateWithLifecycle()
-                    ReservationDetailsScreen(booking, { navController.popBackStack() }, detail::retry) { campsiteId ->
-                        navController.navigate("campsite/${Uri.encode(campsiteId)}") { launchSingleTop = true }
-                    }
+                    val download = rememberReservationDownload(detail, booking)
+                    ReservationDetailsScreen(booking, { navController.popBackStack() }, detail::retry,
+                        onCampsite = { campsiteId ->
+                            navController.navigate("campsite/${Uri.encode(campsiteId)}") { launchSingleTop = true }
+                        },
+                        onConfirmation = {
+                            navController.navigate(reservationConfirmationRoute(checkNotNull(booking.entry).reservation.id)) {
+                                launchSingleTop = true
+                            }
+                        }, onDownload = download)
+                }
+            }
+            composable(RESERVATION_CONFIRMATION_PATTERN,
+                arguments = listOf(navArgument("reservationId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val reservationId = checkNotNull(entry.arguments?.getString("reservationId"))
+                    val confirmation: ReservationDetailsController = viewModel(factory = viewModelFactory {
+                        initializer { ReservationDetailsController(reservationId, reservations) }
+                    })
+                    val booking by confirmation.state.collectAsStateWithLifecycle()
+                    val download = rememberReservationDownload(confirmation, booking)
+                    ReservationConfirmationScreen(booking, { navController.popBackStack() }, confirmation::retry, download,
+                        onReservation = {
+                            navController.navigate(reservationDetailsRoute(reservationId)) {
+                                popUpTo(RESERVATION_CONFIRMATION_PATTERN) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        })
                 }
             }
             composable(PROFILE_ROUTE) {
@@ -807,6 +848,35 @@ fun AppNavigation(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Connects Android's Save dialog to the controller, without retaining CSV data in navigation state.
+ * A restored picker result waits for the booking read, then is consumed before writing so
+ * recreation cannot repeat a download. Cancelling the picker leaves the booking unchanged.
+ */
+@Composable
+private fun rememberReservationDownload(controller: ReservationDetailsController, state: ReservationDetailsState): () -> Unit {
+    val resolver = LocalContext.current.contentResolver
+    var destination by rememberSaveable { mutableStateOf<String?>(null) }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        destination = uri?.toString()
+    }
+    LaunchedEffect(destination, state.loading) {
+        val uri = destination ?: return@LaunchedEffect
+        if (!state.loading) {
+            destination = null
+            controller.exportConfirmation { csv -> writeReservationCsv(resolver, Uri.parse(uri), csv) }
+        }
+    }
+    return {
+        val id = state.entry?.reservation?.id.orEmpty().filter(Char::isLetterOrDigit).take(64).ifEmpty { "confirmation" }
+        try {
+            save.launch("reservation-$id.csv")
+        } catch (_: ActivityNotFoundException) {
+            controller.reportSaveUnavailable()
         }
     }
 }

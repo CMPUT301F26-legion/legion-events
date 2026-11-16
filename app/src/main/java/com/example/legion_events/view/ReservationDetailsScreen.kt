@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.ReservationDetailsState
+import com.example.legion_events.model.Reservation
 
 /**
  * S10b: shows an owned reservation's saved details.
@@ -23,10 +24,12 @@ import com.example.legion_events.controller.ReservationDetailsState
  * @param onBack Returns to the existing reservations list.
  * @param onRetry Reloads after a read failure.
  * @param onCampsite Opens the campsite through the shared router.
+ * @param onConfirmation Opens S09 for this confirmed booking.
+ * @param onDownload Opens Android's Save dialog for the confirmation CSV.
  */
 @Composable
 fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit, onRetry: () -> Unit,
-    onCampsite: (String) -> Unit) {
+    onCampsite: (String) -> Unit, onConfirmation: () -> Unit, onDownload: () -> Unit) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -72,6 +75,12 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
                             Text(if (reservation.rulesAccepted) "Campsite rules accepted" else "Campsite rules not accepted")
                         }
                         item { OutlinedButton(onClick = { onCampsite(reservation.campsiteId) }) { Text("View campsite") } }
+                        if (reservation.status == Reservation.STATUS_CONFIRMED) {
+                            item {
+                                OutlinedButton(onClick = onConfirmation, modifier = Modifier.fillMaxWidth()) { Text("View confirmation") }
+                                ReservationDownloadButton(state, onDownload)
+                            }
+                        }
                     }
                 }
             }
