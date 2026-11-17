@@ -84,12 +84,16 @@ import com.example.legion_events.data.WelcomePreferences
 import com.example.legion_events.data.FirebaseOwnerNoticeRepository
 import com.example.legion_events.data.FirebaseWaitlistRepository
 import com.example.legion_events.data.OwnerNoticeRepository
+import com.example.legion_events.data.OwnerReservationRepository
+import com.example.legion_events.data.FirebaseOwnerReservationRepository
 import com.example.legion_events.data.WaitlistRepository
 import com.example.legion_events.data.ReservationRepository
 import com.example.legion_events.data.writeReservationCsv
 import com.example.legion_events.data.FirebaseReservationRepository
 import com.example.legion_events.view.CampsiteLotterySection
 import com.example.legion_events.view.OwnerNoticesScreen
+import com.example.legion_events.view.OwnerReservationsActions
+import com.example.legion_events.view.OwnerReservationsScreen
 import com.example.legion_events.view.AdminCampsiteScreen
 import com.example.legion_events.view.AdminCampsitesScreen
 import com.example.legion_events.view.AdminProfilesScreen
@@ -196,7 +200,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
 private val PLACEHOLDER_SCREENS = mapOf(
     RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-    OWNER_RESERVATIONS_ROUTE to "Owner reservations",
     ADMIN_LOGS_ROUTE to "Admin logs",
 )
 
@@ -285,6 +288,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param onEnablePush Requests Android's notification permission when available.
  * @param reservations Reads the authenticated entrant's saved bookings.
  * @param admin Reads and moderates every campsite and profile on S19.
+ * @param ownerReservations Reads and rejects bookings at the owner's campsites on S17.
  */
 @Composable
 fun AppNavigation(
@@ -305,6 +309,7 @@ fun AppNavigation(
     onEnablePush: (() -> Unit)? = null,
     reservations: ReservationRepository = FirebaseReservationRepository.instance,
     admin: AdminRepository = FirebaseAdminRepository.instance,
+    ownerReservations: OwnerReservationRepository = FirebaseOwnerReservationRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -743,6 +748,31 @@ fun AppNavigation(
                     OwnerNoticesScreen(noticeState, notes::selectLottery, notes::setMessage, notes::send, notes::refresh)
                 }
             }
+            composable(OWNER_RESERVATIONS_ROUTE) {
+                RequireAccount(state, controller) {
+                    val bookings: OwnerReservationsController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerReservationsController(owners::getMyCampsites, ownerReservations, createSavedStateHandle()) }
+                    })
+                    val bookingState by bookings.state.collectAsStateWithLifecycle()
+                    // Reload on every return so campsites added in S13 and new bookings appear.
+                    LifecycleResumeEffect(bookings) {
+                        bookings.refresh()
+                        onPauseOrDispose {}
+                    }
+                    OwnerReservationsScreen(bookingState, OwnerReservationsActions(
+                        onRefresh = bookings::refresh,
+                        onSelectCampsite = bookings::selectCampsite,
+                        onTab = bookings::selectTab,
+                        onMonth = bookings::showMonth,
+                        onView = bookings::viewBooking,
+                        onCloseView = bookings::closeBooking,
+                        onReject = bookings::requestReject,
+                        onReason = bookings::setRejectReason,
+                        onConfirmReject = bookings::confirmReject,
+                        onCancelReject = bookings::cancelReject,
+                    ))
+                }
+            }
             composable(ADMIN_DASHBOARD_ROUTE) {
                 RequireAccount(state, controller) {
                     val list: AdminCampsitesController = viewModel(factory = viewModelFactory {
@@ -798,10 +828,11 @@ fun AppNavigation(
                             (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN) ||
                             (tab.route == LOTTERY_MANAGEMENT_ROUTE && currentRoute == LOTTERY_DETAILS_PATTERN),
                         onClick = {
+                            // No saveState/restoreState here: this bar pops to a different root than the
+                            // entrant bar in the same graph, and saving here made Explore restore Profile.
                             navController.navigate(tab.route) {
-                                popUpTo(OWNER_DASHBOARD_ROUTE) { saveState = true }
+                                popUpTo(OWNER_DASHBOARD_ROUTE)
                                 launchSingleTop = true
-                                restoreState = true
                             }
                         },
                         icon = { Icon(painterResource(tab.icon), contentDescription = null) },
@@ -818,10 +849,11 @@ fun AppNavigation(
                         selected = currentRoute == tab.route ||
                             (tab.route == ADMIN_DASHBOARD_ROUTE && currentRoute == ADMIN_CAMPSITE_PATTERN),
                         onClick = {
+                            // No saveState/restoreState here: this bar pops to a different root than the
+                            // entrant bar in the same graph, and saving here made Explore restore Profile.
                             navController.navigate(tab.route) {
-                                popUpTo(ADMIN_DASHBOARD_ROUTE) { saveState = true }
+                                popUpTo(ADMIN_DASHBOARD_ROUTE)
                                 launchSingleTop = true
-                                restoreState = true
                             }
                         },
                         icon = { Icon(painterResource(tab.icon), contentDescription = null) },

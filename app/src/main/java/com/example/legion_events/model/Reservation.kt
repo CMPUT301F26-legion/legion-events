@@ -1,13 +1,17 @@
 /*
  * Reservation.kt
  *
- * Purpose: Represent saved bookings and determine active and past stays (US 01.06.01/02).
- * Role: Model in MVC; keeps reservation fields and the checkout boundary.
+ * Purpose: Represent saved bookings and determine active, past, and cancelled stays
+ *   (US 01.06.01/02, 02.07.01 to 02.07.03) and the nights they occupy (US 02.06.01).
+ * Role: Model in MVC; keeps reservation fields, the checkout boundary, and booked nights.
  * Outstanding issues: None.
  */
 package com.example.legion_events.model
 
 import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * A saved booking at reservations/{id}; campsite names are read separately from the listing.
@@ -50,8 +54,57 @@ data class Reservation(
     /** Returns true for confirmed stays at or after checkout, without changing their saved status. */
     fun isPast(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate <= at
 
+    /**
+     * Returns true when the entrant cancelled the booking or the owner rejected it.
+     * @return Whether the booking belongs in an owner's Cancelled list.
+     */
+    fun isCancelled(): Boolean = status == STATUS_CANCELLED || status == STATUS_REJECTED
+
+    /**
+     * Lists the nights this stay occupies as UTC `YYYY-MM-DD` keys, matching `availableNights`
+     * and `bookedNights` IDs. The checkout night is excluded; a same-day stay occupies one night.
+     * @return Night keys in date order.
+     */
+    fun bookedNights(): List<String> {
+        val first = startDate.toDate().time.floorDiv(DAY_MILLIS) * DAY_MILLIS
+        val checkout = endDate.toDate().time.floorDiv(DAY_MILLIS) * DAY_MILLIS
+        val last = maxOf(checkout, first + DAY_MILLIS)
+        val format = nightFormat()
+        return generateSequence(first) { it + DAY_MILLIS }.takeWhile { it < last }.map { format.format(it) }.toList()
+    }
+
     companion object {
         /** Stored status of an accepted booking that has not been cancelled or rejected. */
         const val STATUS_CONFIRMED = "confirmed"
+        /** Stored status of a booking the entrant cancelled. */
+        const val STATUS_CANCELLED = "cancelled"
+        /** Stored status of a booking the campsite owner rejected (US 02.08.01). */
+        const val STATUS_REJECTED = "rejected"
+        /** Longest optional reason an owner can give when rejecting, so the notice stays within its limit. */
+        const val MAX_REJECTION_REASON_LENGTH = 500
+        /** Milliseconds in one UTC day. */
+        internal const val DAY_MILLIS = 24 * 60 * 60 * 1000L
     }
+}
+
+/**
+ * Creates the `YYYY-MM-DD` formatter used for night keys.
+ * @return A UTC formatter, independent of the device's time zone.
+ */
+internal fun nightFormat(): SimpleDateFormat =
+    SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+/**
+ * Writes the inbox message sent to an entrant whose booking the owner rejected (US 02.08.01).
+ * @param reservation The rejected booking; its first night and checkout date are named.
+ * @param campsiteName The campsite's current name, or null when unknown.
+ * @param reason The owner's optional reason, already trimmed.
+ * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
+ */
+fun rejectionNotice(reservation: Reservation, campsiteName: String?, reason: String?): String {
+    val days = SimpleDateFormat("MMM d, yyyy", Locale.CANADA).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    val place = campsiteName?.takeIf { it.isNotBlank() }?.let { " at $it" } ?: ""
+    val stay = "${days.format(reservation.startDate.toDate())} to ${days.format(reservation.endDate.toDate())}"
+    val because = reason?.takeIf { it.isNotBlank() }?.let { " Reason: $it" } ?: ""
+    return "The owner rejected your reservation$place for $stay.$because".take(MAX_NOTICE_LENGTH)
 }

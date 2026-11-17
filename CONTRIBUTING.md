@@ -131,6 +131,32 @@ Cells are quoted, quotes are escaped, and formula-like text is exported as text.
 No profile information is included. This story uses the downloadable CSV option;
 it does not publish booking notifications or create reservations.
 
+## Owner reservations
+
+S17 (`OwnerReservationsScreen`) is the owner bar's **Reservations** tab. A dropdown picks one of the
+owner's campsites (from `OwnerCampsiteRepository.getMyCampsites`), and `OwnerReservationsController`
+reads that campsite's bookings through `OwnerReservationRepository`, implemented by
+`FirebaseOwnerReservationRepository`. It reloads on resume and offers Refresh/Retry. The campsite,
+tab, and calendar month are kept in `SavedStateHandle`.
+
+- **Calendar (US 02.06.01):** marks every night held by a `confirmed` booking, using
+  `Reservation.bookedNights()` (UTC `YYYY-MM-DD`, checkout excluded). It opens on the next stay's
+  month, or the current month. `BookingCalendar.kt` lays out the grid.
+- **Tabs (US 02.07.01 to 02.07.03):** Active and Past use the same rules as S10. Cancelled lists
+  `cancelled` and `rejected` bookings, most recently changed first. Switching tabs does not read again.
+- **View booking:** a dialog with the reservation number, dates, guests, total, and rules acceptance.
+  The rules let only a profile's owner or an admin read `users/{uid}`, so entrant names are not shown.
+- **Reject (US 02.08.01):** only active bookings. The dialog takes an optional reason (at most
+  `Reservation.MAX_REJECTION_REASON_LENGTH`). One transaction sets the booking to `rejected` and writes an
+  `ownerNotices` entry to that entrant, so it appears in their S07 inbox; the booking then moves to
+  Cancelled. The app never writes `bookedNights` (the rules make them worker-only). The deployed rules do
+  not yet allow owners to update reservations, so Reject currently shows "Rejecting reservations is not
+  enabled for owners yet." See [SCHEMA.md](SCHEMA.md#owner-reservations) for the rule it needs.
+
+Card and calendar dates are UTC days so they match `availableNights` and the lottery date pickers.
+The shared `toReservation()` in `ReservationDocument.kt` maps booking documents for both the entrant
+and owner repositories; call it only after checking who may read the record.
+
 ## Theme
 
 The app-wide **Dark mode** switch selects light or dark appearance. Light is the

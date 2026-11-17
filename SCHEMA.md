@@ -188,6 +188,40 @@ Confirmation CSV export rechecks ownership and requires the saved status to be
 `confirmed`. Receipts are saved to the user-selected document on the device;
 no receipt collection or additional Firestore fields are created.
 
+## Owner reservations
+
+S17 lists bookings with `ownerId == uid` and `campsiteId == <selected campsite>`, which the deployed
+reservation read rule (`mine(resource.data.ownerId)`) allows. Two equality filters need no composite
+index. Malformed records are left out instead of hiding the rest. Entrant profiles are not read, because
+`users/{uid}` is readable only by its owner or an admin. Bookings created by entrants start as
+`requested`; S17's Active and Past tabs, like S10's, show only `confirmed` stays.
+
+Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
+`confirmed` with `endDate` in the future, then:
+
+| Write | Fields |
+| --- | --- |
+| `reservations/{id}` update | `status: "rejected"`, `updatedAt` server timestamp; nothing else changes |
+| `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
+
+The optional reason is only sent in the notice; no extra reservation field is written. The deployed
+`ownerNotices` rule already allows this notice, because the owner owns the booking's lottery.
+`bookedNights` stay `allow write: if false`; as for cancellations, the trusted worker must release a
+rejected booking's nights.
+
+The deployed reservation update rule only lets the entrant request a cancellation, so the rejection
+write is currently denied and S17 reports that rejecting is not enabled. To enable it, extend the
+reservation `allow update` with an owner branch:
+
+```text
+      allow update: if (mine(resource.data.userId) && resource.data.status in ['requested','confirmed']
+          && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
+          && request.resource.data.cancellationRequested == true && updatedNow())
+        || (mine(resource.data.ownerId) && resource.data.status == 'confirmed'
+          && request.time < resource.data.endDate && changedOnly(['status','updatedAt'])
+          && request.resource.data.status == 'rejected' && updatedNow());
+```
+
 ## Lottery notifications
 
 The backend publishes `notifications/{outboxEventId}` for each active recipient
