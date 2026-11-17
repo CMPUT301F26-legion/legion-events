@@ -52,7 +52,9 @@ class FirebaseOwnerReservationRepositoryTest {
     /** 2027-07-04T00:00:00Z in seconds. */
     private val july4 = 1_814_659_200L
     private val day = 24 * 60 * 60L
-    private val repository = FirebaseOwnerReservationRepository(auth, firestore) { Timestamp(july4 - day, 0) }
+    /** Diagnostics the repository wrote, in order. */
+    private val logged = mutableListOf<String>()
+    private val repository = FirebaseOwnerReservationRepository(auth, firestore, { Timestamp(july4 - day, 0) }, logged::add)
 
     @Before fun setUp() {
         `when`(auth.currentUser).thenReturn(user)
@@ -93,6 +95,8 @@ class FirebaseOwnerReservationRepositoryTest {
         returnsList(document("good"), document("bad", mapOf("guestCount" to 0L)),
             document("foreign", mapOf("ownerId" to "someone-else")))
         assertEquals(listOf("good"), repository.getCampsiteReservations("lake").map { it.id })
+        assertEquals("Campsite lake: 3 booking(s) from server [good, bad, foreign]", logged.first())
+        assertTrue(logged.contains("Skipped reservation bad: Invalid guest count."))
     }
 
     @Test fun signedOutAndInvalidRequestsNeverReachFirestore() = runTest {

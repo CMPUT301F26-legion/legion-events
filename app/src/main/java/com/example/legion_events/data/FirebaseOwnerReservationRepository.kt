@@ -9,6 +9,7 @@
  */
 package com.example.legion_events.data
 
+import android.util.Log
 import com.example.legion_events.model.Reservation
 import com.example.legion_events.model.rejectionNotice
 import com.google.firebase.Timestamp
@@ -23,23 +24,30 @@ import kotlinx.coroutines.tasks.await
  * @property auth Supplies the owner's identity; callers cannot choose another owner's ID.
  * @property firestore The app's Firestore database.
  * @property now Clock that decides whether a booking is still active; tests supply a fixed clock.
+ * @property log Writes diagnostics, such as skipped bookings, to Logcat; tests supply a recorder.
  */
 class FirebaseOwnerReservationRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val now: () -> Timestamp = { Timestamp.now() },
+    private val log: (String) -> Unit = { Log.w(TAG, it) },
 ) : OwnerReservationRepository {
     /** Queries by the owner's UID and campsite; entrant profiles are private, so none are read. */
     override suspend fun getCampsiteReservations(campsiteId: String): List<Reservation> {
         requireSingleId(campsiteId, "campsite")
         val ownerId = currentUserId()
-        val documents = firestore.collection(RESERVATIONS).whereEqualTo("ownerId", ownerId)
-            .whereEqualTo("campsiteId", campsiteId).get().await().documents
+        val snapshot = firestore.collection(RESERVATIONS).whereEqualTo("ownerId", ownerId)
+            .whereEqualTo("campsiteId", campsiteId).get().await()
         checkAccount(ownerId)
-        val reservations = documents.mapNotNull { document ->
+        val source = if (snapshot.metadata?.isFromCache == true) "cache" else "server"
+        log("Campsite $campsiteId: ${snapshot.documents.size} booking(s) from $source " +
+            snapshot.documents.map { it.id })
+        val reservations = snapshot.documents.mapNotNull { document ->
             try {
                 document.toReservation()
-            } catch (_: IllegalStateException) {
+            } catch (error: IllegalStateException) {
+                // A malformed record must not hide the others, but the skip should be traceable.
+                log("Skipped reservation ${document.id}: ${error.message}")
                 null
             }
         }
@@ -106,6 +114,8 @@ class FirebaseOwnerReservationRepository(
     }
 
     companion object {
+        /** Logcat tag for S17 diagnostics. */
+        private const val TAG = "OwnerReservations"
         /** Collection holding bookings. */
         private const val RESERVATIONS = "reservations"
         /** Collection holding campsite listings. */
