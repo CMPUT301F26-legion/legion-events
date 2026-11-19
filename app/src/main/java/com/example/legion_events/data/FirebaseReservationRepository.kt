@@ -8,6 +8,7 @@
 package com.example.legion_events.data
 
 import com.example.legion_events.model.Reservation
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
