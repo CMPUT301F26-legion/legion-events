@@ -18,6 +18,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.Transaction
+import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -34,7 +37,9 @@ class FirebaseReservationRepositoryTest {
     private val query = mock(Query::class.java)
     private val booking = mock(DocumentReference::class.java)
     private val campsite = mock(DocumentReference::class.java)
-    private val repository = FirebaseReservationRepository(auth, firestore)
+    private val transaction = mock(Transaction::class.java)
+    private var attempts = listOf(transaction)
+    private val repository = FirebaseReservationRepository(auth, firestore) { Timestamp(150, 0) }
 
     @Before fun setUp() {
         `when`(auth.currentUser).thenReturn(user)
@@ -48,6 +53,11 @@ class FirebaseReservationRepositoryTest {
         `when`(labels.get("name")).thenReturn("Pine Ridge")
         `when`(labels.get("locationName")).thenReturn("Banff")
         `when`(campsite.get()).thenReturn(Tasks.forResult(labels))
+        doAnswer { invocation ->
+            val function = invocation.getArgument<Transaction.Function<Unit>>(0)
+            try { attempts.forEach { function.apply(it) }; Tasks.forResult(Unit) }
+            catch (error: Exception) { Tasks.forException<Unit>(error) }
+        }.`when`(firestore).runTransaction<Unit>(any())
     }
 
     @Test fun listingIsUidScopedAndReadsEachCampsiteLabelOnlyOnce() = runTest {
@@ -143,6 +153,72 @@ class FirebaseReservationRepositoryTest {
         }
         failure<SecurityException> { repository.getMyReservations() }
         verify(campsite, never()).get()
+    }
+
+    @Test fun cancellationWritesOnlyTheRequestFlagAndServerTimeThenReadsTheServerOutcome() = runTest {
+        val owned = document()
+        val pending = document(overrides = mapOf("cancellationRequested" to true))
+        `when`(transaction.get(booking)).thenReturn(owned)
+        `when`(booking.get(Source.SERVER)).thenReturn(Tasks.forResult(pending))
+        val result = repository.requestCancellation("booking")
+        assertEquals("confirmed", result.reservation.status)
+        assertTrue(result.reservation.cancellationRequested)
+        verify(transaction).update(booking, mapOf("cancellationRequested" to true, "updatedAt" to FieldValue.serverTimestamp()))
+        verify(firestore, never()).collection("bookedNights")
+        verify(firestore, never()).collection("notifications")
+    }
+
+    @Test fun repeatedPendingAndCompletedRequestsDoNotRewriteTheBooking() = runTest {
+        for (fields in listOf(mapOf("cancellationRequested" to true),
+            mapOf("status" to "cancelled", "cancellationRequested" to false))) {
+            val saved = document(overrides = fields + mapOf("endDate" to Timestamp(120, 0)))
+            `when`(transaction.get(booking)).thenReturn(saved)
+            `when`(booking.get(Source.SERVER)).thenReturn(Tasks.forResult(saved))
+            repeat(2) { repository.requestCancellation("booking") }
+        }
+        verify(transaction, never()).update(any(DocumentReference::class.java), anyMap<String, Any>())
+    }
+
+    @Test fun cancellationRejectsForeignMissingTerminalAndCheckedOutBookings() = runTest {
+        val foreign = document(overrides = mapOf("userId" to "bob"))
+        `when`(transaction.get(booking)).thenReturn(foreign)
+        failure<SecurityException> { repository.requestCancellation("booking") }
+        for (invalid in listOf(mock(DocumentSnapshot::class.java),
+            document(overrides = mapOf("status" to "rejected")),
+            document(overrides = mapOf("endDate" to Timestamp(150, 0))))) {
+            `when`(transaction.get(booking)).thenReturn(invalid)
+            failure<IllegalStateException> { repository.requestCancellation("booking") }
+        }
+        for (id in listOf("", "path/nested")) failure<IllegalArgumentException> { repository.requestCancellation(id) }
+        `when`(auth.currentUser).thenReturn(null)
+        failure<IllegalStateException> { repository.requestCancellation("booking") }
+        verify(transaction, never()).update(any(DocumentReference::class.java), anyMap<String, Any>())
+    }
+
+    @Test fun uncertainCommittedRequestsAreSafeToRetry() = runTest {
+        val owned = document()
+        val pending = document(overrides = mapOf("cancellationRequested" to true))
+        `when`(transaction.get(booking)).thenReturn(owned, pending)
+        `when`(booking.get(Source.SERVER)).thenReturn(Tasks.forException(IllegalStateException("Unavailable")), Tasks.forResult(pending))
+        failure<IllegalStateException> { repository.requestCancellation("booking") }
+        assertTrue(repository.requestCancellation("booking").reservation.cancellationRequested)
+        verify(transaction, times(1)).update(any(DocumentReference::class.java), anyMap<String, Any>())
+    }
+
+    @Test fun retriedTransactionsRecheckOwnershipAndAccountChangesBeforeWriting() = runTest {
+        val owned = document()
+        val foreign = document(overrides = mapOf("userId" to "bob"))
+        val retried = mock(Transaction::class.java)
+        attempts = listOf(transaction, retried)
+        `when`(transaction.get(booking)).thenReturn(owned)
+        `when`(retried.get(booking)).thenReturn(foreign)
+        failure<SecurityException> { repository.requestCancellation("booking") }
+        verify(retried, never()).update(any(DocumentReference::class.java), anyMap<String, Any>())
+        clearInvocations(transaction)
+        attempts = listOf(transaction)
+        `when`(transaction.get(booking)).thenAnswer { `when`(auth.currentUser).thenReturn(null); owned }
+        failure<SecurityException> { repository.requestCancellation("booking") }
+        verify(transaction, never()).update(any(DocumentReference::class.java), anyMap<String, Any>())
     }
 
     /** Supplies a completed document read after its fields have been stubbed. */

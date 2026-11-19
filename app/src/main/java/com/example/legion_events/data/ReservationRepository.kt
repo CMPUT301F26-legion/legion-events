@@ -1,7 +1,7 @@
 /*
  * ReservationRepository.kt
  *
- * Purpose: Define reads for the signed-in entrant's reservations and optional campsite labels.
+ * Purpose: Define owned reservation reads and cancellation requests.
  * Role: Data contract in MVC; separates reservation controllers from Firebase.
  * Outstanding issues: None.
  */
@@ -21,11 +21,14 @@ data class ReservationEntry(
     val locationName: String? = null,
 )
 
-/** Reads reservations owned by the signed-in entrant without changing bookings or occupied nights. */
+/** Reads owned reservations and submits requests; only the worker changes status and occupied nights. */
 interface ReservationRepository {
     /** Returns the entrant's reservations; controllers select the active or other requested period. */
     suspend fun getMyReservations(): List<ReservationEntry>
 
     /** Returns one owned reservation, or null if missing or forbidden; never returns another entrant's record. */
     suspend fun getReservation(reservationId: String): ReservationEntry?
+
+    /** Requests cancellation once, or returns the already requested/completed booking after a retry. */
+    suspend fun requestCancellation(reservationId: String): ReservationEntry
 }

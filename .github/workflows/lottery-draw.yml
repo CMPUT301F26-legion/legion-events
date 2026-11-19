@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   draw:
-    if: ${{ vars.LOTTERY_DRAW_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
+    if: ${{ (vars.LOTTERY_DRAW_ENABLED == 'true' || vars.RESERVATION_CANCELLATIONS_ENABLED == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -33,9 +33,16 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_LOTTERY_WORKER_SERVICE_ACCOUNT }}
       - run: ./lottery-worker/build/install/legion-lottery-worker/bin/legion-lottery-worker
+        if: ${{ vars.LOTTERY_DRAW_ENABLED == 'true' }}
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           LOTTERY_DRAW_ENABLED: 'true'
+      - name: Process reservation cancellations
+        if: ${{ !cancelled() && steps.auth.outcome == 'success' && vars.RESERVATION_CANCELLATIONS_ENABLED == 'true' }}
+        run: ./lottery-worker/build/install/legion-lottery-worker/bin/legion-lottery-worker process-cancellations
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          RESERVATION_CANCELLATIONS_ENABLED: 'true'
       - name: Deliver lottery notifications
         if: ${{ !cancelled() && steps.auth.outcome == 'success' && vars.LOTTERY_NOTIFICATIONS_ENABLED == 'true' }}
         run: ./lottery-worker/build/install/legion-lottery-worker/bin/legion-lottery-worker deliver-notifications

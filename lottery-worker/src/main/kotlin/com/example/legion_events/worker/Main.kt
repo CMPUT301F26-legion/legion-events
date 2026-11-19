@@ -1,8 +1,9 @@
 /*
  * Main.kt
  *
- * Purpose: Starts the standalone lottery worker from GitHub Actions or a local emulator.
+ * Purpose: Run lottery, notification, or cancellation processing from Actions or a local emulator.
  * Role: Command-line entry point that selects the Firestore connection.
+ * Outstanding issues: None.
  */
 package com.example.legion_events.worker
 
@@ -21,16 +22,20 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 /**
- * Processes due lotteries in `FIREBASE_PROJECT_ID` and prints the number of completed draws.
+ * Processes the selected worker step in `FIREBASE_PROJECT_ID` and prints its completed count.
  * When `FIRESTORE_EMULATOR_HOST` is set, the project ID must start with `demo-`.
- * Live runs require `LOTTERY_DRAW_ENABLED=true` and Google Application Default Credentials.
+ * Live runs require Google Application Default Credentials and the corresponding enable flag:
+ * `RESERVATION_CANCELLATIONS_ENABLED` for cancellations, otherwise `LOTTERY_DRAW_ENABLED`.
  *
- * @param args Empty to draw lotteries, or `deliver-notifications` to publish queued results.
+ * @param args Empty to draw, `deliver-notifications`, or `process-cancellations`.
  * @throws IllegalStateException If required configuration is missing or processing fails.
  */
 fun main(args: Array<String>) {
-    require(args.isEmpty() || args.contentEquals(arrayOf("deliver-notifications"))) { "Unknown worker command." }
-    val deliverNotifications = args.isNotEmpty()
+    require(args.isEmpty() || (args.size == 1 && args[0] in listOf("deliver-notifications", "process-cancellations"))) {
+        "Unknown worker command."
+    }
+    val deliverNotifications = args.firstOrNull() == "deliver-notifications"
+    val cancellations = args.firstOrNull() == "process-cancellations"
     val projectId = checkNotNull(System.getenv("FIREBASE_PROJECT_ID")?.takeIf { it.isNotBlank() }) {
         "Set FIREBASE_PROJECT_ID before running the worker."
     }
@@ -39,7 +44,9 @@ fun main(args: Array<String>) {
         check(projectId.startsWith("demo-")) { "Use a demo project ID with the Firestore emulator." }
         FirestoreOptions.newBuilder().setProjectId(projectId).setEmulatorHost(emulatorHost).build()
             .service.use { firestore ->
-                if (deliverNotifications) {
+                if (cancellations) {
+                    println("Completed ${ReservationCancellationWorker(firestore).processPending()} cancellation(s).")
+                } else if (deliverNotifications) {
                     val delivered = NotificationDelivery(firestore) { false }.deliverPending()
                     println("Completed $delivered notification(s) in the emulator.")
                 } else {
@@ -49,7 +56,8 @@ fun main(args: Array<String>) {
         return
     }
 
-    check(System.getenv("LOTTERY_DRAW_ENABLED") == "true") { "Set LOTTERY_DRAW_ENABLED to enable live draws." }
+    val enableFlag = if (cancellations) "RESERVATION_CANCELLATIONS_ENABLED" else "LOTTERY_DRAW_ENABLED"
+    check(System.getenv(enableFlag) == "true") { "Set $enableFlag to enable this live worker command." }
     val app = FirebaseApp.initializeApp(
         FirebaseOptions.builder()
             .setProjectId(projectId)
@@ -58,7 +66,9 @@ fun main(args: Array<String>) {
     )
     try {
         val firestore = FirestoreClient.getFirestore(app)
-        if (deliverNotifications) {
+        if (cancellations) {
+            println("Completed ${ReservationCancellationWorker(firestore).processPending()} cancellation(s).")
+        } else if (deliverNotifications) {
             val messaging = FirebaseMessaging.getInstance(app)
             val delivered = NotificationDelivery(firestore) { sendLotteryPush(messaging, it) }.deliverPending()
             println("Completed $delivered notification(s).")

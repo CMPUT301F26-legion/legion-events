@@ -1,7 +1,7 @@
 /*
  * ReservationConfirmationScreen.kt
  *
- * Purpose: Show S09's saved booking confirmation and CSV download (US 01.05.02).
+ * Purpose: Show S09's booking or cancellation confirmation and CSV (US 01.05.02/01.07.02).
  * Role: View in MVC; displays controller state and forwards navigation and save actions.
  * Outstanding issues: Booking creation must open S09 with its saved reservation ID.
  */
@@ -20,7 +20,7 @@ import com.example.legion_events.controller.ReservationDetailsState
 import com.example.legion_events.model.Reservation
 
 /**
- * Shows confirmation only after the repository has loaded an owned, confirmed booking.
+ * Shows confirmation only after loading an owned confirmed booking or completed cancellation.
  * @param state Saved booking and loading, failure, and export state.
  * @param onBack Returns to the previous destination.
  * @param onRetry Reloads an unavailable booking.
@@ -48,15 +48,17 @@ fun ReservationConfirmationScreen(state: ReservationDetailsState, onBack: () -> 
                     Text(state.error ?: "This reservation is not available for this account.")
                     Button(onClick = onRetry) { Text("Retry") }
                 }
-                entry.reservation.status != Reservation.STATUS_CONFIRMED -> {
+                entry.reservation.status != Reservation.STATUS_CONFIRMED && !entry.reservation.cancellationCompleted() -> {
                     Text("This reservation is not confirmed.")
                     OutlinedButton(onClick = onReservation) { Text("View reservation") }
                 }
                 else -> {
                     val reservation = entry.reservation
-                    Text("Reservation confirmed", style = MaterialTheme.typography.titleLarge,
+                    Text(if (reservation.cancellationCompleted()) "Cancellation confirmed" else "Reservation confirmed", style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.primary)
-                    Text("Your saved booking confirmation is available below.")
+                    Text(if (reservation.cancellationCompleted()) "Your reservation was cancelled and its dates released."
+                        else "Your saved booking confirmation is available below.")
+                    if (reservation.cancellationRequested) Text("Cancellation requested. Waiting for processing.")
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(entry.campsiteName ?: "Campsite unavailable", style = MaterialTheme.typography.titleLarge)
@@ -66,6 +68,7 @@ fun ReservationConfirmationScreen(state: ReservationDetailsState, onBack: () -> 
                             Text("Check-out: ${reservationDateText(reservation.endDate)}")
                             Text("Guests: ${reservation.guestCount}")
                             Text("Total: ${shortPrice(reservation.totalPrice)} CAD")
+                            if (reservation.cancellationCompleted()) reservation.updatedAt?.let { Text("Cancelled: ${reservationDateText(it)}") }
                         }
                     }
                     ReservationDownloadButton(state, onDownload)
@@ -80,8 +83,9 @@ fun ReservationConfirmationScreen(state: ReservationDetailsState, onBack: () -> 
 @Composable
 internal fun ReservationDownloadButton(state: ReservationDetailsState, onDownload: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onDownload, enabled = !state.exporting, modifier = Modifier.fillMaxWidth()) {
-            Text(if (state.exporting) "Saving CSV…" else "Download confirmation CSV")
+        OutlinedButton(onClick = onDownload, enabled = !state.exporting && !state.requestingCancellation, modifier = Modifier.fillMaxWidth()) {
+            Text(if (state.exporting) "Saving CSV…" else if (state.entry?.reservation?.cancellationCompleted() == true)
+                "Download cancellation CSV" else "Download confirmation CSV")
         }
         state.exportNotice?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
     }

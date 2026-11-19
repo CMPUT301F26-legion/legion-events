@@ -32,6 +32,10 @@ import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.ReservationEntry
 import com.example.legion_events.data.ReservationRepository
 import com.example.legion_events.data.UserRepository
+import com.example.legion_events.data.NotificationRepository
+import com.example.legion_events.data.OwnerNoticeRepository
+import com.example.legion_events.model.OwnerNotice
+import com.example.legion_events.model.CancellationNotification
 import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Reservation
 import com.example.legion_events.model.UserProfile
@@ -109,7 +113,7 @@ class ReservationConfirmationTest {
     }
 
     @Test fun unconfirmedDirectLinksDoNotShowSuccessOrAllowDownloads() {
-        open(FakeReservations().apply { saved = entry.copy(reservation = entry.reservation.copy(status = "cancelled")) },
+        open(FakeReservations().apply { saved = entry.copy(reservation = entry.reservation.copy(status = "rejected")) },
             confirmation = true)
         waitFor("This reservation is not confirmed.")
         compose.onNodeWithText("Reservation confirmed").assertDoesNotExist()
@@ -134,6 +138,28 @@ class ReservationConfirmationTest {
         waitFor("Reservation confirmed")
     }
 
+    @Test fun inboxOpensCompletedCancellationAndSavesItsReceiptOnce() {
+        val cancelled = entry.copy(reservation = entry.reservation.copy(status = "cancelled", updatedAt = Timestamp(300, 0)))
+        val repository = FakeReservations().apply { saved = cancelled }
+        open(repository, confirmation = true)
+        compose.onNodeWithText("Cancellation confirmed").assertIsDisplayed()
+        compose.onNodeWithText("Inbox").performClick()
+        waitFor("View cancellation")
+        compose.onNodeWithText("View cancellation").performClick()
+        waitFor("Cancellation confirmed")
+        picker.destination = receiptUri()
+        compose.onNodeWithText("Download cancellation CSV").performScrollTo().performClick()
+        waitFor("Cancellation CSV saved.")
+        val csv = receipt.readText()
+        assertTrue(csv.contains("\"cancelledAtUtc\""))
+        assertTrue(csv.contains("\"65.50\",\"CAD\",\"cancelled\""))
+        assertTrue(csv.contains("\"1970-01-01T00:05:00.000Z\""))
+        assertTrue(checkNotNull(picker.intent?.getStringExtra(Intent.EXTRA_TITLE)).endsWith("-cancellation.csv"))
+        restoration.emulateSavedInstanceStateRestore()
+        waitFor("Cancellation CSV saved.")
+        compose.runOnIdle { assertEquals(1, picker.launches) }
+    }
+
     /** Starts the shared router, passing only the document ID to either reservation screen. */
     private fun open(repository: FakeReservations, confirmation: Boolean = false,
         dark: Boolean = false, waitForBooking: Boolean = true) {
@@ -143,12 +169,18 @@ class ReservationConfirmationTest {
         })
         val campsites = object : CampsiteRepository { override fun observeCampsites() = flowOf(emptyList<Campsite>()) }
         val owner = object : ActivityResultRegistryOwner { override val activityResultRegistry = picker }
+        val notices = object : OwnerNoticeRepository {
+            override suspend fun sendNotification(lotteryId: String, message: String): Int = error("Unexpected notice write")
+            override suspend fun getSentNotices(): List<OwnerNotice> = emptyList()
+            override fun observeReceived(userId: String) = flowOf(emptyList<OwnerNotice>())
+        }
         restoration = StateRestorationTester(compose)
         restoration.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
                 navigation = rememberNavController()
                 LegioneventsTheme(darkTheme = dark) {
-                    AppNavigation(account, navigation, campsites = campsites, reservations = repository)
+                    AppNavigation(account, navigation, campsites = campsites, reservations = repository, notices = notices,
+                        notifications = NotificationRepository { flowOf(listOf(CancellationNotification("cancelled", entry.reservation.id, Timestamp(300, 0)))) })
                 }
             }
         }
@@ -157,8 +189,12 @@ class ReservationConfirmationTest {
             navigation.navigate(if (confirmation) reservationConfirmationRoute(entry.reservation.id)
                 else reservationDetailsRoute(entry.reservation.id))
         }
-        if (waitForBooking) waitFor(if (confirmation && repository.saved?.reservation?.status == "confirmed")
-            "Reservation confirmed" else if (confirmation) "This reservation is not confirmed." else "Total: $65.50 CAD")
+        if (waitForBooking) waitFor(when {
+            confirmation && repository.saved?.reservation?.cancellationCompleted() == true -> "Cancellation confirmed"
+            confirmation && repository.saved?.reservation?.status == "confirmed" -> "Reservation confirmed"
+            confirmation -> "This reservation is not confirmed."
+            else -> "Total: $65.50 CAD"
+        })
     }
 
     /** Returns a writable URI for the test receipt through the app's existing cache provider. */
@@ -192,6 +228,7 @@ class ReservationConfirmationTest {
         var saved: ReservationEntry? = entry
         var load: suspend () -> ReservationEntry? = { saved }
         var reads = 0
+        override suspend fun requestCancellation(reservationId: String): ReservationEntry = error("Unexpected cancellation request")
         override suspend fun getMyReservations(): List<ReservationEntry> = error("Unexpected list read")
         override suspend fun getReservation(reservationId: String): ReservationEntry? {
             assertEquals(entry.reservation.id, reservationId)

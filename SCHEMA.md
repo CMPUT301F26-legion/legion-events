@@ -181,12 +181,28 @@ and then document ID. Finished stays retain their saved `confirmed` status; no
 `completed` status or checkout write is needed. Cancelled, rejected, pending, and
 unknown statuses are excluded from both periods.
 Checkout is excluded from the occupied nights. A pending cancellation request alone
-does not change the saved status. S09, S10, and S10b perform no writes to reservations,
-offers, or `bookedNights`. Names and areas are optional reads from `campsites/{id}`;
+does not change the saved status. The client can only set `cancellationRequested`
+to `true` and `updatedAt` to server time on its own confirmed booking before checkout.
+An already pending or completed request is a read-only retry. The worker changes
+status to `cancelled`, clears the flag, and sets `updatedAt` to server time, atomically
+deleting only `bookedNights` documents whose `reservationId` still matches this booking.
+It preserves the offer, original dates, guests, price, and all other reservation fields.
+Names and areas are optional reads from `campsites/{id}`;
 they do not replace the booking's saved dates, guest count, or total price.
 Confirmation CSV export rechecks ownership and requires the saved status to be
-`confirmed`. Receipts are saved to the user-selected document on the device;
+`confirmed`. Cancellation CSV requires `cancelled`, a cleared request flag, and
+the worker's `updatedAt` timestamp (exported as `cancelledAtUtc`). Cancelled bookings
+have their own S10 tab; they are not finished stays in Past.
+Receipts are saved to the user-selected document on the device;
 no receipt collection or additional Firestore fields are created.
+
+The worker creates `notifications/reservation_cancelled_{reservationId}` in the
+same transaction as cancellation. It stores `toUserId`, `fromUserId: null`,
+`lotteryId`, `reservationId`, `type: "reservation_cancelled"`, `title`, `body`,
+`read: false`, and server `createdAt`/`updatedAt` timestamps. The shared Inbox reads
+it through its existing recipient-scoped query and opens that reservation's confirmation.
+Repeated worker runs do not rewrite the booking or notification. Clients must
+not be allowed to create cancellation notices, set `status`, or release nights.
 
 ## Lottery notifications
 
