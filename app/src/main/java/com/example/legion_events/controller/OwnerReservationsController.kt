@@ -2,9 +2,9 @@
  * OwnerReservationsController.kt
  *
  * Purpose: S17 owner reservations: pick a campsite, see its booked nights, list active, past,
- *   and cancelled bookings, and reject one (US 02.06.01, 02.07.01 to 02.07.03, 02.08.01).
+ *   and cancelled bookings, and accept or reject one (US 02.06.01, 02.07.01 to 02.07.03, 02.08.01).
  * Role: Controller in MVC; OwnerReservationsScreen renders its state and
- *   OwnerReservationRepository reads and rejects bookings.
+ *   OwnerReservationRepository reads, accepts, and rejects bookings.
  * Outstanding issues: None.
  */
 package com.example.legion_events.controller
@@ -57,7 +57,9 @@ data class RejectionDraft(
  * @property selectedTab Which booking list is shown.
  * @property viewing The booking whose details dialog is open, or null.
  * @property rejecting The rejection dialog's state, or null when it is closed.
- * @property result Confirmation after a rejection, or null.
+ * @property accepting The ID of the booking being accepted, or null.
+ * @property actionError Why accepting a booking failed, or null.
+ * @property result Confirmation after accepting or rejecting, or null.
  */
 data class OwnerReservationsState(
     val loading: Boolean = true,
@@ -73,6 +75,8 @@ data class OwnerReservationsState(
     val selectedTab: OwnerReservationTab = OwnerReservationTab.ACTIVE,
     val viewing: Reservation? = null,
     val rejecting: RejectionDraft? = null,
+    val accepting: String? = null,
+    val actionError: String? = null,
     val result: String? = null,
 ) {
     /**
@@ -113,7 +117,7 @@ class OwnerReservationsController(
     /** Reloads the campsites and the selected campsite's bookings, keeping the campsite, tab, and month. */
     fun refresh() = load {
         // A refresh (including on resume) starts fresh, so an old confirmation does not linger.
-        mutableState.value = state.value.copy(result = null)
+        mutableState.value = state.value.copy(result = null, actionError = null)
         val campsites = loadCampsites().sortedBy { it.name.lowercase() }
         val selected = state.value.selectedCampsiteId?.takeIf { id -> campsites.any { it.id == id } }
             ?: campsites.firstOrNull()?.id
@@ -133,7 +137,8 @@ class OwnerReservationsController(
         savedState.remove<String>(MONTH_KEY)
         choose(campsiteId)
         mutableState.value = state.value.copy(month = "", active = emptyList(), past = emptyList(),
-            cancelled = emptyList(), bookedNights = emptySet(), requestedNights = emptySet(), result = null)
+            cancelled = emptyList(), bookedNights = emptySet(), requestedNights = emptySet(), result = null,
+            actionError = null)
         load { loadBookings(campsiteId) }
     }
 
@@ -171,13 +176,49 @@ class OwnerReservationsController(
     }
 
     /**
+     * Confirms a requested booking, notifies the entrant, and reloads so its nights show as booked.
+     * Ignored for bookings that cannot be accepted or while another acceptance is saving.
+     * @param reservation The requested booking.
+     */
+    fun accept(reservation: Reservation) {
+        if (state.value.accepting != null || !reservation.canOwnerAccept(now())) return
+        mutableState.value = state.value.copy(viewing = null, accepting = reservation.id, actionError = null,
+            result = null)
+        viewModelScope.launch {
+            try {
+                repository.acceptReservation(reservation.id)
+                mutableState.value = state.value.copy(accepting = null,
+                    result = "Reservation accepted. The entrant was notified.")
+                load { loadBookings(state.value.selectedCampsiteId) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: IllegalStateException) {
+                acceptFailed(error)
+            } catch (error: SecurityException) {
+                acceptFailed(error)
+            } catch (_: Exception) {
+                mutableState.value = state.value.copy(accepting = null, actionError = ACCEPT_FAILED)
+            }
+        }
+    }
+
+    /**
+     * Shows why accepting failed.
+     * @param error The repository's error; its message is written for the owner.
+     */
+    private fun acceptFailed(error: Exception) {
+        mutableState.value = state.value.copy(accepting = null, actionError = error.message ?: ACCEPT_FAILED)
+    }
+
+    /**
      * Opens the rejection dialog for an upcoming requested or confirmed booking; other bookings
      * cannot be rejected.
      * @param reservation The booking to reject.
      */
     fun requestReject(reservation: Reservation) {
-        if (!reservation.isUpcomingForOwner(now())) return
-        mutableState.value = state.value.copy(viewing = null, rejecting = RejectionDraft(reservation), result = null)
+        if (!reservation.isUpcomingForOwner(now()) || state.value.accepting == reservation.id) return
+        mutableState.value = state.value.copy(viewing = null, rejecting = RejectionDraft(reservation), result = null,
+            actionError = null)
     }
 
     /**
@@ -298,6 +339,8 @@ class OwnerReservationsController(
         const val MONTH_KEY = "ownerReservationMonth"
         /** Shown when campsites or bookings cannot be read. */
         const val LOAD_FAILED = "Could not load your reservations. Check your connection and retry."
+        /** Shown when accepting fails for an unexpected reason. */
+        const val ACCEPT_FAILED = "Could not accept the reservation. Check your connection and retry."
         /** Shown when a rejection fails for an unexpected reason. */
         const val REJECT_FAILED = "Could not reject the reservation. Check your connection and retry."
     }

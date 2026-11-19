@@ -770,6 +770,7 @@ fun AppNavigation(
                         onMonth = bookings::showMonth,
                         onView = bookings::viewBooking,
                         onCloseView = bookings::closeBooking,
+                        onAccept = bookings::accept,
                         onReject = bookings::requestReject,
                         onReason = bookings::setRejectReason,
                         onConfirmReject = bookings::confirmReject,

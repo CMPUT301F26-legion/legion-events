@@ -168,6 +168,11 @@ tab, and calendar month are kept in `SavedStateHandle`.
   `cancelled` and `rejected` bookings, most recently changed first. Switching tabs does not read again.
 - **View booking:** a dialog with the reservation number, dates, guests, total, and rules acceptance.
   The rules let only a profile's owner or an admin read `users/{uid}`, so entrant names are not shown.
+- **Accept:** requested bookings with no pending cancellation show **Accept** in the Active tab and the
+  details dialog. One transaction sets the booking to `confirmed` and writes an `ownerNotices` entry to
+  the entrant; its nights then show as booked. Like Reject, it needs the owner rule in
+  [SCHEMA.md](SCHEMA.md#owner-reservations) and reports "Accepting reservations is not enabled for owners
+  yet." until it is deployed. The app does not reserve `bookedNights`.
 - **Reject (US 02.08.01):** only bookings in the Active tab (`requested` or `confirmed`, before checkout). The dialog takes an optional reason (at most
   `Reservation.MAX_REJECTION_REASON_LENGTH`). One transaction sets the booking to `rejected` and writes an
   `ownerNotices` entry to that entrant, so it appears in their S07 inbox; the booking then moves to

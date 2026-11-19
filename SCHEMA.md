@@ -216,6 +216,18 @@ index. Malformed records are left out instead of hiding the rest. Entrant profil
 outlines nights asked for by upcoming `requested` ones. Past lists only `confirmed` stays after
 checkout; a `requested` booking whose checkout passes without confirmation is not listed.
 
+Accepting is one transaction that rechecks that the owner owns the booking and that it is `requested`,
+before its `endDate`, with no cancellation pending, then:
+
+| Write | Fields |
+| --- | --- |
+| `reservations/{id}` update | `status: "confirmed"`, `updatedAt` server timestamp; nothing else changes |
+| `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
+
+`bookedNights` stay worker-only, so accepting does not reserve the nights itself. Until a trusted worker
+reserves them (or rejects a clash), two overlapping `requested` bookings could both be accepted; the
+rule cannot check this because it cannot list another booking's nights.
+
 Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
 `requested` or `confirmed` with `endDate` in the future, then:
 
@@ -231,17 +243,22 @@ cancelled bookings, so a rejected booking's nights are **not released yet**; a w
 `rejected` bookings is needed before the owner rule below is deployed.
 
 The deployed reservation update rule only lets the entrant request a cancellation, so the rejection
-write is currently denied and S17 reports that rejecting is not enabled. To enable it, extend the
-reservation `allow update` with an owner branch:
+write is currently denied and S17 reports that rejecting is not enabled. To let owners accept and
+reject, extend the reservation `allow update` with an owner branch. The owner may change only `status`
+and `updatedAt`, and only along `requested -> confirmed`, `requested -> rejected`, or
+`confirmed -> rejected`:
 
 ```text
       allow update: if (mine(resource.data.userId) && resource.data.status == 'confirmed'
           && request.time < resource.data.endDate
           && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
           && request.resource.data.cancellationRequested == true && updatedNow())
-        || (mine(resource.data.ownerId) && resource.data.status in ['requested','confirmed']
-          && request.time < resource.data.endDate && changedOnly(['status','updatedAt'])
-          && request.resource.data.status == 'rejected' && updatedNow());
+        || (mine(resource.data.ownerId) && request.time < resource.data.endDate
+          && changedOnly(['status','updatedAt']) && updatedNow()
+          && ((resource.data.status == 'requested' && resource.data.cancellationRequested == false
+                && request.resource.data.status == 'confirmed')
+            || (resource.data.status in ['requested','confirmed']
+                && request.resource.data.status == 'rejected')));
 ```
 
 ## Lottery notifications

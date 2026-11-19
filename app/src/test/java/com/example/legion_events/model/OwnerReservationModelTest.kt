@@ -55,6 +55,22 @@ class OwnerReservationModelTest {
         }
     }
 
+    @Test fun ownersCanAcceptOnlyUpcomingRequestsWithoutACancellation() {
+        val now = Timestamp(july4, 0)
+        assertTrue(booking(july4 + day, july4 + 2 * day, Reservation.STATUS_REQUESTED).canOwnerAccept(now))
+        assertFalse(booking(july4 + day, july4 + 2 * day).canOwnerAccept(now))
+        assertFalse(booking(july4 - 2 * day, july4, Reservation.STATUS_REQUESTED).canOwnerAccept(now))
+        assertFalse(booking(july4 + day, july4 + 2 * day, Reservation.STATUS_REQUESTED)
+            .copy(cancellationRequested = true).canOwnerAccept(now))
+    }
+
+    @Test fun acceptanceNoticeNamesTheCampsiteAndStay() {
+        val stay = booking(july4, july4 + 3 * day)
+        assertEquals("The owner confirmed your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027.",
+            acceptanceNotice(stay, "Two Jack Lakeside"))
+        assertEquals("The owner confirmed your reservation for Jul 4, 2027 to Jul 7, 2027.", acceptanceNotice(stay, " "))
+    }
+
     @Test fun rejectionNoticeNamesTheCampsiteStayAndOptionalReason() {
         val stay = booking(july4, july4 + 3 * day)
         assertEquals("The owner rejected your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027. " +

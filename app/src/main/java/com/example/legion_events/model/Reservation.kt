@@ -72,6 +72,15 @@ data class Reservation(
         (status == STATUS_REQUESTED || status == STATUS_CONFIRMED) && endDate > at
 
     /**
+     * Returns true when the owner may accept this booking: still `requested`, before checkout, and
+     * with no cancellation pending.
+     * @param at The current time.
+     * @return Whether S17 offers Accept and the rules allow `requested -> confirmed`.
+     */
+    fun canOwnerAccept(at: Timestamp): Boolean =
+        status == STATUS_REQUESTED && !cancellationRequested && endDate > at
+
+    /**
      * Returns true when the entrant cancelled the booking or the owner rejected it.
      * @return Whether the booking belongs in an owner's Cancelled list.
      */
@@ -114,6 +123,16 @@ internal fun nightFormat(): SimpleDateFormat =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 
 /**
+ * Writes the inbox message sent to an entrant whose requested booking the owner accepted.
+ * @param reservation The accepted booking; its first night and checkout date are named.
+ * @param campsiteName The campsite's current name, or null when unknown.
+ * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
+ */
+fun acceptanceNotice(reservation: Reservation, campsiteName: String?): String =
+    "The owner confirmed your reservation${placeText(campsiteName)} for ${stayText(reservation)}."
+        .take(MAX_NOTICE_LENGTH)
+
+/**
  * Writes the inbox message sent to an entrant whose booking the owner rejected (US 02.08.01).
  * @param reservation The rejected booking; its first night and checkout date are named.
  * @param campsiteName The campsite's current name, or null when unknown.
@@ -121,9 +140,24 @@ internal fun nightFormat(): SimpleDateFormat =
  * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
  */
 fun rejectionNotice(reservation: Reservation, campsiteName: String?, reason: String?): String {
-    val days = SimpleDateFormat("MMM d, yyyy", Locale.CANADA).apply { timeZone = TimeZone.getTimeZone("UTC") }
-    val place = campsiteName?.takeIf { it.isNotBlank() }?.let { " at $it" } ?: ""
-    val stay = "${days.format(reservation.startDate.toDate())} to ${days.format(reservation.endDate.toDate())}"
     val because = reason?.takeIf { it.isNotBlank() }?.let { " Reason: $it" } ?: ""
-    return "The owner rejected your reservation$place for $stay.$because".take(MAX_NOTICE_LENGTH)
+    return "The owner rejected your reservation${placeText(campsiteName)} for ${stayText(reservation)}.$because"
+        .take(MAX_NOTICE_LENGTH)
+}
+
+/**
+ * Names the campsite in an owner notice.
+ * @param campsiteName The campsite's current name, or null when unknown.
+ * @return Text such as " at Two Jack Lakeside", or nothing when the name is unknown or blank.
+ */
+private fun placeText(campsiteName: String?): String = campsiteName?.takeIf { it.isNotBlank() }?.let { " at $it" } ?: ""
+
+/**
+ * Names a stay in an owner notice, in UTC days to match the calendar.
+ * @param reservation The booking.
+ * @return Text such as "Jul 4, 2027 to Jul 7, 2027".
+ */
+private fun stayText(reservation: Reservation): String {
+    val days = SimpleDateFormat("MMM d, yyyy", Locale.CANADA).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    return "${days.format(reservation.startDate.toDate())} to ${days.format(reservation.endDate.toDate())}"
 }

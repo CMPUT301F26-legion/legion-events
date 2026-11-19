@@ -148,6 +148,45 @@ class FirebaseOwnerReservationRepositoryTest {
         verifyNoWrites()
     }
 
+    @Test fun acceptingConfirmsOnlyTheStatusAndNotifiesTheEntrantWithoutTouchingBookedNights() = runTest {
+        returnsInTransaction(document("booking", mapOf("status" to "requested")))
+        repository.acceptReservation("booking")
+        verify(transaction).update(booking, mapOf("status" to "confirmed", "updatedAt" to FieldValue.serverTimestamp()))
+        verify(firestore, never()).collection("bookedNights")
+        @Suppress("UNCHECKED_CAST")
+        val captor = ArgumentCaptor.forClass(Map::class.java) as ArgumentCaptor<Map<String, Any?>>
+        verify(transaction).set(org.mockito.Mockito.eq(notice), captor.capture())
+        assertEquals(listOf("entrant"), captor.value["recipientIds"])
+        assertEquals("The owner confirmed your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027.",
+            captor.value["message"])
+    }
+
+    @Test fun onlyUpcomingRequestedBookingsWithoutACancellationCanBeAccepted() = runTest {
+        for (fields in listOf(
+            mapOf("status" to "confirmed"), mapOf("status" to "rejected"), mapOf("status" to "cancelled"),
+            mapOf("status" to "requested", "cancellationRequested" to true),
+            mapOf("status" to "requested", "startDate" to Timestamp(july4 - 5 * day, 0),
+                "endDate" to Timestamp(july4 - 2 * day, 0)),
+        )) {
+            returnsInTransaction(document("booking", fields))
+            val error = failure<IllegalStateException> { repository.acceptReservation("booking") }
+            assertEquals("Only requested reservations can be accepted.", error.message)
+        }
+        returnsInTransaction(document("booking", mapOf("status" to "requested", "ownerId" to "someone-else")))
+        failure<SecurityException> { repository.acceptReservation("booking") }
+        verifyNoWrites()
+    }
+
+    @Test fun aDeniedAcceptanceReportsItIsNotEnabled() = runTest {
+        val denied = mock(FirebaseFirestoreException::class.java)
+        `when`(denied.code).thenReturn(FirebaseFirestoreException.Code.PERMISSION_DENIED)
+        `when`(denied.message).thenReturn("PERMISSION_DENIED")
+        doAnswer { Tasks.forException<Unit>(denied) }.`when`(firestore).runTransaction<Unit>(any())
+        val error = failure<IllegalStateException> { repository.acceptReservation("booking") }
+        assertEquals("Accepting reservations is not enabled for owners yet.", error.message)
+        assertEquals(listOf("Accepting reservation booking was denied: PERMISSION_DENIED"), logged)
+    }
+
     @Test fun upcomingRequestedBookingsCanBeRejected() = runTest {
         returnsInTransaction(document("booking", mapOf("status" to "requested")))
         repository.rejectReservation("booking", null)
