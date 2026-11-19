@@ -246,10 +246,10 @@ class OwnerReservationsControllerTest {
         val asked = entry("asked", at + day, at + 2 * day, Reservation.STATUS_REQUESTED, campsite = "creek")
         repository.bookings["creek"] = listOf(asked)
         val controller = loaded()
-        repository.accept = { throw IllegalStateException("Accepting reservations is not enabled for owners yet.") }
+        repository.accept = { throw IllegalStateException("You don't have permission to accept this reservation.") }
         controller.accept(asked)
         runCurrent()
-        assertEquals("Accepting reservations is not enabled for owners yet.", controller.state.value.actionError)
+        assertEquals("You don't have permission to accept this reservation.", controller.state.value.actionError)
         assertNull(controller.state.value.accepting)
         repository.accept = { throw SecurityException("This reservation is not at your campsite.") }
         controller.accept(asked)

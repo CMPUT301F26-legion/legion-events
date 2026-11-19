@@ -4,8 +4,8 @@
  * Purpose: Firestore implementation of S17's owner reservations
  *   (US 02.06.01, 02.07.01 to 02.07.03, 02.08.01).
  * Role: Data layer in MVC; reads `reservations` by owner and accepts or rejects one in a transaction.
- * Outstanding issues: Accepting and rejecting need the owner reservation update rule described in
- *   SCHEMA.md; the deployed rules deny them, so the app reports that they are unavailable.
+ * Outstanding issues: Neither accepting nor rejecting writes `bookedNights`; the trusted worker must
+ *   reserve accepted nights and release rejected ones (see SCHEMA.md#owner-reservations).
  */
 package com.example.legion_events.data
 
@@ -65,7 +65,7 @@ class FirebaseOwnerReservationRepository(
         require(text == null || text.length <= Reservation.MAX_REJECTION_REASON_LENGTH) {
             "Keep the reason under ${Reservation.MAX_REJECTION_REASON_LENGTH} characters."
         }
-        changeStatus(reservationId, Reservation.STATUS_REJECTED, "Rejecting",
+        changeStatus(reservationId, Reservation.STATUS_REJECTED, "reject",
             allowed = { it.isUpcomingForOwner(now()) }, notAllowed = "Only active reservations can be rejected.",
             notice = { reservation, campsiteName -> rejectionNotice(reservation, campsiteName, text) })
     }
@@ -76,7 +76,7 @@ class FirebaseOwnerReservationRepository(
      */
     override suspend fun acceptReservation(reservationId: String) {
         requireSingleId(reservationId, "reservation")
-        changeStatus(reservationId, Reservation.STATUS_CONFIRMED, "Accepting",
+        changeStatus(reservationId, Reservation.STATUS_CONFIRMED, "accept",
             allowed = { it.canOwnerAccept(now()) }, notAllowed = "Only requested reservations can be accepted.",
             notice = ::acceptanceNotice)
     }
@@ -86,7 +86,7 @@ class FirebaseOwnerReservationRepository(
      * Writes only `status` and `updatedAt` on the booking, as the owner rule requires.
      * @param reservationId A single reservation document ID, already validated.
      * @param status The new stored status.
-     * @param action "Accepting" or "Rejecting", for the denied message and log.
+     * @param action "accept" or "reject", for the denied message and log.
      * @param allowed Whether the stored booking may make this change.
      * @param notAllowed Shown when [allowed] is false.
      * @param notice Writes the entrant's message from the booking and campsite name.
@@ -129,10 +129,10 @@ class FirebaseOwnerReservationRepository(
             }.await()
         } catch (error: FirebaseFirestoreException) {
             if (error.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw error
-            // Most likely the missing owner update rule, but a denied notice write or campsite read
-            // shows the same message, so keep the original error for diagnosis.
-            log("$action reservation $reservationId was denied: ${error.message}")
-            throw IllegalStateException("$action reservations is not enabled for owners yet.", error)
+            // Any step can be denied: the booking update, the campsite read, or the notice (which needs
+            // the booking's lottery to be the owner's). Firestore does not say which, so log the original.
+            log("Permission denied to $action reservation $reservationId: ${error.message}")
+            throw IllegalStateException("You don't have permission to $action this reservation.", error)
         }
         checkAccount(ownerId)
     }

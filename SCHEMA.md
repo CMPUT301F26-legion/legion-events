@@ -203,7 +203,7 @@ same transaction as cancellation. It stores `toUserId`, `fromUserId: null`,
 it through its existing recipient-scoped query and opens that reservation's confirmation.
 Repeated worker runs do not rewrite the booking or notification. Entrant clients must
 not be allowed to create cancellation notices, set `status`, or release nights; the only
-client `status` write is the owner rejection under [Owner reservations](#owner-reservations).
+client `status` writes are the owner's acceptance and rejection under [Owner reservations](#owner-reservations).
 
 ## Owner reservations
 
@@ -224,9 +224,8 @@ before its `endDate`, with no cancellation pending, then:
 | `reservations/{id}` update | `status: "confirmed"`, `updatedAt` server timestamp; nothing else changes |
 | `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
 
-`bookedNights` stay worker-only, so accepting does not reserve the nights itself. Until a trusted worker
-reserves them (or rejects a clash), two overlapping `requested` bookings could both be accepted; the
-rule cannot check this because it cannot list another booking's nights.
+`bookedNights` stay worker-only, so accepting does not reserve the nights itself, and the rule cannot
+check for clashes because it cannot list another booking's nights (see the known gaps below).
 
 Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
 `requested` or `confirmed` with `endDate` in the future, then:
@@ -236,30 +235,27 @@ Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the
 | `reservations/{id}` update | `status: "rejected"`, `updatedAt` server timestamp; nothing else changes |
 | `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
 
-The optional reason is only sent in the notice; no extra reservation field is written. The deployed
-`ownerNotices` rule already allows this notice, because the owner owns the booking's lottery.
-`bookedNights` stay `allow write: if false`. `ReservationCancellationWorker` releases nights only for
-cancelled bookings, so a rejected booking's nights are **not released yet**; a worker step for
-`rejected` bookings is needed before the owner rule below is deployed.
+The optional reason is only sent in the notice; no extra reservation field is written. The
+`ownerNotices` rule allows the accept and reject notices because the owner owns the booking's lottery;
+a booking whose `lotteryId` is missing or another owner's (for example, a hand-made test record) is
+denied, and S17 reports "You don't have permission to accept/reject this reservation."
 
-The deployed reservation update rule only lets the entrant request a cancellation, so the rejection
-write is currently denied and S17 reports that rejecting is not enabled. To let owners accept and
-reject, extend the reservation `allow update` with an owner branch. The owner may change only `status`
-and `updatedAt`, and only along `requested -> confirmed`, `requested -> rejected`, or
-`confirmed -> rejected`:
+The deployed rules are in [`firestore.rules`](firestore.rules). The reservation `allow update` has two
+branches:
 
-```text
-      allow update: if (mine(resource.data.userId) && resource.data.status == 'confirmed'
-          && request.time < resource.data.endDate
-          && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
-          && request.resource.data.cancellationRequested == true && updatedNow())
-        || (mine(resource.data.ownerId) && request.time < resource.data.endDate
-          && changedOnly(['status','updatedAt']) && updatedNow()
-          && ((resource.data.status == 'requested' && resource.data.cancellationRequested == false
-                && request.resource.data.status == 'confirmed')
-            || (resource.data.status in ['requested','confirmed']
-                && request.resource.data.status == 'rejected')));
-```
+- **Entrant:** may set `cancellationRequested` to `true` on their own `requested` or `confirmed` booking
+  that has no pending request, changing only `cancellationRequested` and `updatedAt`.
+- **Owner:** before `endDate`, may change only `status` and `updatedAt`, and only along
+  `requested -> confirmed` (with no pending cancellation), `requested -> rejected`, or
+  `confirmed -> rejected`.
+
+**Known gaps.** `bookedNights` stay `allow write: if false`, and `ReservationCancellationWorker` only
+releases nights for entrant-cancelled `confirmed` bookings. So, until the worker handles them:
+
+- a rejected booking's nights are **not released**;
+- an accepted booking's nights are **not reserved**, so two overlapping requests can both be accepted;
+- a cancellation requested on a `requested` booking is never processed (the rule allows the request,
+  but the worker only handles `confirmed` bookings). S17 does not offer Accept for such a booking.
 
 ## Lottery notifications
 

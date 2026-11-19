@@ -170,15 +170,17 @@ tab, and calendar month are kept in `SavedStateHandle`.
   The rules let only a profile's owner or an admin read `users/{uid}`, so entrant names are not shown.
 - **Accept:** requested bookings with no pending cancellation show **Accept** in the Active tab and the
   details dialog. One transaction sets the booking to `confirmed` and writes an `ownerNotices` entry to
-  the entrant; its nights then show as booked. Like Reject, it needs the owner rule in
-  [SCHEMA.md](SCHEMA.md#owner-reservations) and reports "Accepting reservations is not enabled for owners
-  yet." until it is deployed. The app does not reserve `bookedNights`.
+  the entrant; its nights then show as booked on S17. The app does not reserve `bookedNights` (see the
+  known gaps in [SCHEMA.md](SCHEMA.md#owner-reservations)).
 - **Reject (US 02.08.01):** only bookings in the Active tab (`requested` or `confirmed`, before checkout). The dialog takes an optional reason (at most
   `Reservation.MAX_REJECTION_REASON_LENGTH`). One transaction sets the booking to `rejected` and writes an
   `ownerNotices` entry to that entrant, so it appears in their S07 inbox; the booking then moves to
-  Cancelled. The app never writes `bookedNights` (the rules make them worker-only). The deployed rules do
-  not yet allow owners to update reservations, so Reject currently shows "Rejecting reservations is not
-  enabled for owners yet." See [SCHEMA.md](SCHEMA.md#owner-reservations) for the rule it needs.
+  Cancelled. The app never writes `bookedNights` (the rules make them worker-only), so a rejected
+  booking's nights are not released until the worker handles `rejected` bookings.
+- **Denied writes:** if Firestore denies an accept or reject, S17 shows "You don't have permission to
+  accept/reject this reservation." and logs the original error under the `OwnerReservations` tag
+  (`adb logcat -s OwnerReservations`). The usual cause is a booking whose `lotteryId` is not one of
+  the owner's lotteries.
 
 Card and calendar dates are UTC days so they match `availableNights` and the lottery date pickers.
 The shared `toReservation()` in `ReservationDocument.kt` maps booking documents for both the entrant
@@ -207,6 +209,15 @@ Account roles are `user` and `admin`. Ordinary users share the same capabilities
 A listing belongs to the user identified by its `ownerId`; ownership is not a
 separate account role. Users can view and create listings and modify only their own
 listings. Admins have additional permissions. An entrant is a participant in a lottery.
+
+## Firestore rules
+
+The deployed security rules are kept in [`firestore.rules`](firestore.rules). Change rules there,
+in the same pull request as the app code that needs them, so reviewers see both. After the pull
+request is merged, deploy it by pasting the file into the Firebase console (**Firestore Database →
+Rules → Publish**), or with the Firebase CLI: `firebase deploy --only firestore:rules`. The rules
+are shared by everyone using the project, so tell the team before publishing. If someone edits the
+rules in the console, copy them back into `firestore.rules` so the file stays accurate.
 
 ## Changes and documentation
 

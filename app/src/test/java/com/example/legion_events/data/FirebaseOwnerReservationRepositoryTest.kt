@@ -177,14 +177,14 @@ class FirebaseOwnerReservationRepositoryTest {
         verifyNoWrites()
     }
 
-    @Test fun aDeniedAcceptanceReportsItIsNotEnabled() = runTest {
+    @Test fun aDeniedAcceptanceReportsMissingPermission() = runTest {
         val denied = mock(FirebaseFirestoreException::class.java)
         `when`(denied.code).thenReturn(FirebaseFirestoreException.Code.PERMISSION_DENIED)
         `when`(denied.message).thenReturn("PERMISSION_DENIED")
         doAnswer { Tasks.forException<Unit>(denied) }.`when`(firestore).runTransaction<Unit>(any())
         val error = failure<IllegalStateException> { repository.acceptReservation("booking") }
-        assertEquals("Accepting reservations is not enabled for owners yet.", error.message)
-        assertEquals(listOf("Accepting reservation booking was denied: PERMISSION_DENIED"), logged)
+        assertEquals("You don't have permission to accept this reservation.", error.message)
+        assertEquals(listOf("Permission denied to accept reservation booking: PERMISSION_DENIED"), logged)
     }
 
     @Test fun upcomingRequestedBookingsCanBeRejected() = runTest {
@@ -193,14 +193,14 @@ class FirebaseOwnerReservationRepositoryTest {
         verify(transaction).update(booking, mapOf("status" to "rejected", "updatedAt" to FieldValue.serverTimestamp()))
     }
 
-    @Test fun aDeniedRejectionReportsItIsNotEnabledAndLogsTheOriginalError() = runTest {
+    @Test fun aDeniedRejectionReportsMissingPermissionAndLogsTheOriginalError() = runTest {
         val denied = mock(FirebaseFirestoreException::class.java)
         `when`(denied.code).thenReturn(FirebaseFirestoreException.Code.PERMISSION_DENIED)
         `when`(denied.message).thenReturn("PERMISSION_DENIED: Missing or insufficient permissions.")
         doAnswer { Tasks.forException<Unit>(denied) }.`when`(firestore).runTransaction<Unit>(any())
         val error = failure<IllegalStateException> { repository.rejectReservation("booking", null) }
-        assertEquals("Rejecting reservations is not enabled for owners yet.", error.message)
-        assertEquals(listOf("Rejecting reservation booking was denied: " +
+        assertEquals("You don't have permission to reject this reservation.", error.message)
+        assertEquals(listOf("Permission denied to reject reservation booking: " +
             "PERMISSION_DENIED: Missing or insufficient permissions."), logged)
     }
 
