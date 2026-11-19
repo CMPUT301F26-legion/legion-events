@@ -2,7 +2,8 @@
  * Reservation.kt
  *
  * Purpose: Represent saved bookings and determine active, past, and cancelled stays
- *   (US 01.06.01/02, 02.07.01 to 02.07.03) and the nights they occupy (US 02.06.01).
+ *   (US 01.06.01/02, 02.07.01 to 02.07.03), which ones an owner can reject (US 02.08.01),
+ *   and the nights they occupy (US 02.06.01).
  * Role: Model in MVC; keeps reservation fields, the checkout boundary, and booked nights.
  * Outstanding issues: None.
  */
@@ -26,7 +27,7 @@ import java.util.TimeZone
  * @property guestCount Number of booked guests.
  * @property totalPrice Saved booking total in integer CAD cents.
  * @property rulesAccepted Whether the entrant accepted the campsite rules.
- * @property status Stored reservation status, such as confirmed, cancelled, or rejected.
+ * @property status Stored reservation status, such as requested, confirmed, cancelled, or rejected.
  * @property cancellationRequested Whether a cancellation is awaiting processing.
  * @property createdAt Server creation time, or null before it is available.
  * @property updatedAt Server modification time, or null before it is available.
@@ -55,6 +56,16 @@ data class Reservation(
     fun isPast(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate <= at
 
     /**
+     * Returns true for bookings an owner still has to host: requested or confirmed, strictly before
+     * checkout. Unlike [isActive], this includes `requested`, the status entrant bookings start in,
+     * so owners see new bookings before anything confirms them (S17's Active tab and Reject).
+     * @param at The current time.
+     * @return Whether the booking belongs in an owner's Active list and can be rejected.
+     */
+    fun isUpcomingForOwner(at: Timestamp): Boolean =
+        (status == STATUS_REQUESTED || status == STATUS_CONFIRMED) && endDate > at
+
+    /**
      * Returns true when the entrant cancelled the booking or the owner rejected it.
      * @return Whether the booking belongs in an owner's Cancelled list.
      */
@@ -74,6 +85,8 @@ data class Reservation(
     }
 
     companion object {
+        /** Stored status of a booking an entrant just made, before it is confirmed. */
+        const val STATUS_REQUESTED = "requested"
         /** Stored status of an accepted booking that has not been cancelled or rejected. */
         const val STATUS_CONFIRMED = "confirmed"
         /** Stored status of a booking the entrant cancelled. */

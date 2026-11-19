@@ -19,7 +19,7 @@ internal fun reservationDateText(date: Timestamp): String =
 /** Maps stored reservation statuses to readable labels, with a fallback for unknown values. */
 internal fun reservationStatusText(status: String): String = when (status) {
     Reservation.STATUS_CONFIRMED -> "Confirmed"
-    "requested" -> "Requested"
+    Reservation.STATUS_REQUESTED -> "Requested"
     "pending" -> "Pending"
     "completed" -> "Completed"
     "cancelled" -> "Cancelled"

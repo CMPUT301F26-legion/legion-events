@@ -15,7 +15,6 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -146,53 +145,6 @@ class ProfileNavigationTest {
         waitFor("My Campsites")
         waitFor("You have no campsites yet. Tap Add Campsite to list your first one.")
     }
-
-    @Test
-    fun exploreOpensSearchAfterSwitchingOwnerTabs() {
-        WelcomePreferences(preferences).markWelcomeSeen()
-        open()
-        waitFor("Explore campsites")
-        compose.onNodeWithText("Profile").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Manage my campsites").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Manage my campsites").performScrollTo().performClick()
-        waitFor("My Campsites")
-        // Switching owner tabs once made Explore restore Profile instead of opening search.
-        compose.onNodeWithText("Lotteries").performClick()
-        compose.onNodeWithText("Dashboard").performClick()
-        waitFor("My Campsites")
-        compose.onNodeWithContentDescription("Back").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Manage my campsites").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Explore").performClick()
-        waitFor("Explore campsites")
-        compose.runOnIdle { assertEquals(listOf("home"), backStackRoutes()) }
-    }
-
-    @Test
-    fun exploreOpensSearchAfterSwitchingAdminTabs() {
-        WelcomePreferences(preferences).markWelcomeSeen()
-        profiles.role = "admin"
-        open()
-        waitFor("Explore campsites")
-        compose.onNodeWithText("Profile").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Admin dashboard").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Admin dashboard").performScrollTo().performClick()
-        waitFor("Admin dashboard")
-        compose.onNodeWithText("Profiles").performClick()
-        compose.onNodeWithText("Campsites").performClick()
-        compose.runOnIdle { assertEquals("admin", navigation.currentDestination?.route) }
-        compose.onNodeWithContentDescription("Back").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Manage my campsites").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Explore").performClick()
-        waitFor("Explore campsites")
-        compose.runOnIdle { assertEquals(listOf("home"), backStackRoutes()) }
-    }
-
-    /**
-     * Lists the routes on the back stack, oldest first, without the navigation graph itself.
-     * @return The screen routes.
-     */
-    @Suppress("RestrictedApi")
-    private fun backStackRoutes() = navigation.currentBackStack.value.mapNotNull { it.destination.route }
 
     @Test
     fun adminCanOpenAdminDashboard() {

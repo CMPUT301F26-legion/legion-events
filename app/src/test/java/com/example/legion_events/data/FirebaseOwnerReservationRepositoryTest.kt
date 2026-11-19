@@ -95,8 +95,8 @@ class FirebaseOwnerReservationRepositoryTest {
         returnsList(document("good"), document("bad", mapOf("guestCount" to 0L)),
             document("foreign", mapOf("ownerId" to "someone-else")))
         assertEquals(listOf("good"), repository.getCampsiteReservations("lake").map { it.id })
-        assertEquals("Campsite lake: 3 booking(s) from server [good, bad, foreign]", logged.first())
-        assertTrue(logged.contains("Skipped reservation bad: Invalid guest count."))
+        // Only the skipped record is logged; there is no per-query dump of booking IDs.
+        assertEquals(listOf("Skipped reservation bad: Invalid guest count."), logged)
     }
 
     @Test fun signedOutAndInvalidRequestsNeverReachFirestore() = runTest {
@@ -148,9 +148,28 @@ class FirebaseOwnerReservationRepositoryTest {
         verifyNoWrites()
     }
 
-    @Test fun onlyActiveConfirmedBookingsCanBeRejected() = runTest {
+    @Test fun upcomingRequestedBookingsCanBeRejected() = runTest {
+        returnsInTransaction(document("booking", mapOf("status" to "requested")))
+        repository.rejectReservation("booking", null)
+        verify(transaction).update(booking, mapOf("status" to "rejected", "updatedAt" to FieldValue.serverTimestamp()))
+    }
+
+    @Test fun aDeniedRejectionReportsItIsNotEnabledAndLogsTheOriginalError() = runTest {
+        val denied = mock(FirebaseFirestoreException::class.java)
+        `when`(denied.code).thenReturn(FirebaseFirestoreException.Code.PERMISSION_DENIED)
+        `when`(denied.message).thenReturn("PERMISSION_DENIED: Missing or insufficient permissions.")
+        doAnswer { Tasks.forException<Unit>(denied) }.`when`(firestore).runTransaction<Unit>(any())
+        val error = failure<IllegalStateException> { repository.rejectReservation("booking", null) }
+        assertEquals("Rejecting reservations is not enabled for owners yet.", error.message)
+        assertEquals(listOf("Rejecting reservation booking was denied: " +
+            "PERMISSION_DENIED: Missing or insufficient permissions."), logged)
+    }
+
+    @Test fun onlyActiveRequestedOrConfirmedBookingsCanBeRejected() = runTest {
         for (fields in listOf(
-            mapOf("status" to "cancelled"), mapOf("status" to "rejected"),
+            mapOf("status" to "cancelled"), mapOf("status" to "rejected"), mapOf("status" to "pending"),
+            mapOf("status" to "requested", "startDate" to Timestamp(july4 - 5 * day, 0),
+                "endDate" to Timestamp(july4 - 2 * day, 0)),
             mapOf("startDate" to Timestamp(july4 - 5 * day, 0), "endDate" to Timestamp(july4 - 2 * day, 0)),
         )) {
             returnsInTransaction(document("booking", fields))

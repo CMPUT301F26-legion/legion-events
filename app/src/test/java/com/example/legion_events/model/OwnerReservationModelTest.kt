@@ -1,7 +1,7 @@
 /*
  * OwnerReservationModelTest.kt
  *
- * Purpose: Verify booked nights, cancelled statuses, the rejection notice, and calendar layout
+ * Purpose: Verify booked nights, owner-visible and cancelled statuses, the rejection notice, and calendar layout
  *   used by S17 (US 02.06.01, 02.07.03, 02.08.01).
  * Role: Local JVM tests for model helpers; no Firebase access.
  * Outstanding issues: None.
@@ -37,6 +37,21 @@ class OwnerReservationModelTest {
         assertTrue(booking(status = Reservation.STATUS_REJECTED).isCancelled())
         for (status in listOf(Reservation.STATUS_CONFIRMED, "pending", "unknown")) {
             assertFalse(booking(status = status).isCancelled())
+        }
+    }
+
+    @Test fun ownersSeeUpcomingRequestedAndConfirmedBookingsButEntrantsOnlyConfirmed() {
+        val now = Timestamp(july4, 0)
+        val requested = booking(july4 + day, july4 + 2 * day, Reservation.STATUS_REQUESTED)
+        assertTrue(requested.isUpcomingForOwner(now))
+        assertFalse(requested.isActive(now))
+        assertTrue(booking(july4 + day, july4 + 2 * day).isUpcomingForOwner(now))
+        // Checkout ends the stay, and a request that was never confirmed is not a past stay.
+        val finishedRequest = booking(july4 - 2 * day, july4, Reservation.STATUS_REQUESTED)
+        assertFalse(finishedRequest.isUpcomingForOwner(now))
+        assertFalse(finishedRequest.isPast(now))
+        for (status in listOf(Reservation.STATUS_CANCELLED, Reservation.STATUS_REJECTED, "pending")) {
+            assertFalse(booking(july4 + day, july4 + 2 * day, status).isUpcomingForOwner(now))
         }
     }
 

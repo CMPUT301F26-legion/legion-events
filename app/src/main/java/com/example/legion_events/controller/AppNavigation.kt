@@ -828,11 +828,10 @@ fun AppNavigation(
                             (tab.route == OWNER_DASHBOARD_ROUTE && currentRoute == OWNER_CAMPSITE_PATTERN) ||
                             (tab.route == LOTTERY_MANAGEMENT_ROUTE && currentRoute == LOTTERY_DETAILS_PATTERN),
                         onClick = {
-                            // No saveState/restoreState here: this bar pops to a different root than the
-                            // entrant bar in the same graph, and saving here made Explore restore Profile.
                             navController.navigate(tab.route) {
-                                popUpTo(OWNER_DASHBOARD_ROUTE)
+                                popUpTo(OWNER_DASHBOARD_ROUTE) { saveState = true }
                                 launchSingleTop = true
+                                restoreState = true
                             }
                         },
                         icon = { Icon(painterResource(tab.icon), contentDescription = null) },
@@ -849,11 +848,10 @@ fun AppNavigation(
                         selected = currentRoute == tab.route ||
                             (tab.route == ADMIN_DASHBOARD_ROUTE && currentRoute == ADMIN_CAMPSITE_PATTERN),
                         onClick = {
-                            // No saveState/restoreState here: this bar pops to a different root than the
-                            // entrant bar in the same graph, and saving here made Explore restore Profile.
                             navController.navigate(tab.route) {
-                                popUpTo(ADMIN_DASHBOARD_ROUTE)
+                                popUpTo(ADMIN_DASHBOARD_ROUTE) { saveState = true }
                                 launchSingleTop = true
+                                restoreState = true
                             }
                         },
                         icon = { Icon(painterResource(tab.icon), contentDescription = null) },

@@ -20,12 +20,12 @@ interface OwnerReservationRepository {
     suspend fun getCampsiteReservations(campsiteId: String): List<Reservation>
 
     /**
-     * Rejects an active booking at one of the owner's campsites and sends the entrant a notice
+     * Rejects an upcoming requested or confirmed booking at one of the owner's campsites and sends the entrant a notice
      * in the same write. Occupied nights are released by the trusted worker, not the app.
      * @param reservationId A single reservation document ID.
      * @param reason The owner's optional reason, at most [Reservation.MAX_REJECTION_REASON_LENGTH] characters.
      * @throws IllegalStateException With a message for the owner when the booking can no longer be rejected.
-     * @throws SecurityException If the booking belongs to another owner.
+     * @throws SecurityException If the booking belongs to another owner or the signed-in account changed.
      */
     suspend fun rejectReservation(reservationId: String, reason: String?)
 }

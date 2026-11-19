@@ -139,14 +139,17 @@ reads that campsite's bookings through `OwnerReservationRepository`, implemented
 `FirebaseOwnerReservationRepository`. It reloads on resume and offers Refresh/Retry. The campsite,
 tab, and calendar month are kept in `SavedStateHandle`.
 
-- **Calendar (US 02.06.01):** marks every night held by a `confirmed` booking, using
-  `Reservation.bookedNights()` (UTC `YYYY-MM-DD`, checkout excluded). It opens on the next stay's
-  month, or the current month. `BookingCalendar.kt` lays out the grid.
-- **Tabs (US 02.07.01 to 02.07.03):** Active and Past use the same rules as S10. Cancelled lists
+- **Calendar (US 02.06.01):** fills every night held by a `confirmed` booking and outlines nights
+  asked for by upcoming `requested` ones, using `Reservation.bookedNights()` (UTC `YYYY-MM-DD`,
+  checkout excluded). It opens on the next stay's month, or the current month. `BookingCalendar.kt`
+  lays out the grid.
+- **Tabs (US 02.07.01 to 02.07.03):** Active lists upcoming and ongoing `requested` and `confirmed`
+  bookings (`Reservation.isUpcomingForOwner`), because entrant bookings start as `requested`; a status
+  badge tells them apart. Past uses S10's rule (`confirmed` after checkout). Cancelled lists
   `cancelled` and `rejected` bookings, most recently changed first. Switching tabs does not read again.
 - **View booking:** a dialog with the reservation number, dates, guests, total, and rules acceptance.
   The rules let only a profile's owner or an admin read `users/{uid}`, so entrant names are not shown.
-- **Reject (US 02.08.01):** only active bookings. The dialog takes an optional reason (at most
+- **Reject (US 02.08.01):** only bookings in the Active tab (`requested` or `confirmed`, before checkout). The dialog takes an optional reason (at most
   `Reservation.MAX_REJECTION_REASON_LENGTH`). One transaction sets the booking to `rejected` and writes an
   `ownerNotices` entry to that entrant, so it appears in their S07 inbox; the booking then moves to
   Cancelled. The app never writes `bookedNights` (the rules make them worker-only). The deployed rules do

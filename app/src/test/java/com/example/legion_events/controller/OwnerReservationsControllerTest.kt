@@ -56,10 +56,13 @@ class OwnerReservationsControllerTest {
             entry("cancelled", at + day, at + 2 * day, Reservation.STATUS_CANCELLED, updated = at - 100),
             entry("rejected", at + day, at + 2 * day, Reservation.STATUS_REJECTED, updated = at - 10),
             entry("pending", at + day, at + 2 * day, "pending"),
+            entry("requested", at + 3 * day, at + 4 * day, Reservation.STATUS_REQUESTED),
+            entry("stale-request", at - 5 * day, at - 4 * day, Reservation.STATUS_REQUESTED),
         )
         val controller = loaded()
         val state = controller.state.value
-        assertEquals(listOf("ongoing", "later"), state.active.ids())
+        // New entrant bookings start as requested and must show before anything confirms them.
+        assertEquals(listOf("ongoing", "requested", "later"), state.active.ids())
         assertEquals(listOf("recent", "old"), state.past.ids())
         assertEquals(listOf("rejected", "cancelled"), state.cancelled.ids())
         assertEquals(state.active, state.visibleEntries())
@@ -68,14 +71,19 @@ class OwnerReservationsControllerTest {
         assertEquals(1, repository.reads)
     }
 
-    @Test fun calendarMarksOnlyConfirmedNightsAndOpensOnTheNextStay() = runTest(dispatcher) {
+    @Test fun calendarMarksConfirmedNightsOutlinesRequestedOnesAndOpensOnTheNextStay() = runTest(dispatcher) {
         repository.bookings["creek"] = listOf(
             entry("next", at + 30 * day, at + 32 * day), entry("past", at - 3 * day, at - 2 * day),
             entry("rejected", at + 1 * day, at + 2 * day, Reservation.STATUS_REJECTED),
+            entry("asked", at + 40 * day, at + 42 * day, Reservation.STATUS_REQUESTED),
+            entry("overlap", at + 31 * day, at + 33 * day, Reservation.STATUS_REQUESTED),
+            entry("stale-request", at - 3 * day, at - 2 * day, Reservation.STATUS_REQUESTED),
         )
         val controller = loaded()
         val state = controller.state.value
         assertEquals(setOf("2027-08-03", "2027-08-04", "2027-07-01"), state.bookedNights)
+        // A confirmed night is only shown as booked; finished requests are not shown.
+        assertEquals(setOf("2027-08-05", "2027-08-13", "2027-08-14"), state.requestedNights)
         assertEquals("2027-08", state.month)
         controller.showMonth(-1)
         assertEquals("2027-07", controller.state.value.month)
@@ -187,6 +195,31 @@ class OwnerReservationsControllerTest {
         assertTrue(controller.state.value.bookedNights.isEmpty())
     }
 
+    @Test fun requestedBookingsCanBeRejected() = runTest(dispatcher) {
+        val asked = entry("asked", at + day, at + 2 * day, Reservation.STATUS_REQUESTED, campsite = "creek")
+        repository.bookings["creek"] = listOf(asked)
+        val controller = loaded()
+        controller.requestReject(asked)
+        controller.confirmReject()
+        runCurrent()
+        assertEquals(listOf("asked" to null), repository.rejected)
+        assertEquals(listOf("asked"), controller.state.value.cancelled.ids())
+        assertTrue(controller.state.value.requestedNights.isEmpty())
+    }
+
+    @Test fun refreshClearsTheRejectionConfirmation() = runTest(dispatcher) {
+        val stay = entry("stay", at + day, at + 2 * day, campsite = "creek")
+        repository.bookings["creek"] = listOf(stay)
+        val controller = loaded()
+        controller.requestReject(stay)
+        controller.confirmReject()
+        runCurrent()
+        assertNotNull(controller.state.value.result)
+        controller.refresh()
+        runCurrent()
+        assertNull(controller.state.value.result)
+    }
+
     @Test fun aBlankReasonIsSentAsNoReasonAndLongReasonsAreCut() = runTest(dispatcher) {
         val stay = entry("stay", at + day, at + 2 * day, campsite = "creek")
         repository.bookings["creek"] = listOf(stay)
@@ -232,6 +265,10 @@ class OwnerReservationsControllerTest {
         assertEquals("Only active reservations can be rejected.", draft.error)
         assertEquals("Closed", draft.reason)
         assertFalse(draft.inProgress)
+        repository.reject = { throw SecurityException("This reservation is not at your campsite.") }
+        controller.confirmReject()
+        runCurrent()
+        assertEquals("This reservation is not at your campsite.", controller.state.value.rejecting?.error)
         repository.reject = { throw java.io.IOException("offline") }
         controller.confirmReject()
         runCurrent()

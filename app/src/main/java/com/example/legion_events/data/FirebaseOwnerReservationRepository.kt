@@ -24,25 +24,23 @@ import kotlinx.coroutines.tasks.await
  * @property auth Supplies the owner's identity; callers cannot choose another owner's ID.
  * @property firestore The app's Firestore database.
  * @property now Clock that decides whether a booking is still active; tests supply a fixed clock.
- * @property log Writes diagnostics, such as skipped bookings, to Logcat; tests supply a recorder.
+ * @property log Writes debug diagnostics (skipped malformed bookings, denied rejections) to Logcat;
+ *   tests supply a recorder.
  */
 class FirebaseOwnerReservationRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val now: () -> Timestamp = { Timestamp.now() },
-    private val log: (String) -> Unit = { Log.w(TAG, it) },
+    private val log: (String) -> Unit = { Log.d(TAG, it) },
 ) : OwnerReservationRepository {
     /** Queries by the owner's UID and campsite; entrant profiles are private, so none are read. */
     override suspend fun getCampsiteReservations(campsiteId: String): List<Reservation> {
         requireSingleId(campsiteId, "campsite")
         val ownerId = currentUserId()
-        val snapshot = firestore.collection(RESERVATIONS).whereEqualTo("ownerId", ownerId)
-            .whereEqualTo("campsiteId", campsiteId).get().await()
+        val documents = firestore.collection(RESERVATIONS).whereEqualTo("ownerId", ownerId)
+            .whereEqualTo("campsiteId", campsiteId).get().await().documents
         checkAccount(ownerId)
-        val source = if (snapshot.metadata?.isFromCache == true) "cache" else "server"
-        log("Campsite $campsiteId: ${snapshot.documents.size} booking(s) from $source " +
-            snapshot.documents.map { it.id })
-        val reservations = snapshot.documents.mapNotNull { document ->
+        val reservations = documents.mapNotNull { document ->
             try {
                 document.toReservation()
             } catch (error: IllegalStateException) {
@@ -51,6 +49,8 @@ class FirebaseOwnerReservationRepository(
                 null
             }
         }
+        // The query already filters on both fields; this re-check is a safety net so a booking from
+        // another owner or campsite (e.g. a stale cache entry) can never reach the screen.
         return reservations.filter { it.ownerId == ownerId && it.campsiteId == campsiteId }
     }
 
@@ -74,7 +74,7 @@ class FirebaseOwnerReservationRepository(
                     throw SecurityException("This reservation is not at your campsite.")
                 }
                 val reservation = document.toReservation()
-                check(reservation.isActive(now())) { "Only active reservations can be rejected." }
+                check(reservation.isUpcomingForOwner(now())) { "Only active reservations can be rejected." }
                 val campsite = transaction.get(firestore.collection(CAMPSITES).document(reservation.campsiteId))
                 transaction.update(reference, mapOf(
                     "status" to Reservation.STATUS_REJECTED,
@@ -92,6 +92,9 @@ class FirebaseOwnerReservationRepository(
             }.await()
         } catch (error: FirebaseFirestoreException) {
             if (error.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw error
+            // Most likely the missing owner update rule, but a denied notice write or campsite read
+            // shows the same message, so keep the original error for diagnosis.
+            log("Rejecting reservation $reservationId was denied: ${error.message}")
             throw IllegalStateException("Rejecting reservations is not enabled for owners yet.", error)
         }
         checkAccount(ownerId)

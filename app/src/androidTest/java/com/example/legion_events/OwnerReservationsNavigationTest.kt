@@ -9,6 +9,7 @@
  */
 package com.example.legion_events
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -85,6 +86,17 @@ class OwnerReservationsNavigationTest {
     }
 
     @Test
+    fun requestedBookingsAppearInActiveWithABadgeAndCanBeRejected() {
+        bookings.stored = mutableListOf(entry("ava", today + day, today + 2 * day, Reservation.STATUS_REQUESTED))
+        openReservations()
+        card("ava").performScrollTo().assertIsDisplayed()
+        // The card's status badge and the calendar legend for the requested night.
+        compose.onAllNodesWithText("Requested").assertCountEquals(2)
+        compose.onNodeWithText("0 nights booked").assertIsDisplayed()
+        compose.onNodeWithText("Reject").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun calendarMarksBookedNightsAndMovesBetweenMonths() {
         bookings.stored = mutableListOf(entry("alex", today + day, today + 2 * day))
         openReservations()
@@ -98,7 +110,7 @@ class OwnerReservationsNavigationTest {
     }
 
     @Test
-    fun viewBookingShowsEntrantDatesGuestsAndRules() {
+    fun viewBookingShowsReservationDatesGuestsAndRules() {
         bookings.stored = mutableListOf(entry("alex", today + day, today + 3 * day))
         openReservations()
         compose.onNodeWithText("View booking").performScrollTo().performClick()

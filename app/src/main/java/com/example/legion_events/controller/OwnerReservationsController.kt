@@ -47,10 +47,12 @@ data class RejectionDraft(
  * @property error Why they could not be loaded, or null.
  * @property campsites The owner's campsites for the dropdown, sorted by name.
  * @property selectedCampsiteId The campsite whose bookings are shown, or null when the owner has none.
- * @property active Upcoming and ongoing confirmed bookings, by check-in.
+ * @property active Upcoming and ongoing requested and confirmed bookings, by check-in.
  * @property past Finished confirmed bookings, latest checkout first.
  * @property cancelled Cancelled and rejected bookings, most recently changed first.
  * @property bookedNights `YYYY-MM-DD` nights held by confirmed bookings, for the calendar.
+ * @property requestedNights `YYYY-MM-DD` nights asked for by requested bookings that are not also
+ *   in [bookedNights], shown differently on the calendar.
  * @property month The `YYYY-MM` month shown in the calendar.
  * @property selectedTab Which booking list is shown.
  * @property viewing The booking whose details dialog is open, or null.
@@ -66,6 +68,7 @@ data class OwnerReservationsState(
     val past: List<Reservation> = emptyList(),
     val cancelled: List<Reservation> = emptyList(),
     val bookedNights: Set<String> = emptySet(),
+    val requestedNights: Set<String> = emptySet(),
     val month: String = "",
     val selectedTab: OwnerReservationTab = OwnerReservationTab.ACTIVE,
     val viewing: Reservation? = null,
@@ -109,6 +112,8 @@ class OwnerReservationsController(
 
     /** Reloads the campsites and the selected campsite's bookings, keeping the campsite, tab, and month. */
     fun refresh() = load {
+        // A refresh (including on resume) starts fresh, so an old confirmation does not linger.
+        mutableState.value = state.value.copy(result = null)
         val campsites = loadCampsites().sortedBy { it.name.lowercase() }
         val selected = state.value.selectedCampsiteId?.takeIf { id -> campsites.any { it.id == id } }
             ?: campsites.firstOrNull()?.id
@@ -128,7 +133,7 @@ class OwnerReservationsController(
         savedState.remove<String>(MONTH_KEY)
         choose(campsiteId)
         mutableState.value = state.value.copy(month = "", active = emptyList(), past = emptyList(),
-            cancelled = emptyList(), bookedNights = emptySet(), result = null)
+            cancelled = emptyList(), bookedNights = emptySet(), requestedNights = emptySet(), result = null)
         load { loadBookings(campsiteId) }
     }
 
@@ -152,7 +157,8 @@ class OwnerReservationsController(
     }
 
     /**
-     * Opens a booking's details (entrant, dates, guests, rules accepted).
+     * Opens a booking's details (reservation number, dates, guests, total, rules accepted).
+     * Entrant profiles are private, so the entrant is not named.
      * @param reservation The booking to show.
      */
     fun viewBooking(reservation: Reservation) {
@@ -165,11 +171,12 @@ class OwnerReservationsController(
     }
 
     /**
-     * Opens the rejection dialog for an active booking; other bookings cannot be rejected.
+     * Opens the rejection dialog for an upcoming requested or confirmed booking; other bookings
+     * cannot be rejected.
      * @param reservation The booking to reject.
      */
     fun requestReject(reservation: Reservation) {
-        if (!reservation.isActive(now())) return
+        if (!reservation.isUpcomingForOwner(now())) return
         mutableState.value = state.value.copy(viewing = null, rejecting = RejectionDraft(reservation), result = null)
     }
 
@@ -204,12 +211,24 @@ class OwnerReservationsController(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: IllegalStateException) {
-                mutableState.value = state.value.copy(rejecting = draft.copy(inProgress = false,
-                    error = error.message ?: REJECT_FAILED))
+                rejectFailed(draft, error)
+            } catch (error: SecurityException) {
+                // "Not your campsite" and "account changed" are reasons, not connection problems.
+                rejectFailed(draft, error)
             } catch (_: Exception) {
                 mutableState.value = state.value.copy(rejecting = draft.copy(inProgress = false, error = REJECT_FAILED))
             }
         }
+    }
+
+    /**
+     * Shows why a rejection failed in its dialog.
+     * @param draft The rejection that failed.
+     * @param error The repository's error; its message is written for the owner.
+     */
+    private fun rejectFailed(draft: RejectionDraft, error: Exception) {
+        mutableState.value = state.value.copy(rejecting = draft.copy(inProgress = false,
+            error = error.message ?: REJECT_FAILED))
     }
 
     /**
@@ -247,8 +266,12 @@ class OwnerReservationsController(
         val entries = if (campsiteId == null) emptyList() else repository.getCampsiteReservations(campsiteId)
         if (campsiteId != state.value.selectedCampsiteId) return
         val at = now()
-        val confirmed = entries.filter { it.status == Reservation.STATUS_CONFIRMED }
-        val active = entries.filter { it.isActive(at) }
+        val booked = entries.filter { it.status == Reservation.STATUS_CONFIRMED }
+            .flatMap { it.bookedNights() }.toSet()
+        val requested = entries.filter { it.status == Reservation.STATUS_REQUESTED && it.endDate > at }
+            .flatMap { it.bookedNights() }.toSet() - booked
+        // Requested bookings are listed with confirmed ones, so new bookings show before confirmation.
+        val active = entries.filter { it.isUpcomingForOwner(at) }
             .sortedWith(compareBy<Reservation> { it.startDate }.thenBy { it.id })
         // Open on the next booked stay so the owner sees booked nights right away.
         val month = state.value.month.ifEmpty { monthOf(active.firstOrNull()?.startDate ?: at) }
@@ -260,7 +283,8 @@ class OwnerReservationsController(
                 .sortedWith(compareByDescending<Reservation> { it.endDate }.thenBy { it.id }),
             cancelled = entries.filter { it.isCancelled() }
                 .sortedWith(compareByDescending<Reservation> { it.updatedAt }.thenBy { it.id }),
-            bookedNights = confirmed.flatMap { it.bookedNights() }.toSet(),
+            bookedNights = booked,
+            requestedNights = requested,
             month = month,
         )
     }

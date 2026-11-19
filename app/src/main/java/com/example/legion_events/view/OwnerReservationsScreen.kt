@@ -10,6 +10,7 @@ package com.example.legion_events.view
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -181,8 +182,9 @@ private fun CampsiteMenu(state: OwnerReservationsState, onSelect: (String) -> Un
 }
 
 /**
- * A month grid that marks nights held by confirmed bookings (US 02.06.01).
- * @param state Supplies the month and booked nights.
+ * A month grid that marks nights held by confirmed bookings and outlines nights asked for by
+ * requested bookings (US 02.06.01).
+ * @param state Supplies the month and the booked and requested nights.
  * @param onMonth Moves the calendar by the given number of months.
  */
 @Composable
@@ -214,13 +216,18 @@ private fun BookingCalendar(state: OwnerReservationsState, onMonth: (Int) -> Uni
             }
             cells.chunked(7).forEach { week ->
                 Row {
-                    week.forEach { night -> DayCell(night, night != null && night in state.bookedNights, Modifier.weight(1f)) }
+                    week.forEach { night -> DayCell(night, nightStatus(state, night), Modifier.weight(1f)) }
                     repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                 Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.errorContainer, CircleShape))
                 Text("Booked", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+                if (state.requestedNights.isNotEmpty()) {
+                    Box(Modifier.padding(start = 12.dp).size(10.dp)
+                        .border(1.5.dp, MaterialTheme.colorScheme.error, CircleShape))
+                    Text("Requested", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+                }
                 Spacer(Modifier.weight(1f))
                 Text("$bookedThisMonth ${if (bookedThisMonth == 1) "night" else "nights"} booked",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -229,25 +236,51 @@ private fun BookingCalendar(state: OwnerReservationsState, onMonth: (Int) -> Uni
     }
 }
 
+/** How a calendar night is held. */
+private enum class NightStatus { FREE, REQUESTED, BOOKED }
+
 /**
- * One calendar day, circled when a confirmed booking holds that night.
+ * Looks up how a night is held; a confirmed booking wins over a request.
+ * @param state Supplies the booked and requested nights.
  * @param night The `YYYY-MM-DD` night, or null for a blank cell.
- * @param booked Whether the night is booked.
+ * @return The night's status.
+ */
+private fun nightStatus(state: OwnerReservationsState, night: String?): NightStatus = when (night) {
+    null -> NightStatus.FREE
+    in state.bookedNights -> NightStatus.BOOKED
+    in state.requestedNights -> NightStatus.REQUESTED
+    else -> NightStatus.FREE
+}
+
+/**
+ * One calendar day, filled when a confirmed booking holds that night and outlined when a
+ * requested booking asks for it.
+ * @param night The `YYYY-MM-DD` night, or null for a blank cell.
+ * @param status How the night is held.
  * @param modifier Gives the cell its share of the row.
  */
 @Composable
-private fun DayCell(night: String?, booked: Boolean, modifier: Modifier) {
+private fun DayCell(night: String?, status: NightStatus, modifier: Modifier) {
     Box(modifier.aspectRatio(1f).padding(2.dp), contentAlignment = Alignment.Center) {
         if (night == null) return@Box
         val day = night.takeLast(2).trimStart('0')
         val colors = MaterialTheme.colorScheme
+        val (fill, text, label) = when (status) {
+            NightStatus.BOOKED -> Triple(colors.errorContainer, colors.onErrorContainer, "${nightText(night)}, booked")
+            NightStatus.REQUESTED -> Triple(colors.surface, colors.onSurface, "${nightText(night)}, requested")
+            NightStatus.FREE -> Triple(colors.surface, colors.onSurface, nightText(night))
+        }
+        val outline = if (status == NightStatus.REQUESTED) {
+            Modifier.border(1.5.dp, colors.error, CircleShape)
+        } else {
+            Modifier
+        }
         Box(
-            Modifier.fillMaxSize().background(if (booked) colors.errorContainer else colors.surface, CircleShape)
-                .clearAndSetSemantics { contentDescription = if (booked) "${nightText(night)}, booked" else nightText(night) },
+            Modifier.fillMaxSize().background(fill, CircleShape).then(outline)
+                .clearAndSetSemantics { contentDescription = label },
             contentAlignment = Alignment.Center,
         ) {
-            Text(day, style = MaterialTheme.typography.bodySmall,
-                color = if (booked) colors.onErrorContainer else colors.onSurface)
+            Text(day, style = MaterialTheme.typography.bodySmall, color = text)
         }
     }
 }
@@ -275,7 +308,7 @@ private fun EmptyList(tab: OwnerReservationTab) {
     Column {
         Text("No ${tabLabel(tab).lowercase()} reservations", style = MaterialTheme.typography.titleMedium)
         Text(when (tab) {
-            OwnerReservationTab.ACTIVE -> "Upcoming and ongoing confirmed stays at this campsite appear here."
+            OwnerReservationTab.ACTIVE -> "Upcoming and ongoing requested and confirmed stays at this campsite appear here."
             OwnerReservationTab.PAST -> "Confirmed stays appear here after checkout."
             OwnerReservationTab.CANCELLED -> "Cancelled and rejected bookings appear here."
         }, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -285,7 +318,7 @@ private fun EmptyList(tab: OwnerReservationTab) {
 /**
  * One booking with its status, dates, and actions.
  * @param booking The booking.
- * @param canReject Whether to offer Reject (active bookings only).
+ * @param canReject Whether to offer Reject (Active tab only: requested or confirmed, before checkout).
  * @param onView Opens the details.
  * @param onReject Opens the rejection dialog.
  */
@@ -304,7 +337,7 @@ private fun BookingCard(booking: Reservation, canReject: Boolean, onView: () -> 
             }
             Text("${guestText(booking.guestCount)} · Reservation ${booking.id}", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (booking.cancellationRequested && booking.status == Reservation.STATUS_CONFIRMED) {
+            if (booking.cancellationRequested && !booking.isCancelled()) {
                 Text("Cancellation requested", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error)
             }
@@ -329,10 +362,10 @@ private fun BookingCard(booking: Reservation, canReject: Boolean, onView: () -> 
 @Composable
 private fun StatusBadge(status: String) {
     val colors = MaterialTheme.colorScheme
-    val (container, content) = if (status == Reservation.STATUS_CONFIRMED) {
-        colors.primaryContainer to colors.onPrimaryContainer
-    } else {
-        colors.errorContainer to colors.onErrorContainer
+    val (container, content) = when (status) {
+        Reservation.STATUS_CONFIRMED -> colors.primaryContainer to colors.onPrimaryContainer
+        Reservation.STATUS_REQUESTED -> colors.tertiaryContainer to colors.onTertiaryContainer
+        else -> colors.errorContainer to colors.onErrorContainer
     }
     Text(reservationStatusText(status), color = content, style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Medium,

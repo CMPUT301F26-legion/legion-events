@@ -194,10 +194,13 @@ S17 lists bookings with `ownerId == uid` and `campsiteId == <selected campsite>`
 reservation read rule (`mine(resource.data.ownerId)`) allows. Two equality filters need no composite
 index. Malformed records are left out instead of hiding the rest. Entrant profiles are not read, because
 `users/{uid}` is readable only by its owner or an admin. Bookings created by entrants start as
-`requested`; S17's Active and Past tabs, like S10's, show only `confirmed` stays.
+`requested`, so unlike S10, S17's Active tab lists `requested` and `confirmed` bookings with
+`endDate > now`, each with its status badge. The calendar fills nights held by `confirmed` bookings and
+outlines nights asked for by upcoming `requested` ones. Past lists only `confirmed` stays after
+checkout; a `requested` booking whose checkout passes without confirmation is not listed.
 
 Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
-`confirmed` with `endDate` in the future, then:
+`requested` or `confirmed` with `endDate` in the future, then:
 
 | Write | Fields |
 | --- | --- |
@@ -217,7 +220,7 @@ reservation `allow update` with an owner branch:
       allow update: if (mine(resource.data.userId) && resource.data.status in ['requested','confirmed']
           && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
           && request.resource.data.cancellationRequested == true && updatedNow())
-        || (mine(resource.data.ownerId) && resource.data.status == 'confirmed'
+        || (mine(resource.data.ownerId) && resource.data.status in ['requested','confirmed']
           && request.time < resource.data.endDate && changedOnly(['status','updatedAt'])
           && request.resource.data.status == 'rejected' && updatedNow());
 ```
