@@ -1,7 +1,7 @@
 /*
  * Reservation.kt
  *
- * Purpose: Represent saved bookings and determine active and past stays (US 01.06.01/02).
+ * Purpose: Represent saved bookings, stay periods, and cancellation eligibility.
  * Role: Model in MVC; keeps reservation fields and the checkout boundary.
  * Outstanding issues: None.
  */
@@ -50,8 +50,16 @@ data class Reservation(
     /** Returns true for confirmed stays at or after checkout, without changing their saved status. */
     fun isPast(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate <= at
 
+    /** Allows a new cancellation request for an upcoming or ongoing stay, before checkout. */
+    fun canRequestCancellation(at: Timestamp): Boolean = isActive(at) && !cancellationRequested
+
+    /** Confirms that the worker has completed cancellation rather than merely received a request. */
+    fun cancellationCompleted(): Boolean = status == STATUS_CANCELLED && !cancellationRequested
+
     companion object {
         /** Stored status of an accepted booking that has not been cancelled or rejected. */
         const val STATUS_CONFIRMED = "confirmed"
+        /** Stored only by the trusted worker after releasing the booking's occupied nights. */
+        const val STATUS_CANCELLED = "cancelled"
     }
 }

@@ -63,4 +63,17 @@ class ReservationCsvTest {
             assertThrows(IllegalArgumentException::class.java) { reservation.copy(status = status).confirmationCsv() }
         }
     }
+
+    @Test fun cancellationReceiptsRequireWorkerCompletionAndItsServerTimestamp() {
+        val cancelled = reservation.copy(status = "cancelled", updatedAt = Timestamp(300, 0))
+        val csv = cancelled.cancellationCsv("Pine, \"Ridge\"", "Québec")
+        assertTrue(csv.contains("\"cancelledAtUtc\""))
+        assertTrue(csv.contains("\"65.50\",\"CAD\",\"cancelled\""))
+        assertTrue(csv.endsWith("\"1970-01-01T00:05:00.000Z\"\r\n"))
+        assertTrue(csv.contains("\"Pine, \"\"Ridge\"\"\""))
+        for (invalid in listOf(reservation, reservation.copy(cancellationRequested = true),
+            cancelled.copy(cancellationRequested = true), cancelled.copy(updatedAt = null))) {
+            assertThrows(IllegalArgumentException::class.java) { invalid.cancellationCsv() }
+        }
+    }
 }

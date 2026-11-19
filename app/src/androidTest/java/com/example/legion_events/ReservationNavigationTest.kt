@@ -9,6 +9,8 @@ package com.example.legion_events
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.NavHostController
@@ -189,6 +191,62 @@ class ReservationNavigationTest {
         compose.onNodeWithText("View reservation").assertDoesNotExist()
     }
 
+    @Test fun cancellationRequiresConsentWaitsForProcessingAndRemainsAccessibleAfterReturning() {
+        val repository = FakeReservations()
+        open(repository)
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("View reservation")
+        compose.onNodeWithText("View reservation").performClick()
+        waitFor("Total: $65.50 CAD")
+        compose.onNodeWithText("Cancel reservation").performScrollTo().performClick()
+        compose.onNodeWithText("Keep reservation").performClick()
+        compose.runOnIdle { assertEquals(0, repository.requests) }
+        compose.onNodeWithText("Cancel reservation").performScrollTo().performClick()
+        compose.onNodeWithText("Request cancellation").performClick()
+        waitFor("Cancellation requested. Waiting for processing; your dates remain reserved.")
+        compose.onNodeWithText("Download cancellation CSV").assertDoesNotExist()
+        restoration.emulateSavedInstanceStateRestore()
+        waitFor("Cancellation requested. Waiting for processing; your dates remain reserved.")
+        compose.runOnIdle {
+            assertEquals(1, repository.requests)
+            repository.entries = listOf(upcoming.copy(reservation = upcoming.reservation.copy(
+                status = "cancelled", cancellationRequested = false, updatedAt = Timestamp.now())))
+        }
+        compose.waitUntil(8_000) {
+            compose.onAllNodesWithText("Reservation cancelled. Your dates have been released.").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Download cancellation CSV").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Cancel reservation").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Back").performClick()
+        waitFor("No active reservations")
+        compose.onNodeWithText("Cancelled").performClick()
+        waitFor("View reservation")
+        compose.onNode(hasText("Cancelled") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertIsSelected()
+        compose.onNodeWithText("View reservation").performClick()
+        waitFor("Reservation cancelled. Your dates have been released.")
+        compose.runOnIdle { assertEquals(1, repository.requests) }
+    }
+
+    @Test fun cancellationFailureShowsRecoveryAndDoesNotClaimCompletion() {
+        val repository = FakeReservations().apply { failCancellation = true }
+        open(repository, dark = true)
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("View reservation")
+        compose.onNodeWithText("View reservation").performClick()
+        waitFor("Total: $65.50 CAD")
+        compose.onNodeWithText("Cancel reservation").performScrollTo().performClick()
+        compose.onNodeWithText("Request cancellation").performClick()
+        waitFor("Could not confirm your cancellation request. Refresh to check, then try again.")
+        compose.onNodeWithText("Download cancellation CSV").assertDoesNotExist()
+        compose.onNodeWithText("Refresh").performClick()
+        waitFor("Total: $65.50 CAD")
+        compose.runOnIdle { repository.failCancellation = false }
+        compose.onNodeWithText("Cancel reservation").performScrollTo().performClick()
+        compose.onNodeWithText("Request cancellation").performClick()
+        waitFor("Cancellation requested. Waiting for processing; your dates remain reserved.")
+        compose.runOnIdle { assertEquals(2, repository.requests) }
+    }
+
     /** Starts the shared router with a synthetic account and empty campsite search results. */
     private fun open(repository: ReservationRepository, dark: Boolean = false) {
         compose.runOnUiThread {
@@ -224,6 +282,16 @@ class ReservationNavigationTest {
         var failDetail = false
         var detailReads = 0
         var listReads = 0
+        var requests = 0
+        var failCancellation = false
+        override suspend fun requestCancellation(reservationId: String): ReservationEntry {
+            requests++
+            if (failCancellation) error("Unavailable")
+            val saved = entries.first { it.reservation.id == reservationId }
+            val pending = saved.copy(reservation = saved.reservation.copy(cancellationRequested = true))
+            entries = entries.map { if (it.reservation.id == reservationId) pending else it }
+            return pending
+        }
         override suspend fun getMyReservations(): List<ReservationEntry> {
             listReads++
             return load()

@@ -1,4 +1,10 @@
-/* S07 presents saved lottery results and links winners to their booking offers. */
+/*
+ * InboxScreen.kt
+ *
+ * Purpose: Show lottery results, completed cancellations, and owner notices on S07.
+ * Role: View in MVC; renders Inbox state and forwards offer and reservation actions.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.view
 
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.InboxState
 import com.example.legion_events.model.LotteryNotification
 import com.example.legion_events.model.OwnerNotice
+import com.example.legion_events.model.CancellationNotification
 import java.text.DateFormat
 
 /** Shows loading, retry, empty, or populated inbox state with optional push permission and offer actions. */
@@ -31,6 +38,7 @@ fun InboxScreen(
     onRetry: () -> Unit,
     onOffer: (String) -> Unit,
     onEnablePush: (() -> Unit)? = null,
+    onReservation: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -39,7 +47,7 @@ fun InboxScreen(
     ) {
         item {
             Text("Inbox", style = MaterialTheme.typography.headlineMedium)
-            Text("Your campsite lottery results and owner notices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Your lottery results, cancellation confirmations, and owner notices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (onEnablePush != null) {
             item { OutlinedButton(onClick = onEnablePush) { Text("Allow push notifications") } }
@@ -53,13 +61,29 @@ fun InboxScreen(
             is InboxState.Loaded -> {
                 if (state.notifications.isEmpty()) item { Text("No lottery results yet.") }
                 items(state.notifications, key = { it.id }) { notification ->
-                    LotteryResultCard(notification, onOffer)
+                    when (notification) {
+                        is LotteryNotification -> LotteryResultCard(notification, onOffer)
+                        is CancellationNotification -> CancellationCard(notification, onReservation)
+                    }
                 }
                 if (state.notices.isNotEmpty()) {
                     item { Text("Notices from owners", style = MaterialTheme.typography.titleMedium) }
                     items(state.notices, key = { "notice-" + it.id }) { notice -> OwnerNoticeCard(notice) }
                 }
             }
+        }
+    }
+}
+
+/** Opens a worker-confirmed cancellation through the shared router for its saved receipt. */
+@Composable
+private fun CancellationCard(notification: CancellationNotification, onReservation: (String) -> Unit) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Reservation cancelled", style = MaterialTheme.typography.titleMedium)
+            Text("Your reservation has been cancelled and its dates released.")
+            Text("Reservation ${notification.reservationId}", style = MaterialTheme.typography.bodySmall)
+            Button(onClick = { onReservation(notification.reservationId) }) { Text("View cancellation") }
         }
     }
 }

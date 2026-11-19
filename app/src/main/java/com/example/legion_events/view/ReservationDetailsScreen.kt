@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.ReservationDetailsState
 import com.example.legion_events.model.Reservation
+import com.google.firebase.Timestamp
 
 /**
  * S10b: shows an owned reservation's saved details.
@@ -24,12 +25,16 @@ import com.example.legion_events.model.Reservation
  * @param onBack Returns to the existing reservations list.
  * @param onRetry Reloads after a read failure.
  * @param onCampsite Opens the campsite through the shared router.
- * @param onConfirmation Opens S09 for this confirmed booking.
- * @param onDownload Opens Android's Save dialog for the confirmation CSV.
+ * @param onConfirmation Opens S09 for this confirmed booking or completed cancellation.
+ * @param onDownload Opens Android's Save dialog for the current receipt.
+ * @param onCancel Requests the cancellation dialog.
+ * @param onDismissCancellation Dismisses the dialog without submitting.
+ * @param onConfirmCancellation Submits the reviewed cancellation request.
  */
 @Composable
 fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit, onRetry: () -> Unit,
-    onCampsite: (String) -> Unit, onConfirmation: () -> Unit, onDownload: () -> Unit) {
+    onCampsite: (String) -> Unit, onConfirmation: () -> Unit, onDownload: () -> Unit,
+    onCancel: () -> Unit, onDismissCancellation: () -> Unit, onConfirmCancellation: () -> Unit) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -37,6 +42,7 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
                 BackArrow(onBack)
                 Text("Reservation details", style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onRetry, enabled = !state.loading && !state.exporting && !state.requestingCancellation) { Text("Refresh") }
             }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -62,7 +68,9 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
                         item {
                             Text("Reservation ${reservation.id}", style = MaterialTheme.typography.titleMedium)
                             Text("Status: ${reservationStatusText(reservation.status)}")
-                            if (reservation.cancellationRequested) Text("Cancellation requested")
+                            if (reservation.cancellationRequested) Text("Cancellation requested. Waiting for processing; your dates remain reserved.")
+                            if (reservation.cancellationCompleted()) Text("Reservation cancelled. Your dates have been released.")
+                            state.cancellationNotice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         }
                         item {
                             Text("Check-in: ${reservationDateText(reservation.startDate)}")
@@ -75,10 +83,20 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
                             Text(if (reservation.rulesAccepted) "Campsite rules accepted" else "Campsite rules not accepted")
                         }
                         item { OutlinedButton(onClick = { onCampsite(reservation.campsiteId) }) { Text("View campsite") } }
-                        if (reservation.status == Reservation.STATUS_CONFIRMED) {
+                        if (reservation.status == Reservation.STATUS_CONFIRMED || reservation.cancellationCompleted()) {
                             item {
-                                OutlinedButton(onClick = onConfirmation, modifier = Modifier.fillMaxWidth()) { Text("View confirmation") }
+                                OutlinedButton(onClick = onConfirmation, modifier = Modifier.fillMaxWidth()) {
+                                    Text(if (reservation.cancellationCompleted()) "View cancellation confirmation" else "View confirmation")
+                                }
                                 ReservationDownloadButton(state, onDownload)
+                            }
+                        }
+                        if (reservation.canRequestCancellation(Timestamp.now()) || state.requestingCancellation) {
+                            item {
+                                OutlinedButton(onClick = onCancel, enabled = !state.requestingCancellation && !state.exporting,
+                                    modifier = Modifier.fillMaxWidth()) {
+                                    Text(if (state.requestingCancellation) "Requesting cancellation…" else "Cancel reservation")
+                                }
                             }
                         }
                     }
@@ -86,4 +104,11 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
             }
         }
     }
+    if (state.confirmingCancellation) AlertDialog(
+        onDismissRequest = onDismissCancellation,
+        title = { Text("Cancel this reservation?") },
+        text = { Text("This submits a cancellation request. Your reservation stays confirmed until processing completes.") },
+        confirmButton = { TextButton(onClick = onConfirmCancellation) { Text("Request cancellation") } },
+        dismissButton = { TextButton(onClick = onDismissCancellation) { Text("Keep reservation") } },
+    )
 }

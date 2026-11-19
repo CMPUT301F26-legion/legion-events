@@ -1,4 +1,10 @@
-/* Models the lottery result saved in an entrant's inbox. */
+/*
+ * LotteryNotification.kt
+ *
+ * Purpose: Represent a saved win or loss in the shared entrant Inbox.
+ * Role: Model in MVC; preserves lottery result copy and its optional offer ID.
+ * Outstanding issues: None.
+ */
 package com.example.legion_events.model
 
 import androidx.annotation.StringRes
@@ -24,8 +30,8 @@ enum class LotteryResult(val storedType: String, @StringRes val title: Int, @Str
  * @property createdAt Firestore timestamp for the draw result.
  */
 data class LotteryNotification(
-    val id: String,
+    override val id: String,
     val result: LotteryResult,
     val offerId: String?,
-    val createdAt: Timestamp,
-)
+    override val createdAt: Timestamp,
+) : InboxNotification

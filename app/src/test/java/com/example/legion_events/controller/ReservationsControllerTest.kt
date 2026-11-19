@@ -160,6 +160,18 @@ class ReservationsControllerTest {
         assertEquals(1, reads)
     }
 
+    @Test fun completedCancellationsRemainAccessibleInTheirOwnTabNewestFirst() = runTest(dispatcher) {
+        val entries = listOf(entry("pending", at - 1, at + 10).let { it.copy(reservation = it.reservation.copy(cancellationRequested = true)) },
+            entry("old", at - 20, at - 10, "cancelled").let { it.copy(reservation = it.reservation.copy(updatedAt = Timestamp(at - 5, 0))) },
+            entry("new", at - 20, at - 10, "cancelled").let { it.copy(reservation = it.reservation.copy(updatedAt = Timestamp(at - 1, 0))) })
+        val controller = controller(FakeReservations { entries })
+        controller.refresh(); runCurrent()
+        controller.selectTab(ReservationTab.CANCELLED)
+        assertEquals(listOf("new", "old"), controller.state.value.cancelledEntries.map { it.reservation.id })
+        assertEquals(listOf("pending"), controller.state.value.entries.map { it.reservation.id })
+        assertTrue(controller.state.value.pastEntries.isEmpty())
+    }
+
     @Test fun refreshAndLeavingTheScreenCancelPreviousRequests() = runTest(dispatcher) {
         var active = 0
         val controller = controller(FakeReservations {
@@ -189,6 +201,7 @@ class ReservationsControllerTest {
 
     /** Supplies list responses without contacting Firebase. */
     private class FakeReservations(private val load: suspend () -> List<ReservationEntry>) : ReservationRepository {
+        override suspend fun requestCancellation(reservationId: String): ReservationEntry = error("Unexpected cancellation request")
         override suspend fun getMyReservations() = load()
         override suspend fun getReservation(reservationId: String): ReservationEntry? = error("Unexpected detail read")
     }
