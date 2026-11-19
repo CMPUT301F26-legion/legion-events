@@ -744,6 +744,11 @@ fun AppNavigation(
                         initializer { OwnerNoticesController(lotteries, owners::getMyCampsites, notices) }
                     })
                     val noticeState by notes.state.collectAsStateWithLifecycle()
+                    // Reload on every return so new lotteries and entrants appear.
+                    LifecycleResumeEffect(notes) {
+                        notes.refresh()
+                        onPauseOrDispose {}
+                    }
                     OwnerNoticesScreen(noticeState, notes::selectLottery, notes::setMessage, notes::send, notes::refresh)
                 }
             }
@@ -844,7 +849,8 @@ fun AppNavigation(
                             navController.navigate(tab.route) {
                                 popUpTo(HOME_ROUTE) { saveState = true }
                                 launchSingleTop = true
-                                restoreState = true
+                                // Home is the popUpTo target, so restoring it would bring back the tab just saved.
+                                restoreState = tab.route != HOME_ROUTE
                             }
                         },
                         icon = { Icon(painterResource(tab.icon), contentDescription = null) },
