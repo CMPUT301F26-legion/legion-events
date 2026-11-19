@@ -1,13 +1,18 @@
 /*
  * Reservation.kt
  *
- * Purpose: Represent saved bookings, stay periods, and cancellation eligibility.
- * Role: Model in MVC; keeps reservation fields and the checkout boundary.
+ * Purpose: Represent saved bookings and determine active, past, and cancelled stays
+ *   (US 01.06.01/02, 02.07.01 to 02.07.03), which ones an owner can reject (US 02.08.01),
+ *   and the nights they occupy (US 02.06.01).
+ * Role: Model in MVC; keeps reservation fields, the checkout boundary, and booked nights.
  * Outstanding issues: None.
  */
 package com.example.legion_events.model
 
 import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * A saved booking at reservations/{id}; campsite names are read separately from the listing.
@@ -22,7 +27,7 @@ import com.google.firebase.Timestamp
  * @property guestCount Number of booked guests.
  * @property totalPrice Saved booking total in integer CAD cents.
  * @property rulesAccepted Whether the entrant accepted the campsite rules.
- * @property status Stored reservation status, such as confirmed, cancelled, or rejected.
+ * @property status Stored reservation status, such as requested, confirmed, cancelled, or rejected.
  * @property cancellationRequested Whether a cancellation is awaiting processing.
  * @property createdAt Server creation time, or null before it is available.
  * @property updatedAt Server modification time, or null before it is available.
@@ -56,10 +61,103 @@ data class Reservation(
     /** Confirms that the worker has completed cancellation rather than merely received a request. */
     fun cancellationCompleted(): Boolean = status == STATUS_CANCELLED && !cancellationRequested
 
+    /**
+     * Returns true for bookings an owner still has to host: requested or confirmed, strictly before
+     * checkout. Unlike [isActive], this includes `requested`, the status entrant bookings start in,
+     * so owners see new bookings before anything confirms them (S17's Active tab and Reject).
+     * @param at The current time.
+     * @return Whether the booking belongs in an owner's Active list and can be rejected.
+     */
+    fun isUpcomingForOwner(at: Timestamp): Boolean =
+        (status == STATUS_REQUESTED || status == STATUS_CONFIRMED) && endDate > at
+
+    /**
+     * Returns true when the owner may accept this booking: still `requested`, before checkout, and
+     * with no cancellation pending.
+     * @param at The current time.
+     * @return Whether S17 offers Accept and the rules allow `requested -> confirmed`.
+     */
+    fun canOwnerAccept(at: Timestamp): Boolean =
+        status == STATUS_REQUESTED && !cancellationRequested && endDate > at
+
+    /**
+     * Returns true when the entrant cancelled the booking or the owner rejected it.
+     * @return Whether the booking belongs in an owner's Cancelled list.
+     */
+    fun isCancelled(): Boolean = status == STATUS_CANCELLED || status == STATUS_REJECTED
+
+    /**
+     * Lists the nights this stay occupies as UTC `YYYY-MM-DD` keys, matching `availableNights`
+     * and `bookedNights` IDs. The checkout night is excluded; a same-day stay occupies one night.
+     * @return Night keys in date order.
+     */
+    fun bookedNights(): List<String> {
+        val first = startDate.toDate().time.floorDiv(DAY_MILLIS) * DAY_MILLIS
+        val checkout = endDate.toDate().time.floorDiv(DAY_MILLIS) * DAY_MILLIS
+        val last = maxOf(checkout, first + DAY_MILLIS)
+        val format = nightFormat()
+        return generateSequence(first) { it + DAY_MILLIS }.takeWhile { it < last }.map { format.format(it) }.toList()
+    }
+
     companion object {
+        /** Stored status of a booking an entrant just made, before it is confirmed. */
+        const val STATUS_REQUESTED = "requested"
         /** Stored status of an accepted booking that has not been cancelled or rejected. */
         const val STATUS_CONFIRMED = "confirmed"
-        /** Stored only by the trusted worker after releasing the booking's occupied nights. */
+        /** Stored status of a booking the entrant cancelled; only the trusted worker writes it, after releasing its nights. */
         const val STATUS_CANCELLED = "cancelled"
+        /** Stored status of a booking the campsite owner rejected (US 02.08.01). */
+        const val STATUS_REJECTED = "rejected"
+        /** Longest optional reason an owner can give when rejecting, so the notice stays within its limit. */
+        const val MAX_REJECTION_REASON_LENGTH = 500
+        /** Milliseconds in one UTC day. */
+        internal const val DAY_MILLIS = 24 * 60 * 60 * 1000L
     }
+}
+
+/**
+ * Creates the `YYYY-MM-DD` formatter used for night keys.
+ * @return A UTC formatter, independent of the device's time zone.
+ */
+internal fun nightFormat(): SimpleDateFormat =
+    SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+/**
+ * Writes the inbox message sent to an entrant whose requested booking the owner accepted.
+ * @param reservation The accepted booking; its first night and checkout date are named.
+ * @param campsiteName The campsite's current name, or null when unknown.
+ * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
+ */
+fun acceptanceNotice(reservation: Reservation, campsiteName: String?): String =
+    "The owner confirmed your reservation${placeText(campsiteName)} for ${stayText(reservation)}."
+        .take(MAX_NOTICE_LENGTH)
+
+/**
+ * Writes the inbox message sent to an entrant whose booking the owner rejected (US 02.08.01).
+ * @param reservation The rejected booking; its first night and checkout date are named.
+ * @param campsiteName The campsite's current name, or null when unknown.
+ * @param reason The owner's optional reason, already trimmed.
+ * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
+ */
+fun rejectionNotice(reservation: Reservation, campsiteName: String?, reason: String?): String {
+    val because = reason?.takeIf { it.isNotBlank() }?.let { " Reason: $it" } ?: ""
+    return "The owner rejected your reservation${placeText(campsiteName)} for ${stayText(reservation)}.$because"
+        .take(MAX_NOTICE_LENGTH)
+}
+
+/**
+ * Names the campsite in an owner notice.
+ * @param campsiteName The campsite's current name, or null when unknown.
+ * @return Text such as " at Two Jack Lakeside", or nothing when the name is unknown or blank.
+ */
+private fun placeText(campsiteName: String?): String = campsiteName?.takeIf { it.isNotBlank() }?.let { " at $it" } ?: ""
+
+/**
+ * Names a stay in an owner notice, in UTC days to match the calendar.
+ * @param reservation The booking.
+ * @return Text such as "Jul 4, 2027 to Jul 7, 2027".
+ */
+private fun stayText(reservation: Reservation): String {
+    val days = SimpleDateFormat("MMM d, yyyy", Locale.CANADA).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    return "${days.format(reservation.startDate.toDate())} to ${days.format(reservation.endDate.toDate())}"
 }
