@@ -493,6 +493,7 @@ fun AppNavigation(
                         initializer { ReservationDetailsController(checkNotNull(entry.arguments?.getString("reservationId")), reservations) }
                     })
                     val booking by detail.state.collectAsStateWithLifecycle()
+                    LifecycleResumeEffect(detail) { detail.resume(); onPauseOrDispose { detail.pause() } }
                     val download = rememberReservationDownload(detail, booking)
                     ReservationDetailsScreen(booking, { navController.popBackStack() }, detail::retry,
                         onCampsite = { campsiteId ->
@@ -502,7 +503,8 @@ fun AppNavigation(
                             navController.navigate(reservationConfirmationRoute(checkNotNull(booking.entry).reservation.id)) {
                                 launchSingleTop = true
                             }
-                        }, onDownload = download)
+                        }, onDownload = download, onCancel = detail::requestCancel,
+                        onDismissCancellation = detail::dismissCancellation, onConfirmCancellation = detail::confirmCancellation)
                 }
             }
             composable(RESERVATION_CONFIRMATION_PATTERN,
@@ -513,6 +515,7 @@ fun AppNavigation(
                         initializer { ReservationDetailsController(reservationId, reservations) }
                     })
                     val booking by confirmation.state.collectAsStateWithLifecycle()
+                    LifecycleResumeEffect(confirmation) { confirmation.resume(); onPauseOrDispose { confirmation.pause() } }
                     val download = rememberReservationDownload(confirmation, booking)
                     ReservationConfirmationScreen(booking, { navController.popBackStack() }, confirmation::retry, download,
                         onReservation = {
@@ -736,6 +739,7 @@ fun AppNavigation(
                         onRetry = inbox::retry,
                         onOffer = { id -> navController.navigate(bookingOfferRoute(id)) { launchSingleTop = true } },
                         onEnablePush = onEnablePush,
+                        onReservation = { id -> navController.navigate(reservationConfirmationRoute(id)) { launchSingleTop = true } },
                     )
                 }
             }
@@ -891,6 +895,7 @@ fun AppNavigation(
 private fun rememberReservationDownload(controller: ReservationDetailsController, state: ReservationDetailsState): () -> Unit {
     val resolver = LocalContext.current.contentResolver
     var destination by rememberSaveable { mutableStateOf<String?>(null) }
+    var cancellation by rememberSaveable { mutableStateOf(false) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         destination = uri?.toString()
     }
@@ -898,13 +903,15 @@ private fun rememberReservationDownload(controller: ReservationDetailsController
         val uri = destination ?: return@LaunchedEffect
         if (!state.loading) {
             destination = null
-            controller.exportConfirmation { csv -> writeReservationCsv(resolver, Uri.parse(uri), csv) }
+            val write: suspend (String) -> Unit = { csv -> writeReservationCsv(resolver, Uri.parse(uri), csv) }
+            if (cancellation) controller.exportCancellation(write) else controller.exportConfirmation(write)
         }
     }
     return {
         val id = state.entry?.reservation?.id.orEmpty().filter(Char::isLetterOrDigit).take(64).ifEmpty { "confirmation" }
         try {
-            save.launch("reservation-$id.csv")
+            cancellation = state.entry?.reservation?.cancellationCompleted() == true
+            save.launch("reservation-$id${if (cancellation) "-cancellation" else ""}.csv")
         } catch (_: ActivityNotFoundException) {
             controller.reportSaveUnavailable()
         }

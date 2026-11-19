@@ -1,7 +1,7 @@
 /*
  * ReservationsScreen.kt
  *
- * Purpose: Display the entrant's active or past reservations and open a selected booking.
+ * Purpose: Display the entrant's active, past, or cancelled reservations and open a booking.
  * Role: View in MVC; renders S10 state and forwards refresh and navigation actions.
  * Outstanding issues: None.
  */
@@ -23,7 +23,7 @@ import com.example.legion_events.controller.ReservationTab
 import com.example.legion_events.data.ReservationEntry
 
 /**
- * S10: shows the entrant's confirmed reservations in Active and Past tabs.
+ * S10: shows the entrant's Active, Past, and Cancelled reservations.
  * @param state Bookings, selected period, and request state from the controller.
  * @param onRefresh Reloads after a failure or a change elsewhere in the app.
  * @param onTab Selects a stay period without reloading bookings.
@@ -33,7 +33,12 @@ import com.example.legion_events.data.ReservationEntry
 fun ReservationsScreen(state: ReservationsState, onRefresh: () -> Unit,
     onTab: (ReservationTab) -> Unit, onReservation: (String) -> Unit) {
     val past = state.selectedTab == ReservationTab.PAST
-    val entries = if (past) state.pastEntries else state.entries
+    val cancelled = state.selectedTab == ReservationTab.CANCELLED
+    val entries = when (state.selectedTab) {
+        ReservationTab.ACTIVE -> state.entries
+        ReservationTab.PAST -> state.pastEntries
+        ReservationTab.CANCELLED -> state.cancelledEntries
+    }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -42,9 +47,10 @@ fun ReservationsScreen(state: ReservationsState, onRefresh: () -> Unit,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 TextButton(onClick = onRefresh, enabled = !state.loading) { Text("Refresh") }
             }
-            PrimaryTabRow(selectedTabIndex = if (past) 1 else 0) {
-                Tab(selected = !past, onClick = { onTab(ReservationTab.ACTIVE) }, text = { Text("Active") })
+            PrimaryTabRow(selectedTabIndex = state.selectedTab.ordinal) {
+                Tab(selected = !past && !cancelled, onClick = { onTab(ReservationTab.ACTIVE) }, text = { Text("Active") })
                 Tab(selected = past, onClick = { onTab(ReservationTab.PAST) }, text = { Text("Past") })
+                Tab(selected = cancelled, onClick = { onTab(ReservationTab.CANCELLED) }, text = { Text("Cancelled") })
             }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -60,9 +66,10 @@ fun ReservationsScreen(state: ReservationsState, onRefresh: () -> Unit,
                         Button(onClick = onRefresh, modifier = Modifier.padding(top = 12.dp)) { Text("Retry") }
                     }
                     entries.isEmpty() -> item {
-                        Text(if (past) "No past reservations" else "No active reservations",
+                        Text(if (cancelled) "No cancelled reservations" else if (past) "No past reservations" else "No active reservations",
                             style = MaterialTheme.typography.titleMedium)
-                        Text(if (past) "Your finished stays will appear here after checkout."
+                        Text(if (cancelled) "Your completed cancellations and receipts will appear here."
+                            else if (past) "Your finished stays will appear here after checkout."
                             else "Your upcoming and ongoing confirmed stays will appear here.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

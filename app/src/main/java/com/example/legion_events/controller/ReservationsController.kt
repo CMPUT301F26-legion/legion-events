@@ -20,13 +20,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** The two stay periods available on S10. */
-enum class ReservationTab { ACTIVE, PAST }
+/** Stay periods and completed cancellations available on S10. */
+enum class ReservationTab { ACTIVE, PAST, CANCELLED }
 
 /**
- * State displayed in S10's Active and Past tabs.
+ * State displayed in S10's Active, Past, and Cancelled tabs.
  * @property entries Upcoming and ongoing confirmed stays, ordered by check-in and then ID.
  * @property pastEntries Finished confirmed stays, ordered by latest checkout and then ID.
+ * @property cancelledEntries Completed cancellations, newest completion first.
  * @property selectedTab Stay period currently displayed.
  * @property loading Whether a read is pending.
  * @property error Safe request failure message, or null.
@@ -37,6 +38,7 @@ data class ReservationsState(
     val error: String? = null,
     val pastEntries: List<ReservationEntry> = emptyList(),
     val selectedTab: ReservationTab = ReservationTab.ACTIVE,
+    val cancelledEntries: List<ReservationEntry> = emptyList(),
 )
 
 /**
@@ -101,6 +103,8 @@ class ReservationsController(
                 .sortedWith(compareBy<ReservationEntry> { it.reservation.startDate }.thenBy { it.reservation.id }),
             pastEntries = entries.filter { it.reservation.isPast(at) }
                 .sortedWith(compareByDescending<ReservationEntry> { it.reservation.endDate }.thenBy { it.reservation.id }),
+            cancelledEntries = entries.filter { it.reservation.cancellationCompleted() }
+                .sortedWith(compareByDescending<ReservationEntry> { it.reservation.updatedAt }.thenBy { it.reservation.id }),
             selectedTab = state.value.selectedTab, loading = false)
     }
 }

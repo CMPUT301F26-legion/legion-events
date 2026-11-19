@@ -2,7 +2,7 @@
  * FirebaseReservationRepository.kt
  *
  * Purpose: Read owned reservations and optional campsite labels from Firestore.
- * Role: Data layer in MVC; enforces UID-scoped, read-only reservation access.
+ * Role: Data layer in MVC; enforces UID-scoped reads and cancellation requests.
  * Outstanding issues: None.
  */
 package com.example.legion_events.data
@@ -12,6 +12,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
@@ -23,6 +25,7 @@ import kotlinx.coroutines.tasks.await
 class FirebaseReservationRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val now: () -> Timestamp = { Timestamp.now() },
 ) : ReservationRepository {
     /** Queries the current UID only, then attaches each campsite's labels once per request. */
     override suspend fun getMyReservations(): List<ReservationEntry> {
@@ -57,6 +60,37 @@ class FirebaseReservationRepository(
         return ReservationEntry(reservation, labels?.first, labels?.second)
     }
 
+    /**
+     * Sets only the request flag and server update time, leaving status and nights to the worker.
+     * Each transaction attempt rechecks ownership. A repeated request requires no write, including
+     * when an earlier commit succeeded but its response was lost. The server read confirms the outcome.
+     */
+    override suspend fun requestCancellation(reservationId: String): ReservationEntry {
+        require(reservationId.isNotBlank() && '/' !in reservationId) { "A single reservation ID is required." }
+        val userId = currentUserId()
+        val reference = firestore.collection("reservations").document(reservationId)
+        firestore.runTransaction<Unit> { transaction ->
+            checkAccount(userId)
+            val document = transaction.get(reference)
+            check(document.exists()) { "Reservation does not exist." }
+            val reservation = document.toOwnedReservation(userId)
+            if (reservation.cancellationCompleted() ||
+                (reservation.status == Reservation.STATUS_CONFIRMED && reservation.cancellationRequested)) return@runTransaction
+            check(reservation.canRequestCancellation(now())) { "This reservation cannot be cancelled." }
+            checkAccount(userId)
+            transaction.update(reference, mapOf("cancellationRequested" to true, "updatedAt" to FieldValue.serverTimestamp()))
+        }.await()
+        checkAccount(userId)
+        val saved = reference.get(Source.SERVER).await()
+        checkAccount(userId)
+        check(saved.exists()) { "Reservation no longer exists." }
+        val reservation = saved.toOwnedReservation(userId)
+        check(reservation.cancellationRequested || reservation.cancellationCompleted()) { "Please reload the reservation." }
+        val labels = campsiteLabels(reservation.campsiteId)
+        checkAccount(userId)
+        return ReservationEntry(reservation, labels?.first, labels?.second)
+    }
+
     /** Returns the signed-in UID before any database request. */
     private fun currentUserId(): String = checkNotNull(auth.currentUser) { "No user is signed in." }.uid
 
@@ -83,7 +117,7 @@ class FirebaseReservationRepository(
     }
 
     companion object {
-        /** Read-only repository for the app's default Firebase project. */
+        /** Owned reservation repository for the app's default Firebase project. */
         val instance by lazy { FirebaseReservationRepository(FirebaseAuth.getInstance(), FirebaseFirestore.getInstance()) }
     }
 }

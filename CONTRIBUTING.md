@@ -93,10 +93,11 @@ the bottom navigation. Keep notification navigation compatible with direct offer
 
 ## Reservations
 
-The **Bookings** tab opens S10's Active and Past tabs (US 01.06.01/02). A stay is
+The **Bookings** tab opens S10's Active, Past, and Cancelled tabs. A stay is
 active while its status is `confirmed` and checkout is in the future, including stays
 in progress. Past shows confirmed stays at or after checkout, newest checkout first.
-Cancelled, rejected, and pending bookings are excluded from both periods.
+Rejected and unconfirmed bookings are excluded. Worker-completed cancellations
+appear in Cancelled, newest cancellation first, so their receipts remain accessible.
 `ReservationsController` filters owned bookings and moves stays to Past at checkout
 without a database write. Switching tabs reuses the same read; `SavedStateHandle`
 retains the selection across recreation and when returning from details.
@@ -106,19 +107,34 @@ The list refreshes on resume and offers Refresh/Retry. Details check ownership a
 
 Booking dates, guests, rules acceptance, and total price come from the saved reservation.
 Current campsite names and areas are optional display labels; inaccessible listings do
-not hide reservations. This flow reads data only. Cancellation and ratings are
-separate stories.
+not hide reservations. Ratings are a separate story.
+
+### Cancellation
+
+S10b asks for confirmation before submitting a cancellation (US 01.07.01). The
+client transaction changes only `cancellationRequested` and `updatedAt`; it never
+changes status or deletes occupied nights. Requests are allowed before checkout,
+including during a stay. Retrying an already requested or completed cancellation
+does not rewrite it.
+
+While a request is pending, the stay remains confirmed and its dates reserved.
+The details controller checks status every five seconds while its screen is resumed;
+it stops when hidden or complete. Refresh recovers a failed check or uncertain request.
+Only the worker's committed `cancelled` status with a cleared request flag shows
+completion. The same transaction releases owned nights and saves the Inbox notice.
+The notice opens S09; Cancelled bookings also open S10b and their confirmation/CSV
+(US 01.07.02). See [worker commands and setup](doc/reservation-cancellation.md).
 
 ### Confirmation and CSV
 
-S10b offers **View confirmation** and **Download confirmation CSV** for confirmed
-bookings, including past stays. S09 (`ReservationConfirmationScreen`) shows the
+S10b offers confirmation and CSV actions for confirmed bookings (including past
+stays) and completed cancellations. S09 (`ReservationConfirmationScreen`) shows the
 saved booking number, campsite, dates, guests, and total. Booking creation should
 call `reservationConfirmationRoute(reservationId)` after the reservation is saved;
 pass only its ID. S09 checks ownership and status before showing confirmation.
 
 `ReservationDetailsController` supports both screens and rechecks the owned booking
-before each export. `Reservation.confirmationCsv` formats the receipt;
+before each export. `Reservation.confirmationCsv` and `cancellationCsv` format the receipts;
 `writeReservationCsv` writes UTF-8 on the IO dispatcher. The shared router opens
 Android's Save dialog (`text/csv`), so no storage permission is needed. Cancelling
 does nothing; a failed save leaves Download available to retry. A recreated screen
@@ -128,8 +144,11 @@ The CSV contains the reservation and campsite IDs, optional current listing name
 and area, UTC check-in and checkout, guests, exact CAD total, currency, saved status,
 and rules acceptance. Dates use millisecond precision and checkout remains excluded.
 Cells are quoted, quotes are escaped, and formula-like text is exported as text.
-No profile information is included. This story uses the downloadable CSV option;
-it does not publish booking notifications or create reservations.
+No profile information is included. A cancellation CSV adds `cancelledAtUtc` from
+the worker-written `updatedAt`. A pending request cannot produce a cancellation
+receipt. Export rechecks the status after the Save dialog; it does not silently
+change a selected booking receipt into a cancellation receipt. Booking creation
+and booking notifications remain separate work.
 
 ## Owner reservations
 

@@ -165,6 +165,7 @@ class ReservationDetailsControllerTest {
 
     /** Supplies a controlled detail response and rejects unrelated list reads. */
     private fun repository(load: suspend () -> ReservationEntry?) = object : ReservationRepository {
+        override suspend fun requestCancellation(reservationId: String): ReservationEntry = error("Unexpected cancellation request")
         override suspend fun getMyReservations(): List<ReservationEntry> = error("Unexpected list read")
         override suspend fun getReservation(reservationId: String): ReservationEntry? {
             assertEquals("booking", reservationId)

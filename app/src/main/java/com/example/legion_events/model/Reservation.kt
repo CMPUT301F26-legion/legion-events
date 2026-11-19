@@ -55,6 +55,7 @@ data class Reservation(
     /** Returns true for confirmed stays at or after checkout, without changing their saved status. */
     fun isPast(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate <= at
 
+<<<<<<< HEAD
     /**
      * Returns true for bookings an owner still has to host: requested or confirmed, strictly before
      * checkout. Unlike [isActive], this includes `requested`, the status entrant bookings start in,
@@ -83,12 +84,20 @@ data class Reservation(
         val format = nightFormat()
         return generateSequence(first) { it + DAY_MILLIS }.takeWhile { it < last }.map { format.format(it) }.toList()
     }
+=======
+    /** Allows a new cancellation request for an upcoming or ongoing stay, before checkout. */
+    fun canRequestCancellation(at: Timestamp): Boolean = isActive(at) && !cancellationRequested
+
+    /** Confirms that the worker has completed cancellation rather than merely received a request. */
+    fun cancellationCompleted(): Boolean = status == STATUS_CANCELLED && !cancellationRequested
+>>>>>>> origin
 
     companion object {
         /** Stored status of a booking an entrant just made, before it is confirmed. */
         const val STATUS_REQUESTED = "requested"
         /** Stored status of an accepted booking that has not been cancelled or rejected. */
         const val STATUS_CONFIRMED = "confirmed"
+<<<<<<< HEAD
         /** Stored status of a booking the entrant cancelled. */
         const val STATUS_CANCELLED = "cancelled"
         /** Stored status of a booking the campsite owner rejected (US 02.08.01). */
@@ -97,6 +106,10 @@ data class Reservation(
         const val MAX_REJECTION_REASON_LENGTH = 500
         /** Milliseconds in one UTC day. */
         internal const val DAY_MILLIS = 24 * 60 * 60 * 1000L
+=======
+        /** Stored only by the trusted worker after releasing the booking's occupied nights. */
+        const val STATUS_CANCELLED = "cancelled"
+>>>>>>> origin
     }
 }
 

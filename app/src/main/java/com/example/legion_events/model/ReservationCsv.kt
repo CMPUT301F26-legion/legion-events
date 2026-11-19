@@ -1,7 +1,7 @@
 /*
  * ReservationCsv.kt
  *
- * Purpose: Format a saved reservation as a confirmation CSV (US 01.05.02).
+ * Purpose: Format booking and completed cancellation receipts (US 01.05.02/01.07.02).
  * Role: Model helper in MVC; serializes booking values without database or file access.
  * Outstanding issues: None.
  */
@@ -22,11 +22,28 @@ import java.util.TimeZone
  */
 fun Reservation.confirmationCsv(campsiteName: String? = null, locationName: String? = null): String {
     require(status == Reservation.STATUS_CONFIRMED) { "Only confirmed reservations have a confirmation receipt." }
+    return receiptCsv(campsiteName, locationName)
+}
+
+/**
+ * Exports cancellation only after the worker has committed the terminal state and server timestamp.
+ * @param campsiteName Optional current listing name.
+ * @param locationName Optional current listing area.
+ * @return A cancellation receipt with the same booking columns and an additional cancellation time.
+ */
+fun Reservation.cancellationCsv(campsiteName: String? = null, locationName: String? = null): String {
+    require(cancellationCompleted() && updatedAt != null) { "Cancellation has not completed." }
+    return receiptCsv(campsiteName, locationName, updatedAt.csvUtc())
+}
+
+/** Shares the escaping and saved booking columns between confirmation and cancellation receipts. */
+private fun Reservation.receiptCsv(campsiteName: String?, locationName: String?, cancelledAt: String? = null): String {
     val headings = listOf("reservationId", "campsiteId", "campsiteName", "locationName", "startDateUtc",
-        "endDateUtc", "guestCount", "totalPriceCad", "currency", "status", "rulesAccepted")
+        "endDateUtc", "guestCount", "totalPriceCad", "currency", "status", "rulesAccepted") +
+        if (cancelledAt != null) listOf("cancelledAtUtc") else emptyList()
     val values = listOf(id, campsiteId, campsiteName.orEmpty(), locationName.orEmpty(), startDate.csvUtc(),
         endDate.csvUtc(), guestCount.toString(), BigDecimal.valueOf(totalPrice, 2).toPlainString(),
-        "CAD", status, rulesAccepted.toString())
+        "CAD", status, rulesAccepted.toString()) + if (cancelledAt != null) listOf(cancelledAt) else emptyList()
     return listOf(headings, values).joinToString("\r\n", postfix = "\r\n") { row ->
         row.joinToString(",") { it.csvCell() }
     }
