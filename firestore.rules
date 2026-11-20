@@ -1,0 +1,313 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function activeUser() { return signedIn() && me().disabled == false; }
+    function admin() { return activeUser() && me().role == 'admin'; }
+    function mine(uid) { return activeUser() && request.auth.uid == uid; }
+    function changedOnly(fields) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields); }
+    function text(value, max) { return value is string && value.size() <= max; }
+    function updatedNow() { return request.resource.data.updatedAt == request.time; }
+    function campsite(id) { return get(/databases/$(database)/documents/campsites/$(id)).data; }
+    function lottery(id) { return get(/databases/$(database)/documents/lotteries/$(id)).data; }
+    function offer(id) { return get(/databases/$(database)/documents/offers/$(id)).data; }
+    function chat(id) { return get(/databases/$(database)/documents/conversations/$(id)).data; }
+    function participant(c) { return activeUser() && request.auth.uid in [c.entrantId, c.ownerId]; }
+    function openLottery(l) {
+      return l.status == 'open' && l.winnersDrawn == false
+        && request.time >= l.registrationStartAt && request.time < l.registrationEndAt;
+    }
+    function validProfile(d) {
+      return text(d.name, 120) && text(d.email, 254) && text(d.phone, 40)
+        && (d.photoId == null || text(d.photoId, 150))
+        && d.notificationsEnabled is bool && (d.fcmToken == null || text(d.fcmToken, 4096));
+    }
+    match /users/{uid} {
+      allow read: if mine(uid) || admin();
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(['name','email','phone','role','photoId','notificationsEnabled','fcmToken','disabled','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['name','email','phone','role','photoId','notificationsEnabled','fcmToken','disabled','createdAt','updatedAt'])
+        && validProfile(request.resource.data) && request.resource.data.role == 'user'
+        && request.resource.data.disabled == false && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if (mine(uid) && changedOnly(['name','email','phone','photoId','notificationsEnabled','fcmToken','updatedAt'])
+          && validProfile(request.resource.data) && updatedNow())
+        || (admin() && changedOnly(['disabled','moderationReason','updatedAt'])
+          && request.resource.data.disabled is bool && text(request.resource.data.get('moderationReason', ''), 1000) && updatedNow());
+      allow delete: if mine(uid);
+    }
+    function validCampsite(d) {
+      return text(d.name, 150) && d.name.size() > 0 && text(d.description, 10000)
+        && text(d.locationName, 250) && d.location is latlng
+        && d.maxGuests is int && d.maxGuests >= 1 && d.maxGuests <= 100
+        && d.pricePerNight is int && d.pricePerNight >= 0 && d.pricePerNight <= 10000000
+        && d.amenities is list && d.amenities.size() <= 50 && d.tags is list && d.tags.size() <= 50
+        && text(d.rules, 10000) && text(d.cancellationPolicy, 5000)
+        && d.availableNights is list && d.availableNights.size() <= 366
+        && (d.photoId == null || text(d.photoId, 150)) && d.active is bool;
+    }
+    match /campsites/{id} {
+      allow read: if activeUser() && (resource.data.active || resource.data.ownerId == request.auth.uid || admin());
+      allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['ownerId','name','description','locationName','location','maxGuests','pricePerNight','amenities','tags','rules','cancellationPolicy','availableNights','photoId','ratingAverage','ratingCount','active','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['ownerId','name','description','locationName','location','maxGuests','pricePerNight','amenities','tags','rules','cancellationPolicy','availableNights','photoId','ratingAverage','ratingCount','active','createdAt','updatedAt'])
+        && validCampsite(request.resource.data) && request.resource.data.ratingAverage == 0 && request.resource.data.ratingCount == 0
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if (mine(resource.data.ownerId)
+          && changedOnly(['name','description','locationName','location','maxGuests','pricePerNight','amenities','tags','rules','cancellationPolicy','availableNights','photoId','active','updatedAt'])
+          && validCampsite(request.resource.data) && updatedNow())
+        || (admin() && changedOnly(['active','moderationReason','updatedAt'])
+          && request.resource.data.active is bool && text(request.resource.data.get('moderationReason', ''), 1000) && updatedNow());
+      allow delete: if false;
+    }
+    function validLottery(d) {
+      return d.campsiteIds is list && d.campsiteIds.size() >= 1 && d.campsiteIds.size() <= 8
+        && d.registrationStartAt is timestamp && d.registrationEndAt is timestamp
+        && d.bookingStartAt is timestamp && d.bookingEndAt is timestamp
+        && d.registrationStartAt < d.registrationEndAt && d.registrationEndAt <= d.bookingStartAt
+        && d.bookingStartAt < d.bookingEndAt
+        && d.waitlistLimit is int && d.waitlistLimit >= 1 && d.waitlistLimit <= 100
+        && d.winnerCount is int && d.winnerCount >= 1 && d.winnerCount <= d.waitlistLimit;
+    }
+    function ownSite(ids, n) { return ids.size() <= n || (ids[n] is string && campsite(ids[n]).ownerId == request.auth.uid && campsite(ids[n]).active); }
+    function ownSites(ids) {
+      return ownSite(ids,0) && ownSite(ids,1) && ownSite(ids,2) && ownSite(ids,3) && ownSite(ids,4)
+        && ownSite(ids,5) && ownSite(ids,6) && ownSite(ids,7);
+    }
+    function entrantCounterChange(id) {
+      let path = /databases/$(database)/documents/waitlist/$(id + '_' + request.auth.uid);
+      let after = getAfter(path).data;
+      let joined = after.status == 'joined' && (!exists(path) || get(path).data.status == 'withdrawn');
+      let withdrawn = after.status == 'withdrawn' && exists(path) && get(path).data.status == 'joined';
+      return activeUser() && openLottery(resource.data) && changedOnly(['entrantCount','updatedAt']) && updatedNow()
+        && after.userId == request.auth.uid && after.lotteryId == id
+        && ((joined && request.resource.data.entrantCount == resource.data.entrantCount + 1
+              && request.resource.data.entrantCount <= resource.data.waitlistLimit)
+          || (withdrawn && request.resource.data.entrantCount == resource.data.entrantCount - 1
+              && request.resource.data.entrantCount >= 0));
+    }
+
+    // LOCAL DRAW additions. The owner is trusted to select the entrants and winners.
+    // The immutable manifest bounds that authority to one closed lottery and shares rule reads
+    // across up to 100 entrants, avoiding the atomic-write document-access limit.
+    function drawRecord(id) { return getAfter(/databases/$(database)/documents/lotteryDraws/$(id)).data; }
+    function localDrawCommitted(id) {
+      let before = lottery(id);
+      let after = getAfter(/databases/$(database)/documents/lotteries/$(id)).data;
+      let draw = drawRecord(id);
+      return mine(before.ownerId) && before.status == 'open' && before.winnersDrawn == false
+        && request.time >= before.registrationEndAt && after.winnersDrawn == true
+        && after.updatedAt == request.time && draw.createdAt == request.time
+        && draw.ownerId == before.ownerId && draw.lotteryId == id;
+    }
+    function validDraw(d, l, id) {
+      return d.keys().hasAll(['lotteryId','ownerId','entrantIds','winnerIds','createdAt'])
+        && d.keys().hasOnly(['lotteryId','ownerId','entrantIds','winnerIds','createdAt'])
+        && d.lotteryId == id && d.ownerId == l.ownerId && d.createdAt == request.time
+        && d.entrantIds is list && d.entrantIds.size() == l.entrantCount && d.entrantIds.size() <= 100
+        && d.entrantIds.toSet().size() == d.entrantIds.size()
+        && d.winnerIds is list && d.winnerIds.toSet().size() == d.winnerIds.size()
+        && d.entrantIds.hasAll(d.winnerIds)
+        && d.winnerIds.size() == (l.entrantCount < l.winnerCount ? l.entrantCount : l.winnerCount);
+    }
+    function localDrawUpdate(id) {
+      return localDrawCommitted(id) && changedOnly(['winnersDrawn','updatedAt'])
+        && validDraw(drawRecord(id), resource.data, id);
+    }
+    function localResult(d, id) {
+      let draw = drawRecord(d.lotteryId);
+      let won = d.toUserId in draw.winnerIds;
+      return localDrawCommitted(d.lotteryId) && d.toUserId in draw.entrantIds
+        && id == d.lotteryId + '_' + d.toUserId && d.createdAt == request.time
+        && d.type == (won ? 'lottery_won' : 'lottery_lost')
+        && d.offerId == (won ? id : null);
+    }
+    match /lotteryDraws/{id} {
+      allow get: if mine(lottery(id).ownerId);
+      allow create: if localDrawCommitted(id) && validDraw(request.resource.data, lottery(id), id);
+      allow list, update, delete: if false;
+    }
+    match /lotteries/{id} {
+      allow read: if activeUser();
+      allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['ownerId','campsiteIds','registrationStartAt','registrationEndAt','bookingStartAt','bookingEndAt','winnerCount','waitlistLimit','entrantCount','status','winnersDrawn','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['ownerId','campsiteIds','registrationStartAt','registrationEndAt','bookingStartAt','bookingEndAt','winnerCount','waitlistLimit','entrantCount','status','winnersDrawn','createdAt','updatedAt'])
+        && validLottery(request.resource.data) && ownSites(request.resource.data.campsiteIds)
+        && request.resource.data.entrantCount == 0 && request.resource.data.winnersDrawn == false
+        && request.resource.data.status == 'open' && request.resource.data.registrationEndAt > request.time
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if (mine(resource.data.ownerId) && request.time < resource.data.registrationStartAt
+          && resource.data.entrantCount == 0 && resource.data.winnersDrawn == false
+          && changedOnly(['campsiteIds','registrationStartAt','registrationEndAt','bookingStartAt','bookingEndAt','winnerCount','waitlistLimit','updatedAt'])
+          && validLottery(request.resource.data) && ownSites(request.resource.data.campsiteIds)
+          && request.resource.data.registrationStartAt > request.time && updatedNow())
+        || entrantCounterChange(id) || localDrawUpdate(id);
+      allow delete: if false;
+    }
+    function counterAfter(id, delta) {
+      let before = lottery(id);
+      let after = getAfter(/databases/$(database)/documents/lotteries/$(id)).data;
+      return openLottery(before) && after.entrantCount == before.entrantCount + delta
+        && after.entrantCount >= 0 && after.entrantCount <= before.waitlistLimit;
+    }
+    match /waitlist/{id} {
+      allow read: if mine(resource.data.userId) || mine(lottery(resource.data.lotteryId).ownerId) || admin();
+      allow create: if activeUser() && request.resource.data.userId == request.auth.uid
+        && id == request.resource.data.lotteryId + '_' + request.auth.uid
+        && request.resource.data.keys().hasAll(['lotteryId','userId','status','joinedAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['lotteryId','userId','status','joinedAt','updatedAt'])
+        && request.resource.data.status == 'joined' && request.resource.data.joinedAt == request.time
+        && updatedNow() && counterAfter(request.resource.data.lotteryId, 1);
+      allow update: if (mine(resource.data.userId) && changedOnly(['status','joinedAt','updatedAt']) && updatedNow()
+        && ((resource.data.status == 'joined' && request.resource.data.status == 'withdrawn'
+              && request.resource.data.joinedAt == resource.data.joinedAt && counterAfter(resource.data.lotteryId, -1))
+          || (resource.data.status == 'withdrawn' && request.resource.data.status == 'joined'
+              && request.resource.data.joinedAt == request.time && counterAfter(resource.data.lotteryId, 1))))
+        || (localDrawCommitted(resource.data.lotteryId) && resource.data.status == 'joined'
+          && id == resource.data.lotteryId + '_' + resource.data.userId
+          && changedOnly(['status','updatedAt']) && updatedNow()
+          && resource.data.userId in drawRecord(resource.data.lotteryId).entrantIds
+          && request.resource.data.status == (resource.data.userId in drawRecord(resource.data.lotteryId).winnerIds ? 'won' : 'lost'));
+      allow delete: if false;
+    }
+    match /offers/{id} {
+      allow read: if mine(resource.data.userId) || mine(lottery(resource.data.lotteryId).ownerId) || admin();
+      allow create: if localDrawCommitted(request.resource.data.lotteryId)
+        && request.resource.data.keys().hasAll(['lotteryId','userId','campsiteIds','status','response','expiresAt','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['lotteryId','userId','campsiteIds','status','response','expiresAt','createdAt','updatedAt'])
+        && id == request.resource.data.lotteryId + '_' + request.resource.data.userId
+        && request.resource.data.userId in drawRecord(request.resource.data.lotteryId).winnerIds
+        && request.resource.data.campsiteIds == lottery(request.resource.data.lotteryId).campsiteIds
+        && request.resource.data.expiresAt == lottery(request.resource.data.lotteryId).bookingEndAt
+        && request.resource.data.status == 'pending' && request.resource.data.response == null
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if mine(resource.data.userId) && resource.data.status == 'pending'
+        && request.time < resource.data.expiresAt && resource.data.get('response', null) == null
+        && changedOnly(['response','respondedAt','updatedAt']) && request.resource.data.response == 'decline'
+        && request.resource.data.respondedAt == request.time && updatedNow();
+      allow delete: if false;
+    }
+    match /lotteryNotificationOutbox/{id} {
+      allow create: if localResult(request.resource.data, id)
+        && request.resource.data.keys().hasAll(['type','toUserId','lotteryId','offerId','createdAt','deliveryStatus','updatedAt'])
+        && request.resource.data.keys().hasOnly(['type','toUserId','lotteryId','offerId','createdAt','deliveryStatus','updatedAt'])
+        && request.resource.data.deliveryStatus == 'pending' && updatedNow();
+      allow read, update, delete: if false;
+    }
+    match /reservations/{id} {
+      allow read: if mine(resource.data.userId) || mine(resource.data.ownerId) || admin();
+      allow create: if activeUser() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll(['lotteryId','offerId','campsiteId','userId','ownerId','startDate','endDate','guestCount','totalPrice','rulesAccepted','status','cancellationRequested','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['lotteryId','offerId','campsiteId','userId','ownerId','startDate','endDate','guestCount','totalPrice','rulesAccepted','status','cancellationRequested','createdAt','updatedAt'])
+        && request.resource.data.status == 'requested' && request.resource.data.rulesAccepted == true
+        && request.resource.data.cancellationRequested == false
+        && request.resource.data.startDate is timestamp && request.resource.data.endDate is timestamp
+        && request.resource.data.startDate < request.resource.data.endDate
+        && request.resource.data.guestCount is int && request.resource.data.guestCount >= 1
+        && request.resource.data.totalPrice is int && request.resource.data.totalPrice >= 0
+        && request.resource.data.offerId == request.resource.data.lotteryId + '_' + request.auth.uid
+        && offer(request.resource.data.offerId).userId == request.auth.uid
+        && offer(request.resource.data.offerId).lotteryId == request.resource.data.lotteryId
+        && offer(request.resource.data.offerId).status == 'pending'
+        && offer(request.resource.data.offerId).get('response', null) == null
+        && request.time < offer(request.resource.data.offerId).expiresAt
+        && request.time >= lottery(request.resource.data.lotteryId).bookingStartAt
+        && request.time < lottery(request.resource.data.lotteryId).bookingEndAt
+        && request.resource.data.ownerId == lottery(request.resource.data.lotteryId).ownerId
+        && request.resource.data.campsiteId in offer(request.resource.data.offerId).campsiteIds
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if (mine(resource.data.userId) && resource.data.status in ['requested','confirmed']
+        && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
+        && request.resource.data.cancellationRequested == true && updatedNow())
+        || (mine(resource.data.ownerId) && request.time < resource.data.endDate
+          && changedOnly(['status','updatedAt']) && updatedNow()
+          && ((resource.data.status == 'requested' && resource.data.cancellationRequested == false
+                && request.resource.data.status == 'confirmed')
+            || (resource.data.status in ['requested','confirmed'] && request.resource.data.status == 'rejected')));
+      allow delete: if false;
+    }
+    match /bookedNights/{id} {
+      allow read: if activeUser();
+      allow write: if false;
+    }
+    match /notifications/{id} {
+      allow read: if mine(resource.data.toUserId) || admin();
+      allow create: if localResult(request.resource.data, id)
+        && request.resource.data.keys().hasAll(['type','toUserId','lotteryId','offerId','createdAt'])
+        && request.resource.data.keys().hasOnly(['type','toUserId','lotteryId','offerId','createdAt']);
+      allow update: if mine(resource.data.toUserId) && changedOnly(['read','updatedAt'])
+        && request.resource.data.read is bool && updatedNow();
+      allow delete: if false;
+    }
+    match /conversations/{id} {
+      allow read: if participant(resource.data) || admin();
+      allow create: if activeUser() && request.resource.data.entrantId == request.auth.uid
+        && request.resource.data.keys().hasAll(['campsiteId','lotteryId','reservationId','entrantId','ownerId','lastMessage','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['campsiteId','lotteryId','reservationId','entrantId','ownerId','lastMessage','createdAt','updatedAt'])
+        && request.resource.data.ownerId == campsite(request.resource.data.campsiteId).ownerId
+        && request.resource.data.entrantId != request.resource.data.ownerId && campsite(request.resource.data.campsiteId).active
+        && request.resource.data.lastMessage == ''
+        && (request.resource.data.lotteryId == null || (lottery(request.resource.data.lotteryId).ownerId == request.auth.uid
+          && request.resource.data.campsiteId in lottery(request.resource.data.lotteryId).campsiteIds))
+        && (request.resource.data.reservationId == null || (get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.userId == request.auth.uid
+          && get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.campsiteId == request.resource.data.campsiteId))
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if participant(resource.data) && changedOnly(['lastMessage','updatedAt'])
+        && text(request.resource.data.lastMessage, 4000) && updatedNow();
+      allow delete: if false;
+    }
+    match /messages/{id} {
+      allow read: if participant(chat(resource.data.conversationId)) || admin();
+      allow create: if activeUser() && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.keys().hasAll(['conversationId','senderId','receiverId','text','read','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['conversationId','senderId','receiverId','text','read','createdAt','updatedAt'])
+        && participant(chat(request.resource.data.conversationId))
+        && request.resource.data.receiverId in [chat(request.resource.data.conversationId).entrantId, chat(request.resource.data.conversationId).ownerId]
+        && request.resource.data.receiverId != request.auth.uid
+        && text(request.resource.data.text, 4000) && request.resource.data.text.size() > 0
+        && request.resource.data.read == false && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if mine(resource.data.receiverId) && participant(chat(resource.data.conversationId))
+        && changedOnly(['read','updatedAt']) && request.resource.data.read == true && updatedNow();
+      allow delete: if false;
+    }
+    match /photos/{id} {
+      allow read: if activeUser();
+      allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['ownerId','targetType','targetId','imageBase64','mimeType','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['ownerId','targetType','targetId','imageBase64','mimeType','createdAt','updatedAt'])
+        && text(request.resource.data.imageBase64, 280000) && request.resource.data.imageBase64.size() > 0
+        && request.resource.data.mimeType in ['image/jpeg','image/webp','image/png']
+        && ((request.resource.data.targetType == 'user' && request.resource.data.targetId == request.auth.uid)
+          || (request.resource.data.targetType == 'campsite' && campsite(request.resource.data.targetId).ownerId == request.auth.uid))
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if false;
+      allow delete: if mine(resource.data.ownerId) || admin();
+    }
+    match /ratings/{id} {
+      allow read: if activeUser();
+      allow create: if activeUser() && request.resource.data.userId == request.auth.uid
+        && id == request.resource.data.campsiteId + '_' + request.auth.uid
+        && request.resource.data.keys().hasAll(['campsiteId','userId','score','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['campsiteId','userId','score','createdAt','updatedAt'])
+        && campsite(request.resource.data.campsiteId).active
+        && request.resource.data.score is int && request.resource.data.score >= 1 && request.resource.data.score <= 5
+        && request.resource.data.createdAt == request.time && updatedNow();
+      allow update: if mine(resource.data.userId) && changedOnly(['score','updatedAt'])
+        && request.resource.data.score is int && request.resource.data.score >= 1 && request.resource.data.score <= 5 && updatedNow();
+      allow delete: if mine(resource.data.userId) || admin();
+    }
+    match /ownerNotices/{id} {
+      allow read: if mine(resource.data.ownerId)
+        || (activeUser() && request.auth.uid in resource.data.recipientIds) || admin();
+      allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['ownerId','lotteryId','message','recipientIds','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['ownerId','lotteryId','message','recipientIds','createdAt','updatedAt'])
+        && lottery(request.resource.data.lotteryId).ownerId == request.auth.uid
+        && text(request.resource.data.message, 1000) && request.resource.data.message.size() > 0
+        && request.resource.data.recipientIds is list && request.resource.data.recipientIds.size() >= 1
+        && request.resource.data.recipientIds.size() <= 100 && request.resource.data.createdAt == request.time && updatedNow();
+      allow update, delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

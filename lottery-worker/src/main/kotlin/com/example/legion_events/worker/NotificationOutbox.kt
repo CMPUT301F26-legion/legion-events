@@ -1,7 +1,7 @@
 /*
  * NotificationOutbox.kt
  *
- * Purpose: Queues win and loss events when the lottery result commits (US 01.03.01 and 01.03.02).
+ * Purpose: Saves Inbox results and queues optional push delivery in the draw transaction.
  * Role: Firestore handoff from the draw worker to Part 5's notification service.
  */
 package com.example.legion_events.worker
@@ -11,8 +11,8 @@ import com.google.cloud.firestore.Firestore
 import com.google.cloud.firestore.Transaction
 
 /**
- * Stages one pending notification event under `lotteryNotificationOutbox/{lotteryId}_{toUserId}`.
- * The event commits with the draw and is available to the inbox and push service after commit.
+ * Saves one Inbox result and one pending push event using the same stable document ID.
+ * Both commit with the draw, so the winner's offer and Inbox result appear together even with push disabled.
  *
  * @param transaction Active draw transaction. Call after its reads are complete.
  * @param firestore Firestore client for the database used by the transaction.
@@ -27,15 +27,19 @@ internal fun sendNotification(
     toUserId: String,
     offerId: String?,
 ) {
+    val eventId = "${lotteryId}_$toUserId"
+    val result = mapOf(
+        "type" to if (offerId == null) "lottery_lost" else "lottery_won",
+        "toUserId" to toUserId,
+        "lotteryId" to lotteryId,
+        "offerId" to offerId,
+        "createdAt" to FieldValue.serverTimestamp(),
+    )
+    transaction.create(firestore.collection("notifications").document(eventId), result)
     transaction.create(
-        firestore.collection("lotteryNotificationOutbox").document("${lotteryId}_$toUserId"),
-        mapOf(
-            "type" to if (offerId == null) "lottery_lost" else "lottery_won",
-            "toUserId" to toUserId,
-            "lotteryId" to lotteryId,
-            "offerId" to offerId,
+        firestore.collection("lotteryNotificationOutbox").document(eventId),
+        result + mapOf(
             "deliveryStatus" to "pending",
-            "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp(),
         ),
     )

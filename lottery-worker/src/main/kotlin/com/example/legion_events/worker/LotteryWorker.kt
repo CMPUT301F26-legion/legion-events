@@ -52,6 +52,18 @@ class LotteryWorker(private val firestore: Firestore) {
     }
 
     /**
+     * Handles one changed lottery using its current stored values, including edits made in the console.
+     * Repeated, delayed, and out-of-order events all pass through the transaction's eligibility check.
+     * @param lotteryId A single document ID from `lotteries`.
+     * @param cutoff Backend time at which the event is processed.
+     * @return True if this call committed the draw, or false if it is missing, future, or already drawn.
+     */
+    fun drawLottery(lotteryId: String, cutoff: Timestamp = Timestamp.now()): Boolean {
+        require(lotteryId.isNotBlank() && '/' !in lotteryId) { "A single lottery ID is required." }
+        return drawLottery(firestore.collection("lotteries").document(lotteryId), cutoff)
+    }
+
+    /**
      * Rechecks eligibility in the transaction so concurrent attempts can commit a draw only once.
      *
      * @param reference Lottery document to read and update.

@@ -1,5 +1,9 @@
 name: Lottery draw
 
+# CLOUD-ONLY entry point. Foreground Android draws use LocalLotteryDrawController instead.
+# Leave LOTTERY_DRAW_ENABLED and LOTTERY_NOTIFICATIONS_ENABLED unset/false for local-only operation.
+# Reservation cancellations have their own independent enable flag.
+
 on:
   schedule:
     - cron: '17 * * * *'

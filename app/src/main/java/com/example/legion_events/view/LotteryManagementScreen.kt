@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.LotteryBadge
+import com.example.legion_events.controller.LocalLotteryDrawController
 import com.example.legion_events.controller.LotteryManagementState
 import com.example.legion_events.controller.ManagementTab
 import com.example.legion_events.controller.WaitlistRow
@@ -101,7 +102,10 @@ fun LotteryManagementScreen(
                         }
                         ManagementTab.WINNERS -> when {
                             !lottery.winnersDrawn -> item {
-                                Text("Winners are drawn automatically when registration closes.",
+                                Text(
+                                    if (LocalLotteryDrawController.ENABLED)
+                                        "Keep the owner's app open after registration closes to draw winners automatically."
+                                    else "Winners are drawn automatically when registration closes.",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             state.waitlistError != null -> item {
@@ -152,7 +156,9 @@ private fun StatusCard(lottery: Lottery, badge: LotteryBadge?, editBlockedReason
                 }
             }
             Text("Registration " + periodText(lottery.registrationStartAt, lottery.registrationEndAt) +
-                " · Draw runs automatically", style = MaterialTheme.typography.bodySmall)
+                if (LocalLotteryDrawController.ENABLED)
+                    " · Draw runs while the owner's app is open" else " · Draw runs automatically",
+                style = MaterialTheme.typography.bodySmall)
             Text("Booking " + periodText(lottery.bookingStartAt, lottery.bookingEndAt), style = MaterialTheme.typography.bodySmall)
             editBlockedReason?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

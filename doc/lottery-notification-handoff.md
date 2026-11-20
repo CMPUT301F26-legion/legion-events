@@ -1,8 +1,15 @@
 # Lottery notification handoff for Person 5
 
-The lottery worker saves each outcome and queues a notification event. A
-separate delivery step publishes it to the entrant's inbox and sends an optional
-push. Part 5 can build on this Firestore contract for the inbox.
+**Current trigger mode is local Android drawing.** The foreground draw writes
+the same Inbox and pending push-event schemas as the retained cloud worker.
+Cloud push delivery is optional and is currently unused by this local trigger.
+See [local draw setup](local-lottery-triggering.md) for the required owner rules.
+
+The lottery worker saves each outcome, its visible Inbox notice, and a pending
+push event in the same transaction. A separate delivery step sends optional
+pushes. Inbox publication succeeds with the draw even when push is disabled.
+See the [deadline service setup](lottery-deadline-automation.md) for automatic
+processing after a saved date change and a one-minute deadline sweep.
 
 ## What `sendNotification()` does today
 
@@ -21,7 +28,8 @@ internal fun sendNotification(
 )
 ```
 
-The helper calls `transaction.create(...)` to stage the event in Firestore. The
+The helper calls `transaction.create(...)` for both the Inbox record in
+`notifications` and the event in `lotteryNotificationOutbox`. The
 same transaction writes the waitlist outcomes, creates the winners' offers, and
 sets `winnersDrawn`. A committed event therefore points to a committed result
 and, for a win, an existing offer. If the draw rolls back, the event rolls back
@@ -55,9 +63,10 @@ open an offer.
 
 ## How delivery works
 
-1. **Publish the inbox item.** The `deliver-notifications` command sweeps
-   pending outbox events. It creates `notifications/{eventId}` for active
-   recipients and preserves existing records on retries. The inbox listens
+1. **Publish the inbox item.** The draw transaction creates
+   `notifications/{eventId}` with the result. The `deliver-notifications`
+   command can fill in missing Inbox records for legacy draws and preserves
+   existing records on retries. The inbox listens
    for records addressed to the signed-in UID. A win opens `bookingOfferRoute(offerId)`.
 2. **Check push preferences.** The backend attempts FCM for an active profile
    with `notificationsEnabled: true` and a token. The inbox item is available
@@ -88,9 +97,9 @@ open an offer.
    `updatedAt == request.time`. The Admin SDK writes through IAM.
    [Firestore server security](https://docs.cloud.google.com/firestore/native/docs/security/iam)
 4. Set the GitHub repository variable `LOTTERY_NOTIFICATIONS_ENABLED` to `true`
-   when the rules, permission, and test client are ready. The draw workflow must
-   also be enabled. Delivery runs on the same schedule and processes pending
-   results from previous draws.
+   when the rules, permission, and test client are ready for push delivery. The
+   draw workflow must also be enabled. The draw's Inbox writes are independent
+   of this flag. Delivery processes pending events from earlier draws.
 
 Merge the inbox rule inside `match /databases/{database}/documents` and check
 that broader rules do not grant inbox writes or outbox access to clients.

@@ -1,0 +1,7 @@
+# Upload only the verified worker distribution and the container recipe.
+**
+!Dockerfile
+!build/
+!build/install/
+!build/install/legion-lottery-worker/
+!build/install/legion-lottery-worker/**

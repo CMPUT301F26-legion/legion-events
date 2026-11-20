@@ -3,6 +3,8 @@
  *
  * Purpose: Run lottery, notification, or cancellation processing from Actions or a local emulator.
  * Role: Command-line entry point that selects the Firestore connection.
+ * Trigger mode: CLOUD-ONLY. The Android app currently uses LocalLotteryDrawController instead.
+ * This entry point runs only when explicitly started locally or by the optional cloud infrastructure.
  * Outstanding issues: None.
  */
 package com.example.legion_events.worker
@@ -20,6 +22,8 @@ import com.google.firebase.messaging.MessagingErrorCode
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.net.InetSocketAddress
+import java.util.concurrent.CountDownLatch
 
 /**
  * Processes the selected worker step in `FIREBASE_PROJECT_ID` and prints its completed count.
@@ -27,15 +31,16 @@ import java.util.concurrent.TimeoutException
  * Live runs require Google Application Default Credentials and the corresponding enable flag:
  * `RESERVATION_CANCELLATIONS_ENABLED` for cancellations, otherwise `LOTTERY_DRAW_ENABLED`.
  *
- * @param args Empty to draw, `deliver-notifications`, or `process-cancellations`.
+ * @param args Empty to draw, `serve` for Cloud Run, `deliver-notifications`, or `process-cancellations`.
  * @throws IllegalStateException If required configuration is missing or processing fails.
  */
 fun main(args: Array<String>) {
-    require(args.isEmpty() || (args.size == 1 && args[0] in listOf("deliver-notifications", "process-cancellations"))) {
+    require(args.isEmpty() || (args.size == 1 && args[0] in listOf("serve", "deliver-notifications", "process-cancellations"))) {
         "Unknown worker command."
     }
     val deliverNotifications = args.firstOrNull() == "deliver-notifications"
     val cancellations = args.firstOrNull() == "process-cancellations"
+    val serve = args.firstOrNull() == "serve"
     val projectId = checkNotNull(System.getenv("FIREBASE_PROJECT_ID")?.takeIf { it.isNotBlank() }) {
         "Set FIREBASE_PROJECT_ID before running the worker."
     }
@@ -44,7 +49,9 @@ fun main(args: Array<String>) {
         check(projectId.startsWith("demo-")) { "Use a demo project ID with the Firestore emulator." }
         FirestoreOptions.newBuilder().setProjectId(projectId).setEmulatorHost(emulatorHost).build()
             .service.use { firestore ->
-                if (cancellations) {
+                if (serve) {
+                    serveLotteries(firestore, projectId)
+                } else if (cancellations) {
                     println("Completed ${ReservationCancellationWorker(firestore).processPending()} cancellation(s).")
                 } else if (deliverNotifications) {
                     val delivered = NotificationDelivery(firestore) { false }.deliverPending()
@@ -66,7 +73,9 @@ fun main(args: Array<String>) {
     )
     try {
         val firestore = FirestoreClient.getFirestore(app)
-        if (cancellations) {
+        if (serve) {
+            serveLotteries(firestore, projectId)
+        } else if (cancellations) {
             println("Completed ${ReservationCancellationWorker(firestore).processPending()} cancellation(s).")
         } else if (deliverNotifications) {
             val messaging = FirebaseMessaging.getInstance(app)
@@ -77,6 +86,18 @@ fun main(args: Array<String>) {
         }
     } finally {
         app.delete()
+    }
+}
+
+/** Hosts the deadline service until the process shuts down. Cloud Run supplies the port and IAM gateway. */
+private fun serveLotteries(firestore: com.google.cloud.firestore.Firestore, projectId: String) {
+    val port = System.getenv("PORT")?.toInt() ?: 8080
+    val stopped = CountDownLatch(1)
+    LotteryAutomationServer(firestore, projectId, InetSocketAddress("0.0.0.0", port)).use { server ->
+        Runtime.getRuntime().addShutdownHook(Thread { stopped.countDown() })
+        server.start()
+        println("Lottery automation listening on port ${server.port}.")
+        stopped.await()
     }
 }
 

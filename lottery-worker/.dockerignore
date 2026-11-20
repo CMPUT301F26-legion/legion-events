@@ -1,0 +1,5 @@
+**
+!build/
+!build/install/
+!build/install/legion-lottery-worker/
+!build/install/legion-lottery-worker/**
