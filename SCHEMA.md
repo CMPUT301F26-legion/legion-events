@@ -201,8 +201,61 @@ same transaction as cancellation. It stores `toUserId`, `fromUserId: null`,
 `lotteryId`, `reservationId`, `type: "reservation_cancelled"`, `title`, `body`,
 `read: false`, and server `createdAt`/`updatedAt` timestamps. The shared Inbox reads
 it through its existing recipient-scoped query and opens that reservation's confirmation.
-Repeated worker runs do not rewrite the booking or notification. Clients must
-not be allowed to create cancellation notices, set `status`, or release nights.
+Repeated worker runs do not rewrite the booking or notification. Entrant clients must
+not be allowed to create cancellation notices, set `status`, or release nights; the only
+client `status` writes are the owner's acceptance and rejection under [Owner reservations](#owner-reservations).
+
+## Owner reservations
+
+S17 lists bookings with `ownerId == uid` and `campsiteId == <selected campsite>`, which the deployed
+reservation read rule (`mine(resource.data.ownerId)`) allows. Two equality filters need no composite
+index. Malformed records are left out instead of hiding the rest. Entrant profiles are not read, because
+`users/{uid}` is readable only by its owner or an admin. Bookings created by entrants start as
+`requested`, so unlike S10, S17's Active tab lists `requested` and `confirmed` bookings with
+`endDate > now`, each with its status badge. The calendar fills nights held by `confirmed` bookings and
+outlines nights asked for by upcoming `requested` ones. Past lists only `confirmed` stays after
+checkout; a `requested` booking whose checkout passes without confirmation is not listed.
+
+Accepting is one transaction that rechecks that the owner owns the booking and that it is `requested`,
+before its `endDate`, with no cancellation pending, then:
+
+| Write | Fields |
+| --- | --- |
+| `reservations/{id}` update | `status: "confirmed"`, `updatedAt` server timestamp; nothing else changes |
+| `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
+
+`bookedNights` stay worker-only, so accepting does not reserve the nights itself, and the rule cannot
+check for clashes because it cannot list another booking's nights (see the known gaps below).
+
+Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
+`requested` or `confirmed` with `endDate` in the future, then:
+
+| Write | Fields |
+| --- | --- |
+| `reservations/{id}` update | `status: "rejected"`, `updatedAt` server timestamp; nothing else changes |
+| `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
+
+The optional reason is only sent in the notice; no extra reservation field is written. The
+`ownerNotices` rule allows the accept and reject notices because the owner owns the booking's lottery;
+a booking whose `lotteryId` is missing or another owner's (for example, a hand-made test record) is
+denied, and S17 reports "You don't have permission to accept/reject this reservation."
+
+The deployed rules are in [`firestore.rules`](firestore.rules). The reservation `allow update` has two
+branches:
+
+- **Entrant:** may set `cancellationRequested` to `true` on their own `requested` or `confirmed` booking
+  that has no pending request, changing only `cancellationRequested` and `updatedAt`.
+- **Owner:** before `endDate`, may change only `status` and `updatedAt`, and only along
+  `requested -> confirmed` (with no pending cancellation), `requested -> rejected`, or
+  `confirmed -> rejected`.
+
+**Known gaps.** `bookedNights` stay `allow write: if false`, and `ReservationCancellationWorker` only
+releases nights for entrant-cancelled `confirmed` bookings. So, until the worker handles them:
+
+- a rejected booking's nights are **not released**;
+- an accepted booking's nights are **not reserved**, so two overlapping requests can both be accepted;
+- a cancellation requested on a `requested` booking is never processed (the rule allows the request,
+  but the worker only handles `confirmed` bookings). S17 does not offer Accept for such a booking.
 
 ## Lottery notifications
 
