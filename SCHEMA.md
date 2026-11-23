@@ -257,6 +257,31 @@ releases nights for entrant-cancelled `confirmed` bookings. So, until the worker
 - a cancellation requested on a `requested` booking is never processed (the rule allows the request,
   but the worker only handles `confirmed` bookings). S17 does not offer Accept for such a booking.
 
+## Ratings
+
+S10c stores one rating at `ratings/{campsiteId}_{userId}`. Repeat reservations for
+the same campsite share that document.
+
+| Field | Type |
+| --- | --- |
+| `campsiteId`, `userId` | String document IDs; `userId` is the current Firebase Auth UID |
+| `score` | Integer from 1 to 5 |
+| `createdAt`, `updatedAt` | Firestore server timestamps |
+
+The app receives a reservation ID through navigation, checks that it belongs to
+the entrant, is `confirmed`, has reached checkout, and has no pending cancellation,
+then loads its active campsite and existing score. Saving rechecks these conditions
+in a transaction. A new rating uses exactly the five fields above. An update changes
+only `score` and `updatedAt`, preserving `createdAt` and both IDs. The same score is
+a read-only retry. No reservation ID or profile information is added to a rating.
+
+The existing security rules enforce the UID, document key, score range, allowed
+fields, and server timestamps. They require an active campsite when creating a
+rating; they do not independently prove that a completed reservation exists.
+Completed-stay access is checked by this app's repository. The client does not
+update campsite `ratingAverage` or `ratingCount`; refreshing those protected fields
+requires trusted backend aggregation.
+
 ## Lottery notifications
 
 The backend publishes `notifications/{outboxEventId}` for each active recipient

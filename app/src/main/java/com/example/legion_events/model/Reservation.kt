@@ -55,6 +55,9 @@ data class Reservation(
     /** Returns true for confirmed stays at or after checkout, without changing their saved status. */
     fun isPast(at: Timestamp): Boolean = status == STATUS_CONFIRMED && endDate <= at
 
+    /** Allows a rating only after a confirmed stay reaches checkout, with no cancellation pending. */
+    fun canRate(at: Timestamp): Boolean = isPast(at) && !cancellationRequested
+
     /** Allows a new cancellation request for an upcoming or ongoing stay, before checkout. */
     fun canRequestCancellation(at: Timestamp): Boolean = isActive(at) && !cancellationRequested
 
