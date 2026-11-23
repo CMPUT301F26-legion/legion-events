@@ -30,11 +30,12 @@ import com.google.firebase.Timestamp
  * @param onCancel Requests the cancellation dialog.
  * @param onDismissCancellation Dismisses the dialog without submitting.
  * @param onConfirmCancellation Submits the reviewed cancellation request.
+ * @param onRate Opens S10c for this completed stay.
  */
 @Composable
 fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit, onRetry: () -> Unit,
     onCampsite: (String) -> Unit, onConfirmation: () -> Unit, onDownload: () -> Unit,
-    onCancel: () -> Unit, onDismissCancellation: () -> Unit, onConfirmCancellation: () -> Unit) {
+    onCancel: () -> Unit, onDismissCancellation: () -> Unit, onConfirmCancellation: () -> Unit, onRate: () -> Unit) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -83,6 +84,9 @@ fun ReservationDetailsScreen(state: ReservationDetailsState, onBack: () -> Unit,
                             Text(if (reservation.rulesAccepted) "Campsite rules accepted" else "Campsite rules not accepted")
                         }
                         item { OutlinedButton(onClick = { onCampsite(reservation.campsiteId) }) { Text("View campsite") } }
+                        if (reservation.canRate(Timestamp.now())) {
+                            item { OutlinedButton(onClick = onRate, modifier = Modifier.fillMaxWidth()) { Text("Rate your stay") } }
+                        }
                         if (reservation.status == Reservation.STATUS_CONFIRMED || reservation.cancellationCompleted()) {
                             item {
                                 OutlinedButton(onClick = onConfirmation, modifier = Modifier.fillMaxWidth()) {

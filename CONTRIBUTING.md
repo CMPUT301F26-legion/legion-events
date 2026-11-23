@@ -107,7 +107,28 @@ The list refreshes on resume and offers Refresh/Retry. Details check ownership a
 
 Booking dates, guests, rules acceptance, and total price come from the saved reservation.
 Current campsite names and areas are optional display labels; inaccessible listings do
-not hide reservations. Ratings are a separate story.
+not hide reservations.
+
+### Rate a completed stay
+
+**Bookings → Past → View reservation → Rate your stay** opens S10c (US 01.13.01).
+`rateStayRoute(reservationId)` passes only the booking ID. `RateStayController`
+loads the eligible stay and existing score through `RatingRepository`, implemented
+by `FirebaseRatingRepository`; `RateStayScreen` renders state and action callbacks.
+
+A stay can be rated at or after checkout while still `confirmed`, with no pending
+cancellation, and while its campsite is available. The repository checks ownership
+and eligibility again inside the save transaction. Choose one to five stars and
+save, or use **Maybe later** without writing. An existing campsite rating is prefilled
+and can be updated. A successful save returns to Bookings and preserves the selected
+tab. The draft survives recreation; loading and saving errors offer separate retries.
+
+Ratings use `ratings/{campsiteId}_{uid}`, so repeat stays share one score. Creates
+use server timestamps; updates change only `score` and `updatedAt`. Retrying the
+same score does not rewrite timestamps. The current rules enforce the signed-in
+UID, field contract, and score range; completed-stay eligibility is additionally
+checked by the app repository. Stored campsite `ratingAverage` and `ratingCount`
+remain backend-managed and need trusted aggregation to reflect new scores.
 
 ### Cancellation
 
