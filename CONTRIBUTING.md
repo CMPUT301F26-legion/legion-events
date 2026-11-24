@@ -107,7 +107,28 @@ The list refreshes on resume and offers Refresh/Retry. Details check ownership a
 
 Booking dates, guests, rules acceptance, and total price come from the saved reservation.
 Current campsite names and areas are optional display labels; inaccessible listings do
-not hide reservations. Ratings are a separate story.
+not hide reservations.
+
+### Rate a completed stay
+
+**Bookings → Past → View reservation → Rate your stay** opens S10c (US 01.13.01).
+`rateStayRoute(reservationId)` passes only the booking ID. `RateStayController`
+loads the eligible stay and existing score through `RatingRepository`, implemented
+by `FirebaseRatingRepository`; `RateStayScreen` renders state and action callbacks.
+
+A stay can be rated at or after checkout while still `confirmed`, with no pending
+cancellation, and while its campsite is available. The repository checks ownership
+and eligibility again inside the save transaction. Choose one to five stars and
+save, or use **Maybe later** without writing. An existing campsite rating is prefilled
+and can be updated. A successful save returns to Bookings and preserves the selected
+tab. The draft survives recreation; loading and saving errors offer separate retries.
+
+Ratings use `ratings/{campsiteId}_{uid}`, so repeat stays share one score. Creates
+use server timestamps; updates change only `score` and `updatedAt`. Retrying the
+same score does not rewrite timestamps. The current rules enforce the signed-in
+UID, field contract, and score range; completed-stay eligibility is additionally
+checked by the app repository. Stored campsite `ratingAverage` and `ratingCount`
+remain backend-managed and need trusted aggregation to reflect new scores.
 
 ### Cancellation
 
@@ -150,6 +171,42 @@ receipt. Export rechecks the status after the Save dialog; it does not silently
 change a selected booking receipt into a cancellation receipt. Booking creation
 and booking notifications remain separate work.
 
+## Owner reservations
+
+S17 (`OwnerReservationsScreen`) is the owner bar's **Reservations** tab. A dropdown picks one of the
+owner's campsites (from `OwnerCampsiteRepository.getMyCampsites`), and `OwnerReservationsController`
+reads that campsite's bookings through `OwnerReservationRepository`, implemented by
+`FirebaseOwnerReservationRepository`. It reloads on resume and offers Refresh/Retry. The campsite,
+tab, and calendar month are kept in `SavedStateHandle`.
+
+- **Calendar (US 02.06.01):** fills every night held by a `confirmed` booking and outlines nights
+  asked for by upcoming `requested` ones, using `Reservation.bookedNights()` (UTC `YYYY-MM-DD`,
+  checkout excluded). It opens on the next stay's month, or the current month. `BookingCalendar.kt`
+  lays out the grid.
+- **Tabs (US 02.07.01 to 02.07.03):** Active lists upcoming and ongoing `requested` and `confirmed`
+  bookings (`Reservation.isUpcomingForOwner`), because entrant bookings start as `requested`; a status
+  badge tells them apart. Past uses S10's rule (`confirmed` after checkout). Cancelled lists
+  `cancelled` and `rejected` bookings, most recently changed first. Switching tabs does not read again.
+- **View booking:** a dialog with the reservation number, dates, guests, total, and rules acceptance.
+  The rules let only a profile's owner or an admin read `users/{uid}`, so entrant names are not shown.
+- **Accept:** requested bookings with no pending cancellation show **Accept** in the Active tab and the
+  details dialog. One transaction sets the booking to `confirmed` and writes an `ownerNotices` entry to
+  the entrant; its nights then show as booked on S17. The app does not reserve `bookedNights` (see the
+  known gaps in [SCHEMA.md](SCHEMA.md#owner-reservations)).
+- **Reject (US 02.08.01):** only bookings in the Active tab (`requested` or `confirmed`, before checkout). The dialog takes an optional reason (at most
+  `Reservation.MAX_REJECTION_REASON_LENGTH`). One transaction sets the booking to `rejected` and writes an
+  `ownerNotices` entry to that entrant, so it appears in their S07 inbox; the booking then moves to
+  Cancelled. The app never writes `bookedNights` (the rules make them worker-only), so a rejected
+  booking's nights are not released until the worker handles `rejected` bookings.
+- **Denied writes:** if Firestore denies an accept or reject, S17 shows "You don't have permission to
+  accept/reject this reservation." and logs the original error under the `OwnerReservations` tag
+  (`adb logcat -s OwnerReservations`). The usual cause is a booking whose `lotteryId` is not one of
+  the owner's lotteries.
+
+Card and calendar dates are UTC days so they match `availableNights` and the lottery date pickers.
+The shared `toReservation()` in `ReservationDocument.kt` maps booking documents for both the entrant
+and owner repositories; call it only after checking who may read the record.
+
 ## Theme
 
 The app-wide **Dark mode** switch selects light or dark appearance. Light is the
@@ -173,6 +230,15 @@ Account roles are `user` and `admin`. Ordinary users share the same capabilities
 A listing belongs to the user identified by its `ownerId`; ownership is not a
 separate account role. Users can view and create listings and modify only their own
 listings. Admins have additional permissions. An entrant is a participant in a lottery.
+
+## Firestore rules
+
+The deployed security rules are kept in [`firestore.rules`](firestore.rules). Change rules there,
+in the same pull request as the app code that needs them, so reviewers see both. After the pull
+request is merged, deploy it by pasting the file into the Firebase console (**Firestore Database →
+Rules → Publish**), or with the Firebase CLI: `firebase deploy --only firestore:rules`. The rules
+are shared by everyone using the project, so tell the team before publishing. If someone edits the
+rules in the console, copy them back into `firestore.rules` so the file stays accurate.
 
 ## Changes and documentation
 

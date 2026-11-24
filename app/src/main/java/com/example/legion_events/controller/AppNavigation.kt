@@ -10,6 +10,7 @@ package com.example.legion_events.controller
 
 import android.content.ActivityNotFoundException
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -50,6 +51,9 @@ import com.example.legion_events.view.InboxScreen
 import com.example.legion_events.view.QrScanScreen
 import com.example.legion_events.view.ReservationsScreen
 import com.example.legion_events.view.ReservationDetailsScreen
+import com.example.legion_events.view.RateStayScreen
+import com.example.legion_events.data.RatingRepository
+import com.example.legion_events.data.FirebaseRatingRepository
 import com.example.legion_events.view.ReservationConfirmationScreen
 import com.example.legion_events.view.LotteryEditScreen
 import com.example.legion_events.view.LotteriesScreen
@@ -84,12 +88,16 @@ import com.example.legion_events.data.WelcomePreferences
 import com.example.legion_events.data.FirebaseOwnerNoticeRepository
 import com.example.legion_events.data.FirebaseWaitlistRepository
 import com.example.legion_events.data.OwnerNoticeRepository
+import com.example.legion_events.data.OwnerReservationRepository
+import com.example.legion_events.data.FirebaseOwnerReservationRepository
 import com.example.legion_events.data.WaitlistRepository
 import com.example.legion_events.data.ReservationRepository
 import com.example.legion_events.data.writeReservationCsv
 import com.example.legion_events.data.FirebaseReservationRepository
 import com.example.legion_events.view.CampsiteLotterySection
 import com.example.legion_events.view.OwnerNoticesScreen
+import com.example.legion_events.view.OwnerReservationsActions
+import com.example.legion_events.view.OwnerReservationsScreen
 import com.example.legion_events.view.AdminCampsiteScreen
 import com.example.legion_events.view.AdminCampsitesScreen
 import com.example.legion_events.view.AdminProfilesScreen
@@ -156,6 +164,14 @@ internal fun reservationDetailsRoute(reservationId: String): String {
 
 /** S10c: rate a completed stay. */
 internal const val RATE_STAY_ROUTE = "rate_stay"
+/** S10c receives only a booking ID; the repository checks the UID, campsite, and checkout again. */
+internal const val RATE_STAY_PATTERN = "$RATE_STAY_ROUTE/{reservationId}"
+
+/** Builds the rating route while preserving spaces and URI punctuation in the saved booking ID. */
+internal fun rateStayRoute(reservationId: String): String {
+    require(reservationId.isNotBlank() && '/' !in reservationId) { "A single reservation ID is required." }
+    return "$RATE_STAY_ROUTE/${Uri.encode(reservationId)}"
+}
 /** S11b: accessibility settings. */
 internal const val ACCESSIBILITY_ROUTE = "accessibility"
 /** S12: owner dashboard. */
@@ -194,9 +210,7 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  * When you build one, remove it here and register it in [AppNavigation]. Add route arguments then too.
  */
 private val PLACEHOLDER_SCREENS = mapOf(
-    RATE_STAY_ROUTE to "Rate your stay",
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-    OWNER_RESERVATIONS_ROUTE to "Owner reservations",
     ADMIN_LOGS_ROUTE to "Admin logs",
 )
 
@@ -286,6 +300,8 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param onEnablePush Requests Android's notification permission when available.
  * @param reservations Reads the authenticated entrant's saved bookings.
  * @param admin Reads and moderates every campsite and profile on S19.
+ * @param ownerReservations Reads and rejects bookings at the owner's campsites on S17.
+ * @param ratings Loads and saves the entrant's score from a completed stay on S10c.
  */
 @Composable
 fun AppNavigation(
@@ -307,6 +323,8 @@ fun AppNavigation(
     onEnablePush: (() -> Unit)? = null,
     reservations: ReservationRepository = FirebaseReservationRepository.instance,
     admin: AdminRepository = FirebaseAdminRepository.instance,
+    ownerReservations: OwnerReservationRepository = FirebaseOwnerReservationRepository.instance,
+    ratings: RatingRepository = FirebaseRatingRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -324,7 +342,7 @@ fun AppNavigation(
     // Detail screens keep their parent tab selected, including direct links from other screens.
     val entrantTab = when (currentRoute) {
         BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
-        RESERVATION_DETAILS_PATTERN, RESERVATION_CONFIRMATION_PATTERN -> BOOKINGS_ROUTE
+        RESERVATION_DETAILS_PATTERN, RESERVATION_CONFIRMATION_PATTERN, RATE_STAY_PATTERN -> BOOKINGS_ROUTE
         else -> currentRoute
     }
     Column {
@@ -501,7 +519,8 @@ fun AppNavigation(
                                 launchSingleTop = true
                             }
                         }, onDownload = download, onCancel = detail::requestCancel,
-                        onDismissCancellation = detail::dismissCancellation, onConfirmCancellation = detail::confirmCancellation)
+                        onDismissCancellation = detail::dismissCancellation, onConfirmCancellation = detail::confirmCancellation,
+                        onRate = { navController.navigate(rateStayRoute(checkNotNull(booking.entry).reservation.id)) { launchSingleTop = true } })
                 }
             }
             composable(RESERVATION_CONFIRMATION_PATTERN,
@@ -521,6 +540,33 @@ fun AppNavigation(
                                 launchSingleTop = true
                             }
                         })
+                }
+            }
+            composable(RATE_STAY_PATTERN,
+                arguments = listOf(navArgument("reservationId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val rate: RateStayController = viewModel(factory = viewModelFactory {
+                        initializer { RateStayController(checkNotNull(entry.arguments?.getString("reservationId")), ratings, createSavedStateHandle()) }
+                    })
+                    val rating by rate.state.collectAsStateWithLifecycle()
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    val context = LocalContext.current.applicationContext
+                    LaunchedEffect(rate, lifecycleOwner) {
+                        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                            rate.state.collect { result ->
+                                if (result.saved && navController.currentDestination?.route == RATE_STAY_PATTERN) {
+                                    Toast.makeText(context, "Rating saved", Toast.LENGTH_SHORT).show()
+                                    if (!navController.popBackStack(BOOKINGS_ROUTE, false)) {
+                                        navController.navigate(BOOKINGS_ROUTE) {
+                                            popUpTo(RATE_STAY_PATTERN) { inclusive = true }
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    RateStayScreen(rating, { navController.popBackStack() }, rate::retry, rate::selectScore, rate::submit)
                 }
             }
             composable(PROFILE_ROUTE) {
@@ -752,6 +798,32 @@ fun AppNavigation(
                         onPauseOrDispose {}
                     }
                     OwnerNoticesScreen(noticeState, notes::selectLottery, notes::setMessage, notes::send, notes::refresh)
+                }
+            }
+            composable(OWNER_RESERVATIONS_ROUTE) {
+                RequireAccount(state, controller) {
+                    val bookings: OwnerReservationsController = viewModel(factory = viewModelFactory {
+                        initializer { OwnerReservationsController(owners::getMyCampsites, ownerReservations, createSavedStateHandle()) }
+                    })
+                    val bookingState by bookings.state.collectAsStateWithLifecycle()
+                    // Reload on every return so campsites added in S13 and new bookings appear.
+                    LifecycleResumeEffect(bookings) {
+                        bookings.refresh()
+                        onPauseOrDispose {}
+                    }
+                    OwnerReservationsScreen(bookingState, OwnerReservationsActions(
+                        onRefresh = bookings::refresh,
+                        onSelectCampsite = bookings::selectCampsite,
+                        onTab = bookings::selectTab,
+                        onMonth = bookings::showMonth,
+                        onView = bookings::viewBooking,
+                        onCloseView = bookings::closeBooking,
+                        onAccept = bookings::accept,
+                        onReject = bookings::requestReject,
+                        onReason = bookings::setRejectReason,
+                        onConfirmReject = bookings::confirmReject,
+                        onCancelReject = bookings::cancelReject,
+                    ))
                 }
             }
             composable(ADMIN_DASHBOARD_ROUTE) {
