@@ -116,6 +116,10 @@ Start a Firestore emulator and run the owner rule tests using Node.js and pnpm.
 The tests use synthetic demo projects and never deploy rules to the live project.
 They include a 100-winner draw, recipient-only reads, premature draws, another
 owner, malformed counts, duplicate attempts, and conflicting offers.
+The existing-permission regression checks also cover profiles, campsite ownership,
+lottery creation and edits, joining and leaving, offer declines, reservations,
+Inbox read markers, conversations, messages, photos, ratings, owner notices,
+admin moderation, and disabled or unauthenticated clients.
 
 ```powershell
 pnpm --dir tests/firestore install --frozen-lockfile --ignore-scripts

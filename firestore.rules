@@ -34,6 +34,7 @@ service cloud.firestore {
           && validProfile(request.resource.data) && updatedNow())
         || (admin() && changedOnly(['disabled','moderationReason','updatedAt'])
           && request.resource.data.disabled is bool && text(request.resource.data.get('moderationReason', ''), 1000) && updatedNow());
+      // Roles can only be assigned through privileged project administration.
       allow delete: if mine(uid);
     }
     function validCampsite(d) {
@@ -69,6 +70,7 @@ service cloud.firestore {
         && d.waitlistLimit is int && d.waitlistLimit >= 1 && d.waitlistLimit <= 100
         && d.winnerCount is int && d.winnerCount >= 1 && d.winnerCount <= d.waitlistLimit;
     }
+    // A small bounded list permits rules to verify every listed campsite owner.
     function ownSite(ids, n) { return ids.size() <= n || (ids[n] is string && campsite(ids[n]).ownerId == request.auth.uid && campsite(ids[n]).active); }
     function ownSites(ids) {
       return ownSite(ids,0) && ownSite(ids,1) && ownSite(ids,2) && ownSite(ids,3) && ownSite(ids,4)
@@ -216,6 +218,8 @@ service cloud.firestore {
         && request.resource.data.ownerId == lottery(request.resource.data.lotteryId).ownerId
         && request.resource.data.campsiteId in offer(request.resource.data.offerId).campsiteIds
         && request.resource.data.createdAt == request.time && updatedNow();
+      // Entrants may only request a cancellation; only the worker releases occupied nights.
+      // Owners may accept a requested booking, or reject a requested or confirmed one, before checkout.
       allow update: if (mine(resource.data.userId) && resource.data.status in ['requested','confirmed']
         && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
         && request.resource.data.cancellationRequested == true && updatedNow())
@@ -247,11 +251,12 @@ service cloud.firestore {
         && request.resource.data.ownerId == campsite(request.resource.data.campsiteId).ownerId
         && request.resource.data.entrantId != request.resource.data.ownerId && campsite(request.resource.data.campsiteId).active
         && request.resource.data.lastMessage == ''
-        && (request.resource.data.lotteryId == null || (lottery(request.resource.data.lotteryId).ownerId == request.auth.uid
+        && (request.resource.data.lotteryId == null || (lottery(request.resource.data.lotteryId).ownerId == request.resource.data.ownerId
           && request.resource.data.campsiteId in lottery(request.resource.data.lotteryId).campsiteIds))
         && (request.resource.data.reservationId == null || (get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.userId == request.auth.uid
           && get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.campsiteId == request.resource.data.campsiteId))
         && request.resource.data.createdAt == request.time && updatedNow();
+      // lastMessage is a display preview; participants cannot change membership.
       allow update: if participant(resource.data) && changedOnly(['lastMessage','updatedAt'])
         && text(request.resource.data.lastMessage, 4000) && updatedNow();
       allow delete: if false;
