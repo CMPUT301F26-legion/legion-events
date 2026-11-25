@@ -23,17 +23,12 @@ service cloud.firestore {
         && (d.photoId == null || text(d.photoId, 150))
         && d.notificationsEnabled is bool && (d.fcmToken == null || text(d.fcmToken, 4096));
     }
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
     match /users/{uid} {
       allow read: if mine(uid) || admin();
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasAll(['name','email','phone','role','photoId','notificationsEnabled','fcmToken','disabled','createdAt','updatedAt'])
         && request.resource.data.keys().hasOnly(['name','email','phone','role','photoId','notificationsEnabled','fcmToken','disabled','createdAt','updatedAt'])
         && validProfile(request.resource.data) && request.resource.data.role == 'user'
-<<<<<<< HEAD
         && request.resource.data.disabled == false && request.resource.data.createdAt == request.time && updatedNow();
       allow update: if (mine(uid) && changedOnly(['name','email','phone','photoId','notificationsEnabled','fcmToken','updatedAt'])
           && validProfile(request.resource.data) && updatedNow())
@@ -42,19 +37,6 @@ service cloud.firestore {
       // Roles can only be assigned through privileged project administration.
       allow delete: if mine(uid);
     }
-=======
-        && request.resource.data.disabled == false
-        && request.resource.data.createdAt == request.time && updatedNow();
-      allow update: if (mine(uid) && changedOnly(['name','email','phone','photoId','notificationsEnabled','fcmToken','updatedAt'])
-          && validProfile(request.resource.data) && updatedNow())
-        || (admin() && changedOnly(['disabled','moderationReason','updatedAt'])
-          && request.resource.data.disabled is bool
-          && text(request.resource.data.get('moderationReason', ''), 1000) && updatedNow());
-      // Roles can only be assigned through privileged project administration.
-       allow delete: if mine(uid);
-    }
-
->>>>>>> origin/main
     function validCampsite(d) {
       return text(d.name, 150) && d.name.size() > 0 && text(d.description, 10000)
         && text(d.locationName, 250) && d.location is latlng
@@ -70,28 +52,15 @@ service cloud.firestore {
       allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(['ownerId','name','description','locationName','location','maxGuests','pricePerNight','amenities','tags','rules','cancellationPolicy','availableNights','photoId','ratingAverage','ratingCount','active','createdAt','updatedAt'])
         && request.resource.data.keys().hasOnly(['ownerId','name','description','locationName','location','maxGuests','pricePerNight','amenities','tags','rules','cancellationPolicy','availableNights','photoId','ratingAverage','ratingCount','active','createdAt','updatedAt'])
-<<<<<<< HEAD
         && validCampsite(request.resource.data) && request.resource.data.ratingAverage == 0 && request.resource.data.ratingCount == 0
-=======
-        && validCampsite(request.resource.data)
-        && request.resource.data.ratingAverage == 0 && request.resource.data.ratingCount == 0
->>>>>>> origin/main
         && request.resource.data.createdAt == request.time && updatedNow();
       allow update: if (mine(resource.data.ownerId)
           && changedOnly(['name','description','locationName','location','maxGuests','pricePerNight','amenities','tags','rules','cancellationPolicy','availableNights','photoId','active','updatedAt'])
           && validCampsite(request.resource.data) && updatedNow())
         || (admin() && changedOnly(['active','moderationReason','updatedAt'])
-<<<<<<< HEAD
           && request.resource.data.active is bool && text(request.resource.data.get('moderationReason', ''), 1000) && updatedNow());
       allow delete: if false;
     }
-=======
-          && request.resource.data.active is bool
-          && text(request.resource.data.get('moderationReason', ''), 1000) && updatedNow());
-      allow delete: if false;
-    }
-
->>>>>>> origin/main
     function validLottery(d) {
       return d.campsiteIds is list && d.campsiteIds.size() >= 1 && d.campsiteIds.size() <= 8
         && d.registrationStartAt is timestamp && d.registrationEndAt is timestamp
@@ -112,19 +81,13 @@ service cloud.firestore {
       let after = getAfter(path).data;
       let joined = after.status == 'joined' && (!exists(path) || get(path).data.status == 'withdrawn');
       let withdrawn = after.status == 'withdrawn' && exists(path) && get(path).data.status == 'joined';
-<<<<<<< HEAD
       return activeUser() && openLottery(resource.data) && changedOnly(['entrantCount','updatedAt']) && updatedNow()
-=======
-      return activeUser() && openLottery(resource.data)
-        && changedOnly(['entrantCount','updatedAt']) && updatedNow()
->>>>>>> origin/main
         && after.userId == request.auth.uid && after.lotteryId == id
         && ((joined && request.resource.data.entrantCount == resource.data.entrantCount + 1
               && request.resource.data.entrantCount <= resource.data.waitlistLimit)
           || (withdrawn && request.resource.data.entrantCount == resource.data.entrantCount - 1
               && request.resource.data.entrantCount >= 0));
     }
-<<<<<<< HEAD
 
     // LOCAL DRAW additions. The owner is trusted to select the entrants and winners.
     // The immutable manifest bounds that authority to one closed lottery and shares rule reads
@@ -166,8 +129,6 @@ service cloud.firestore {
       allow create: if localDrawCommitted(id) && validDraw(request.resource.data, lottery(id), id);
       allow list, update, delete: if false;
     }
-=======
->>>>>>> origin/main
     match /lotteries/{id} {
       allow read: if activeUser();
       allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid
@@ -182,16 +143,9 @@ service cloud.firestore {
           && changedOnly(['campsiteIds','registrationStartAt','registrationEndAt','bookingStartAt','bookingEndAt','winnerCount','waitlistLimit','updatedAt'])
           && validLottery(request.resource.data) && ownSites(request.resource.data.campsiteIds)
           && request.resource.data.registrationStartAt > request.time && updatedNow())
-<<<<<<< HEAD
         || entrantCounterChange(id) || localDrawUpdate(id);
       allow delete: if false;
     }
-=======
-        || entrantCounterChange(id);
-      allow delete: if false;
-    }
-
->>>>>>> origin/main
     function counterAfter(id, delta) {
       let before = lottery(id);
       let after = getAfter(/databases/$(database)/documents/lotteries/$(id)).data;
@@ -206,7 +160,6 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['lotteryId','userId','status','joinedAt','updatedAt'])
         && request.resource.data.status == 'joined' && request.resource.data.joinedAt == request.time
         && updatedNow() && counterAfter(request.resource.data.lotteryId, 1);
-<<<<<<< HEAD
       allow update: if (mine(resource.data.userId) && changedOnly(['status','joinedAt','updatedAt']) && updatedNow()
         && ((resource.data.status == 'joined' && request.resource.data.status == 'withdrawn'
               && request.resource.data.joinedAt == resource.data.joinedAt && counterAfter(resource.data.lotteryId, -1))
@@ -230,23 +183,10 @@ service cloud.firestore {
         && request.resource.data.expiresAt == lottery(request.resource.data.lotteryId).bookingEndAt
         && request.resource.data.status == 'pending' && request.resource.data.response == null
         && request.resource.data.createdAt == request.time && updatedNow();
-=======
-      allow update: if mine(resource.data.userId) && changedOnly(['status','joinedAt','updatedAt']) && updatedNow()
-        && ((resource.data.status == 'joined' && request.resource.data.status == 'withdrawn'
-              && request.resource.data.joinedAt == resource.data.joinedAt && counterAfter(resource.data.lotteryId, -1))
-          || (resource.data.status == 'withdrawn' && request.resource.data.status == 'joined'
-              && request.resource.data.joinedAt == request.time && counterAfter(resource.data.lotteryId, 1)));
-      allow delete: if false;
-    }
-
-    match /offers/{id} {
-      allow read: if mine(resource.data.userId) || mine(lottery(resource.data.lotteryId).ownerId) || admin();
->>>>>>> origin/main
       allow update: if mine(resource.data.userId) && resource.data.status == 'pending'
         && request.time < resource.data.expiresAt && resource.data.get('response', null) == null
         && changedOnly(['response','respondedAt','updatedAt']) && request.resource.data.response == 'decline'
         && request.resource.data.respondedAt == request.time && updatedNow();
-<<<<<<< HEAD
       allow delete: if false;
     }
     match /lotteryNotificationOutbox/{id} {
@@ -256,11 +196,6 @@ service cloud.firestore {
         && request.resource.data.deliveryStatus == 'pending' && updatedNow();
       allow read, update, delete: if false;
     }
-=======
-      allow create, delete: if false;
-    }
-
->>>>>>> origin/main
     match /reservations/{id} {
       allow read: if mine(resource.data.userId) || mine(resource.data.ownerId) || admin();
       allow create: if activeUser() && request.resource.data.userId == request.auth.uid
@@ -292,20 +227,13 @@ service cloud.firestore {
           && changedOnly(['status','updatedAt']) && updatedNow()
           && ((resource.data.status == 'requested' && resource.data.cancellationRequested == false
                 && request.resource.data.status == 'confirmed')
-<<<<<<< HEAD
             || (resource.data.status in ['requested','confirmed'] && request.resource.data.status == 'rejected')));
-=======
-            || (resource.data.status in ['requested','confirmed']
-                && request.resource.data.status == 'rejected')));
-
->>>>>>> origin/main
       allow delete: if false;
     }
     match /bookedNights/{id} {
       allow read: if activeUser();
       allow write: if false;
     }
-<<<<<<< HEAD
     match /notifications/{id} {
       allow read: if mine(resource.data.toUserId) || admin();
       allow create: if localResult(request.resource.data, id)
@@ -314,14 +242,6 @@ service cloud.firestore {
       allow update: if mine(resource.data.toUserId) && changedOnly(['read','updatedAt'])
         && request.resource.data.read is bool && updatedNow();
       allow delete: if false;
-=======
-
-    match /notifications/{id} {
-      allow read: if mine(resource.data.toUserId) || admin();
-      allow update: if mine(resource.data.toUserId) && changedOnly(['read','updatedAt'])
-        && request.resource.data.read is bool && updatedNow();
-      allow create, delete: if false;
->>>>>>> origin/main
     }
     match /conversations/{id} {
       allow read: if participant(resource.data) || admin();
@@ -389,14 +309,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['ownerId','lotteryId','message','recipientIds','createdAt','updatedAt'])
         && lottery(request.resource.data.lotteryId).ownerId == request.auth.uid
         && text(request.resource.data.message, 1000) && request.resource.data.message.size() > 0
-<<<<<<< HEAD
         && request.resource.data.recipientIds is list && request.resource.data.recipientIds.size() >= 1
         && request.resource.data.recipientIds.size() <= 100 && request.resource.data.createdAt == request.time && updatedNow();
-=======
-        && request.resource.data.recipientIds is list
-        && request.resource.data.recipientIds.size() >= 1 && request.resource.data.recipientIds.size() <= 100
-        && request.resource.data.createdAt == request.time && updatedNow();
->>>>>>> origin/main
       allow update, delete: if false;
     }
     match /{document=**} { allow read, write: if false; }
