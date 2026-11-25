@@ -101,10 +101,13 @@ import com.example.legion_events.view.OwnerReservationsScreen
 import com.example.legion_events.view.AdminCampsiteScreen
 import com.example.legion_events.view.AdminCampsitesScreen
 import com.example.legion_events.view.AdminImagesScreen
+import com.example.legion_events.view.AdminLogsScreen
 import com.example.legion_events.view.AdminProfilesScreen
 import com.example.legion_events.data.AdminImageRepository
+import com.example.legion_events.data.AdminLogRepository
 import com.example.legion_events.data.AdminRepository
 import com.example.legion_events.data.FirebaseAdminImageRepository
+import com.example.legion_events.data.FirebaseAdminLogRepository
 import com.example.legion_events.data.FirebaseAdminRepository
 import kotlinx.coroutines.flow.filterIsInstance
 
@@ -216,7 +219,6 @@ internal const val ADMIN_LOGS_ROUTE = "admin/logs"
  */
 private val PLACEHOLDER_SCREENS = mapOf(
     ACCESSIBILITY_ROUTE to "Accessibility settings",
-    ADMIN_LOGS_ROUTE to "Admin logs",
 )
 
 /**
@@ -309,6 +311,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param ownerReservations Reads and rejects bookings at the owner's campsites on S17.
  * @param ratings Loads and saves the entrant's score from a completed stay on S10c.
  * @param images Reads and removes every uploaded image on the S19 Images tab.
+ * @param logs Reads every notification and owner-to-entrant message on S20.
  */
 @Composable
 fun AppNavigation(
@@ -333,6 +336,7 @@ fun AppNavigation(
     ownerReservations: OwnerReservationRepository = FirebaseOwnerReservationRepository.instance,
     ratings: RatingRepository = FirebaseRatingRepository.instance,
     images: AdminImageRepository = FirebaseAdminImageRepository.instance,
+    logs: AdminLogRepository = FirebaseAdminLogRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -878,6 +882,15 @@ fun AppNavigation(
                     val imageState by gallery.state.collectAsStateWithLifecycle()
                     AdminImagesScreen(imageState, { navController.popBackStack() }, gallery::refresh,
                         gallery::requestRemove, gallery::confirmRemove, gallery::cancelRemove)
+                }
+            }
+            composable(ADMIN_LOGS_ROUTE) {
+                RequireAccount(state, controller) {
+                    val history: AdminLogsController = viewModel(factory = viewModelFactory {
+                        initializer { AdminLogsController(logs, admin) }
+                    })
+                    val logState by history.state.collectAsStateWithLifecycle()
+                    AdminLogsScreen(logState, { navController.popBackStack() }, history::refresh, history::selectTab)
                 }
             }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->

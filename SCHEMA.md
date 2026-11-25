@@ -329,3 +329,8 @@ The S19 Images tab (US 03.06.01) reads every `photos/{id}`, newest `createdAt` f
 each one with the campsite named by `targetId`. Deleting a cover photo leaves the campsite's
 `photoId` pointing at a missing document, because the admin rule cannot change `photoId`; the
 gallery and cards already skip missing photos, and the owner can set a new cover in S13.
+
+S20 Admin logs read whole collections, which the rules allow for an admin:
+`notifications` for the notification log (US 03.08.01), and `ownerNotices` plus the
+`messages` whose `senderId` is their conversation's `ownerId` for the owner-to-entrant
+message log (US 03.12.01). Entrant replies are not listed.
