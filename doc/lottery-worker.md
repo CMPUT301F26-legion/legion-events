@@ -3,6 +3,16 @@
 The standalone [Kotlin/JVM worker](../lottery-worker) implements US 02.05.01
 with the Firebase Admin SDK. It runs independently of the Android app.
 
+**Current mode is local Android triggering.** The app uses
+`LocalLotteryDrawController` and `FirebaseLocalLotteryDrawRepository` while the
+owner's app is in the foreground. The entire `lottery-worker/` module is the
+retained cloud implementation and is unused by this foreground trigger.
+See [local setup and required rules](local-lottery-triggering.md).
+
+For optional cloud deadline changes and one-minute deadline checks, deploy the
+[deadline service](lottery-deadline-automation.md). The GitHub schedule below
+is a fallback and requires its enable variables to be configured.
+
 ## Draw behavior
 
 The worker checks undrawn lotteries and runs a Firestore transaction for each
@@ -20,7 +30,8 @@ before writing any results.
   `expiresAt`, and server timestamps for `createdAt` and `updatedAt`.
   The worker uses `bookingEndAt` for `expiresAt` because the lottery has no
   separate offer deadline. A delayed draw can create an already-expired offer.
-- Each entrant gets one win or loss event in `lotteryNotificationOutbox`.
+- Each entrant gets a visible win or loss notice in `notifications` and a pending
+  push event in `lotteryNotificationOutbox`, using the same stable ID.
 
 The transaction commits these writes together. A second run sees `winnersDrawn`
 and skips the lottery. If a destination document already exists, the transaction
@@ -39,9 +50,10 @@ Each event contains `lotteryId`, `toUserId`, `offerId` (null for a loss),
 `type` (`lottery_won` or `lottery_lost`), `deliveryStatus: "pending"`, and server
 timestamps for `createdAt` and `updatedAt`.
 
-The workflow can publish these events to Inbox and send FCM pushes through a
-separate step. Follow the [notification delivery setup](lottery-notification-handoff.md#enable-delivery)
-before enabling `LOTTERY_NOTIFICATIONS_ENABLED`.
+The draw publishes Inbox results in its own transaction. The optional workflow
+delivery step handles FCM and can also publish Inbox records for legacy draws.
+Follow the [notification delivery setup](lottery-notification-handoff.md#enable-delivery)
+before enabling `LOTTERY_NOTIFICATIONS_ENABLED` for push delivery.
 
 ## Local verification
 

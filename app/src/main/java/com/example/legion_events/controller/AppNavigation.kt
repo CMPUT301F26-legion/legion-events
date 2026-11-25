@@ -292,6 +292,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param owners Reads and saves the signed-in user's campsites for S12 to S14.
  * @param offers Reads and declines the authenticated user's offers; tests inject a fake.
  * @param notifications Observes the authenticated user's inbox.
+ * @param localDrawRevision Refreshes visible owner results after a foreground draw commits.
  * @param waitlists Joins and leaves lottery waitlists for S04 and S06.
  * @param notices Sends owner notices on S18 and delivers them to the inbox.
  * @param inboxRecipient Account UID from a pending lottery push tap.
@@ -314,6 +315,7 @@ fun AppNavigation(
     owners: OwnerCampsiteRepository = FirebaseOwnerCampsiteRepository.instance,
     offers: OfferRepository = FirebaseOfferRepository.instance,
     notifications: NotificationRepository = FirebaseNotificationRepository.instance,
+    localDrawRevision: Int = 0,
     waitlists: WaitlistRepository = FirebaseWaitlistRepository.instance,
     notices: OwnerNoticeRepository = FirebaseOwnerNoticeRepository.instance,
     inboxRecipient: String? = null,
@@ -604,7 +606,7 @@ fun AppNavigation(
                     })
                     val listings by dashboard.state.collectAsStateWithLifecycle()
                     // Reload on every return so campsites added or edited in S13 appear.
-                    LifecycleResumeEffect(dashboard) {
+                    LifecycleResumeEffect(dashboard, localDrawRevision) {
                         dashboard.refresh()
                         onPauseOrDispose {}
                     }
@@ -676,7 +678,7 @@ fun AppNavigation(
                     })
                     val information by owned.state.collectAsStateWithLifecycle()
                     // Reload on every return so edits saved in S13 appear.
-                    LifecycleResumeEffect(owned) {
+                    LifecycleResumeEffect(owned, localDrawRevision) {
                         owned.refresh()
                         onPauseOrDispose {}
                     }
@@ -734,7 +736,7 @@ fun AppNavigation(
                     })
                     val listings by list.state.collectAsStateWithLifecycle()
                     // Reload on every return so lotteries created or edited in S15 appear.
-                    LifecycleResumeEffect(list) {
+                    LifecycleResumeEffect(list, localDrawRevision) {
                         list.refresh()
                         onPauseOrDispose {}
                     }
@@ -754,7 +756,7 @@ fun AppNavigation(
                     })
                     val information by manage.state.collectAsStateWithLifecycle()
                     // Reload on every return so edits saved in S15 appear.
-                    LifecycleResumeEffect(manage) {
+                    LifecycleResumeEffect(manage, localDrawRevision) {
                         manage.refresh()
                         onPauseOrDispose {}
                     }

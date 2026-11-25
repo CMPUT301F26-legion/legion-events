@@ -284,12 +284,22 @@ requires trusted backend aggregation.
 
 ## Lottery notifications
 
-The backend publishes `notifications/{outboxEventId}` for each active recipient
-of a completed draw. It stores `toUserId` (Firebase Auth UID), `lotteryId`, `type`
+Local Android draws also create an immutable `lotteryDraws/{lotteryId}` record
+with `lotteryId`, `ownerId`, unique `entrantIds`, unique `winnerIds`, and server
+`createdAt`. It is written in the same transaction as the results and is used by
+the local owner draw rules. The trusted cloud worker uses the shared
+`winnersDrawn` flag without needing this client authorization record.
+See [local trigger setup](doc/local-lottery-triggering.md).
+
+The draw transaction publishes `notifications/{outboxEventId}` for each entrant
+with a joined waitlist entry, together with its result and any winning offer.
+It stores `toUserId` (Firebase Auth UID), `lotteryId`, `type`
 (`lottery_won` or `lottery_lost`), `offerId` (string or null), and `createdAt`
 (the draw event's Firestore timestamp). The app listens for documents addressed
 to the signed-in UID. Inbox results are available when push is off. The app
-stores its FCM registration in `users/{uid}.fcmToken`.
+stores its FCM registration in `users/{uid}.fcmToken`. Inbox publication is
+independent of push enable flags. The [deadline service](doc/lottery-deadline-automation.md)
+handles saved lottery changes and periodic deadline checks.
 
 `lotteryNotificationOutbox` is the backend delivery queue. See the [notification handoff guide](doc/lottery-notification-handoff.md)
 for delivery states, Firestore rules, and FCM setup.

@@ -24,22 +24,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.legion_events.controller.AppNavigation
 import com.example.legion_events.controller.OnboardingController
 import com.example.legion_events.controller.OnboardingState
 import com.example.legion_events.controller.ThemeController
+import com.example.legion_events.controller.LocalLotteryDrawController
+import com.example.legion_events.data.FirebaseLocalLotteryDrawRepository
 import com.example.legion_events.data.FirebaseRepository
 import com.example.legion_events.data.LOTTERY_INBOX_RECIPIENT
 import com.example.legion_events.data.ThemePreferences
@@ -72,6 +80,9 @@ class MainActivity : ComponentActivity() {
             initializer { ThemeController(ThemePreferences(getSharedPreferences("appearance", MODE_PRIVATE))) }
         })[ThemeController::class.java]
         val welcome = WelcomePreferences(getSharedPreferences("onboarding", MODE_PRIVATE))
+        val localDraws = ViewModelProvider(this, viewModelFactory {
+            initializer { LocalLotteryDrawController(FirebaseLocalLotteryDrawRepository.instance) }
+        })[LocalLotteryDrawController::class.java]
         enableEdgeToEdge()
         setContent {
             val pushPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -79,6 +90,19 @@ class MainActivity : ComponentActivity() {
             }
             val account by controller.state.collectAsStateWithLifecycle()
             val profile = (account as? OnboardingState.Ready)?.profile
+            LifecycleStartEffect(profile?.uid) {
+                if (LocalLotteryDrawController.ENABLED && profile != null) localDraws.start(profile.uid)
+                onStopOrDispose { localDraws.stop() }
+            }
+            val drawError by localDraws.error.collectAsStateWithLifecycle()
+            val completedDraws by localDraws.completedDraws.collectAsStateWithLifecycle()
+            val snackbar = remember { SnackbarHostState() }
+            LaunchedEffect(drawError) {
+                val error = drawError ?: return@LaunchedEffect
+                if (snackbar.showSnackbar(error, "Retry", duration = SnackbarDuration.Indefinite) == SnackbarResult.ActionPerformed) {
+                    localDraws.retry()
+                }
+            }
             LaunchedEffect(profile?.uid) {
                 if (profile == null) return@LaunchedEffect
                 try {
@@ -102,11 +126,13 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     topBar = { ThemeToggle(darkTheme, theme::setDarkTheme) },
+                    snackbarHost = { SnackbarHost(snackbar) },
                 ) { innerPadding ->
                     Box(Modifier.padding(innerPadding)) {
                         AppNavigation(
                             controller,
                             welcome = welcome,
+                            localDrawRevision = completedDraws,
                             inboxRecipient = inboxRecipient,
                             onInboxRequestConsumed = {
                                 inboxRecipient = null

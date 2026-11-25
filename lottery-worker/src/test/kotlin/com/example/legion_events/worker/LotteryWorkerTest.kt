@@ -74,6 +74,14 @@ class LotteryWorkerTest {
         assertEquals(2, offers.map { it.getString("userId") }.toSet().size)
         val notifications = firestore.collection("lotteryNotificationOutbox").get().get().documents
         assertEquals(3, notifications.size)
+        val inbox = firestore.collection("notifications").get().get().documents
+        assertEquals(3, inbox.size)
+        for (item in inbox) {
+            val event = notifications.single { it.id == item.id }
+            assertEquals(event.getString("type"), item.getString("type"))
+            assertEquals(event.getString("offerId"), item.getString("offerId"))
+            assertEquals(drawn.getTimestamp("updatedAt"), item.getTimestamp("createdAt"))
+        }
         assertEquals(setOf("alice", "bob", "carol"), notifications.map { it.getString("toUserId") }.toSet())
         for (notification in notifications) {
             val userId = notification.getString("toUserId")
@@ -148,6 +156,7 @@ class LotteryWorkerTest {
         assertEquals(false, firestore.document("lotteries/conflict").get().get().getBoolean("winnersDrawn"))
         assertEquals("joined", statusOf("waitlist/conflict_alice"))
         assertFalse(firestore.document("lotteryNotificationOutbox/conflict_alice").get().get().exists())
+        assertFalse(firestore.document("notifications/conflict_alice").get().get().exists())
         assertEquals(priorOffer, firestore.document("offers/conflict_alice").get().get().data)
         assertEquals(true, firestore.document("lotteries/ready").get().get().getBoolean("winnersDrawn"))
         assertEquals("won", statusOf("waitlist/ready_bob"))
