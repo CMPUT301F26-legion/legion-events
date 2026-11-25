@@ -100,8 +100,11 @@ import com.example.legion_events.view.OwnerReservationsActions
 import com.example.legion_events.view.OwnerReservationsScreen
 import com.example.legion_events.view.AdminCampsiteScreen
 import com.example.legion_events.view.AdminCampsitesScreen
+import com.example.legion_events.view.AdminImagesScreen
 import com.example.legion_events.view.AdminProfilesScreen
+import com.example.legion_events.data.AdminImageRepository
 import com.example.legion_events.data.AdminRepository
+import com.example.legion_events.data.FirebaseAdminImageRepository
 import com.example.legion_events.data.FirebaseAdminRepository
 import kotlinx.coroutines.flow.filterIsInstance
 
@@ -202,6 +205,8 @@ internal const val ADMIN_DASHBOARD_ROUTE = "admin"
 internal const val ADMIN_PROFILES_ROUTE = "admin/profiles"
 /** S19 campsite details for one campsite; only its document ID is saved in the navigation arguments. */
 internal const val ADMIN_CAMPSITE_PATTERN = "admin/campsite/{campsiteId}"
+/** S19 Images tab: every uploaded image. */
+internal const val ADMIN_IMAGES_ROUTE = "admin/images"
 /** S20: admin logs. */
 internal const val ADMIN_LOGS_ROUTE = "admin/logs"
 
@@ -243,6 +248,7 @@ private val OWNER_TABS = listOf(
 private val ADMIN_TABS = listOf(
     Tab(ADMIN_DASHBOARD_ROUTE, "Campsites", R.drawable.ic_nav_explore),
     Tab(ADMIN_PROFILES_ROUTE, "Profiles", R.drawable.ic_nav_profile),
+    Tab(ADMIN_IMAGES_ROUTE, "Images", R.drawable.ic_nav_images),
     Tab(ADMIN_LOGS_ROUTE, "Logs", R.drawable.ic_nav_inbox),
 )
 
@@ -302,6 +308,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param admin Reads and moderates every campsite and profile on S19.
  * @param ownerReservations Reads and rejects bookings at the owner's campsites on S17.
  * @param ratings Loads and saves the entrant's score from a completed stay on S10c.
+ * @param images Reads and removes every uploaded image on the S19 Images tab.
  */
 @Composable
 fun AppNavigation(
@@ -325,6 +332,7 @@ fun AppNavigation(
     admin: AdminRepository = FirebaseAdminRepository.instance,
     ownerReservations: OwnerReservationRepository = FirebaseOwnerReservationRepository.instance,
     ratings: RatingRepository = FirebaseRatingRepository.instance,
+    images: AdminImageRepository = FirebaseAdminImageRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -860,6 +868,16 @@ fun AppNavigation(
                     val profileState by people.state.collectAsStateWithLifecycle()
                     AdminProfilesScreen(profileState, { navController.popBackStack() }, people::setQuery, people::refresh,
                         people::requestRemoveProfile, people::requestRemoveOwner, people::confirmRemove, people::cancelRemove)
+                }
+            }
+            composable(ADMIN_IMAGES_ROUTE) {
+                RequireAccount(state, controller) {
+                    val gallery: AdminImagesController = viewModel(factory = viewModelFactory {
+                        initializer { AdminImagesController(images, admin) }
+                    })
+                    val imageState by gallery.state.collectAsStateWithLifecycle()
+                    AdminImagesScreen(imageState, { navController.popBackStack() }, gallery::refresh,
+                        gallery::requestRemove, gallery::confirmRemove, gallery::cancelRemove)
                 }
             }
             PLACEHOLDER_SCREENS.forEach { (route, title) ->
