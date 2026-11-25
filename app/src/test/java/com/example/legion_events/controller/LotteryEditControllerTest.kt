@@ -247,16 +247,84 @@ class LotteryEditControllerTest {
         assertNull(repository.updated)
     }
 
+    /** A lottery whose registration has closed is locked, because the draw starts then (US 02.04.06). */
     @Test
-    fun lotteryWithEntrantsCannotBeEdited() = runTest(dispatcher) {
-        val repository = FakeRepository().apply { existing = saved().copy(entrantCount = 1) }
-        assertTrue(controller(repository, lotteryId = "L1").state.value.locked)
+    fun closedRegistrationCannotBeEdited() = runTest(dispatcher) {
+        val repository = FakeRepository().apply {
+            existing = saved().copy(registrationStartAt = day("2026-10-20"), registrationEndAt = day("2026-11-04"))
+        }
+        val controller = controller(repository, lotteryId = "L1")
+        assertTrue(controller.state.value.locked)
+        controller.save()
+        runCurrent()
+        assertNull(repository.updated)
     }
 
+    /** After registration opens, the owner can still edit everything except its first day (US 02.04.06). */
     @Test
-    fun lotteryWithOpenRegistrationCannotBeEdited() = runTest(dispatcher) {
+    fun openRegistrationCanStillBeEdited() = runTest(dispatcher) {
+        val opened = day("2026-11-01")
+        val repository = FakeRepository().apply { existing = saved().copy(registrationStartAt = opened) }
+        val controller = controller(repository, lotteryId = "L1")
+        with(controller.state.value) {
+            assertFalse(locked)
+            assertTrue(startLocked)
+            assertNull(message)
+        }
+        controller.setRegistrationStart("2026-12-05")
+        assertEquals("2026-11-01", controller.state.value.registrationStart)
+        controller.setRegistrationEnd("2026-12-20")
+        controller.setWinnerCount("4")
+        controller.save()
+        runCurrent()
+        with(repository.updated!!) {
+            assertEquals(opened, registrationStartAt)
+            assertEquals(day("2026-12-21"), registrationEndAt)
+            assertEquals(4, winnerCount)
+        }
+    }
+
+    /** With entrants, campsites are fixed and the limit cannot drop below them; other fields still save. */
+    @Test
+    fun entrantsFixCampsitesAndLimitFloor() = runTest(dispatcher) {
+        val repository = FakeRepository().apply {
+            existing = saved().copy(registrationStartAt = day("2026-11-01"), entrantCount = 7)
+        }
+        val controller = controller(repository, lotteryId = "L1")
+        assertTrue(controller.state.value.campsitesLocked)
+        controller.toggleCampsite("c2")
+        assertEquals(setOf("c1"), controller.state.value.selectedCampsiteIds)
+
+        controller.setWaitlistLimit("6")
+        controller.save()
+        runCurrent()
+        assertEquals("7 entrants have joined, so the limit cannot be lower.", controller.state.value.errors[LotteryField.LIMIT])
+        assertNull(repository.updated)
+
+        controller.setWaitlistLimit("7")
+        controller.setWinnerCount("2")
+        controller.save()
+        runCurrent()
+        assertEquals(7, repository.updated!!.waitlistLimit)
+        assertEquals(listOf("c1"), repository.updated!!.campsiteIds)
+    }
+
+    /** Unchanged days keep their saved instants even when the device is in another time zone. */
+    @Test
+    fun unchangedDaysKeepSavedTimestampsAcrossTimeZones() = runTest(dispatcher) {
         val repository = FakeRepository().apply { existing = saved().copy(registrationStartAt = day("2026-11-01")) }
-        assertTrue(controller(repository, lotteryId = "L1").state.value.locked)
+        val edmonton = TimeZone.getTimeZone("America/Edmonton")
+        val controller = LotteryEditController("L1", repository, { campsites }, edmonton, { today.toDate() })
+        runCurrent()
+        controller.setWinnerCount("4")
+        controller.save()
+        runCurrent()
+        with(repository.updated!!) {
+            assertEquals(day("2026-11-01"), registrationStartAt)
+            assertEquals(day("2026-12-11"), registrationEndAt)
+            assertEquals(day("2027-06-01"), bookingStartAt)
+            assertEquals(day("2027-07-01"), bookingEndAt)
+        }
     }
 
     @Test
@@ -311,5 +379,18 @@ class LotteryEditControllerTest {
         override suspend fun getMyLotteries() = listOfNotNull(existing)
 
         override suspend fun getWaitlist(lotteryId: String) = emptyList<WaitlistEntrant>()
+    }
+
+    /** Fixing the registration period clears a stale booking-order error. */
+    @Test
+    fun changingRegistrationClearsBookingError() = runTest(dispatcher) {
+        val controller = controller()
+        controller.fillValid()
+        controller.setRegistrationEnd("2027-07-01")
+        controller.save()
+        runCurrent()
+        assertEquals("Booking must open after registration ends.", controller.state.value.errors[LotteryField.BOOKING])
+        controller.setRegistrationEnd("2026-12-10")
+        assertNull(controller.state.value.errors[LotteryField.BOOKING])
     }
 }

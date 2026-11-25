@@ -150,13 +150,21 @@ class LotteryManagementControllerTest {
         assertEquals("L1", repository.waitlistRequestedFor)
     }
 
+    /** An open lottery can still be edited until registration closes (US 02.04.06). */
     @Test
-    fun openLotteryCannotBeEdited() = runTest(dispatcher) {
+    fun openLotteryCanStillBeEdited() = runTest(dispatcher) {
         val repository = FakeRepository().apply { lotteries = listOf(lottery("L1", "2026-11-01", "2026-11-20")) }
         with(manage(repository).state.value) {
             assertEquals(LotteryBadge.OPEN, badge)
-            assertNotNull(editBlockedReason)
+            assertNull(editBlockedReason)
         }
+    }
+
+    /** Once registration closes the draw starts, so Edit is disabled with a reason. */
+    @Test
+    fun closedLotteryCannotBeEdited() = runTest(dispatcher) {
+        val repository = FakeRepository().apply { lotteries = listOf(lottery("L1", "2026-10-20", "2026-11-04")) }
+        assertNotNull(manage(repository).state.value.editBlockedReason)
     }
 
     @Test

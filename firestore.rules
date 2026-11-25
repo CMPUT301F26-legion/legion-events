@@ -138,11 +138,19 @@ service cloud.firestore {
         && request.resource.data.entrantCount == 0 && request.resource.data.winnersDrawn == false
         && request.resource.data.status == 'open' && request.resource.data.registrationEndAt > request.time
         && request.resource.data.createdAt == request.time && updatedNow();
-      allow update: if (mine(resource.data.ownerId) && request.time < resource.data.registrationStartAt
-          && resource.data.entrantCount == 0 && resource.data.winnersDrawn == false
+      // US 02.04.06: the owner can edit until registration closes and the draw starts.
+      // Once registration opens its first day is fixed; once entrants join the campsites are
+      // fixed and the limit cannot drop below the number who joined.
+      allow update: if (mine(resource.data.ownerId) && resource.data.winnersDrawn == false
+          && request.time < resource.data.registrationEndAt
           && changedOnly(['campsiteIds','registrationStartAt','registrationEndAt','bookingStartAt','bookingEndAt','winnerCount','waitlistLimit','updatedAt'])
           && validLottery(request.resource.data) && ownSites(request.resource.data.campsiteIds)
-          && request.resource.data.registrationStartAt > request.time && updatedNow())
+          && request.resource.data.registrationEndAt > request.time
+          && ((request.time < resource.data.registrationStartAt && request.resource.data.registrationStartAt > request.time)
+            || request.resource.data.registrationStartAt == resource.data.registrationStartAt)
+          && (resource.data.entrantCount == 0 || request.resource.data.campsiteIds == resource.data.campsiteIds)
+          && request.resource.data.waitlistLimit >= resource.data.entrantCount
+          && updatedNow())
         || entrantCounterChange(id) || localDrawUpdate(id);
       allow delete: if false;
     }
