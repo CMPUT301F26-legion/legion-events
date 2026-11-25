@@ -78,16 +78,17 @@ fun LotteryEditScreen(
                         Text("You have no campsites yet. Add an active campsite before creating a lottery.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (state.campsitesLocked) Hint("Entrants have joined, so the campsites cannot change.")
                     state.campsites.forEach { campsite ->
                         val checked = campsite.id in state.selectedCampsiteIds
                         Row(
                             modifier = Modifier.fillMaxWidth().toggleable(
-                                value = checked, enabled = enabled, role = Role.Checkbox,
+                                value = checked, enabled = enabled && !state.campsitesLocked, role = Role.Checkbox,
                                 onValueChange = { onToggleCampsite(campsite.id) },
                             ),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)
+                            Checkbox(checked = checked, onCheckedChange = null, enabled = enabled && !state.campsitesLocked)
                             Spacer(Modifier.width(8.dp))
                             Text(listOf(campsite.name, campsite.locationName).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { campsite.id })
                         }
@@ -95,7 +96,8 @@ fun LotteryEditScreen(
                     FieldError(state.errors[LotteryField.CAMPSITES])
 
                     Section("Registration period")
-                    DayButton("Opens", state.registrationStart, enabled, onRegistrationStart)
+                    if (state.startLocked) Hint("Registration has opened, so its first day cannot change.")
+                    DayButton("Opens", state.registrationStart, enabled && !state.startLocked, onRegistrationStart)
                     DayButton("Closes (last day)", state.registrationEnd, enabled, onRegistrationEnd)
                     FieldError(state.errors[LotteryField.REGISTRATION])
 
@@ -126,6 +128,15 @@ fun LotteryEditScreen(
 @Composable
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+}
+
+/**
+ * Grey note explaining why a field cannot change.
+ * @param text The note.
+ */
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** An error line under a group of controls, or nothing. */

@@ -36,6 +36,9 @@ enum class LotteryField { CAMPSITES, REGISTRATION, BOOKING, WINNERS, LIMIT }
  * @property loadError Why loading failed, or null.
  * @property editing True when editing an existing lottery, false when creating one.
  * @property locked True when the lottery can no longer be edited; [message] says why.
+ * @property startLocked True once registration has opened: its first day can no longer change.
+ * @property campsitesLocked True once entrants have joined: the campsites can no longer change.
+ * @property entrantCount How many entrants have joined; the waitlist limit cannot go below it.
  * @property campsites The owner's campsites to choose from.
  * @property selectedCampsiteIds Campsites included in this lottery.
  * @property registrationStart First day entrants can join.
@@ -54,6 +57,9 @@ data class LotteryEditState(
     val loadError: String? = null,
     val editing: Boolean = false,
     val locked: Boolean = false,
+    val startLocked: Boolean = false,
+    val campsitesLocked: Boolean = false,
+    val entrantCount: Int = 0,
     val campsites: List<Campsite> = emptyList(),
     val selectedCampsiteIds: Set<String> = emptySet(),
     val registrationStart: String = "",
@@ -93,6 +99,8 @@ class LotteryEditController(
     val state = mutableState.asStateFlow()
     /** Current load request, cancelled before retrying. */
     private var request: Job? = null
+    /** The lottery as last loaded, or null when creating. Unchanged days keep its exact timestamps. */
+    private var saved: Lottery? = null
 
     init { retry() }
 
@@ -104,6 +112,7 @@ class LotteryEditController(
             mutableState.value = try {
                 val campsites = loadCampsites()
                 val lottery = lotteryId?.let { repository.getLottery(it) }
+                saved = lottery
                 if (lottery == null) {
                     LotteryEditState(loading = false, campsites = campsites)
                 } else {
@@ -112,6 +121,9 @@ class LotteryEditController(
                         loading = false,
                         editing = true,
                         locked = lockReason != null,
+                        startLocked = !now().before(lottery.registrationStartAt.toDate()),
+                        campsitesLocked = lottery.entrantCount > 0,
+                        entrantCount = lottery.entrantCount,
                         message = lockReason,
                         campsites = campsites,
                         selectedCampsiteIds = lottery.campsiteIds.toSet(),
@@ -133,11 +145,16 @@ class LotteryEditController(
     }
 
     /** Adds the campsite if it is not selected, otherwise removes it. */
-    fun toggleCampsite(id: String) = edit(LotteryField.CAMPSITES) {
-        copy(selectedCampsiteIds = if (id in selectedCampsiteIds) selectedCampsiteIds - id else selectedCampsiteIds + id)
+    fun toggleCampsite(id: String) {
+        if (state.value.campsitesLocked) return
+        edit(LotteryField.CAMPSITES) {
+            copy(selectedCampsiteIds = if (id in selectedCampsiteIds) selectedCampsiteIds - id else selectedCampsiteIds + id)
+        }
     }
 
-    fun setRegistrationStart(day: String) = edit(LotteryField.REGISTRATION) { copy(registrationStart = day) }
+    fun setRegistrationStart(day: String) {
+        if (!state.value.startLocked) edit(LotteryField.REGISTRATION) { copy(registrationStart = day) }
+    }
     fun setRegistrationEnd(day: String) = edit(LotteryField.REGISTRATION) { copy(registrationEnd = day) }
     fun setBookingStart(day: String) = edit(LotteryField.BOOKING) { copy(bookingStart = day) }
     fun setBookingEnd(day: String) = edit(LotteryField.BOOKING) { copy(bookingEnd = day) }
@@ -153,14 +170,18 @@ class LotteryEditController(
             mutableState.value = current.copy(errors = errors, message = null)
             return
         }
+        val old = saved
+        // An unchanged day keeps the saved instant, so editing from another time zone cannot move it.
+        fun instant(day: String, plusDays: Int, previous: Timestamp?): Timestamp =
+            previous?.takeIf { it.toDay(zone, plusDays = -plusDays) == day } ?: day.toTimestamp(zone, plusDays)
         val lottery = Lottery(
             id = lotteryId.orEmpty(),
             ownerId = "",
             campsiteIds = current.selectedCampsiteIds.sorted(),
-            registrationStartAt = current.registrationStart.toTimestamp(zone),
-            registrationEndAt = current.registrationEnd.toTimestamp(zone, plusDays = 1),
-            bookingStartAt = current.bookingStart.toTimestamp(zone),
-            bookingEndAt = current.bookingEnd.toTimestamp(zone, plusDays = 1),
+            registrationStartAt = instant(current.registrationStart, 0, old?.registrationStartAt),
+            registrationEndAt = instant(current.registrationEnd, 1, old?.registrationEndAt),
+            bookingStartAt = instant(current.bookingStart, 0, old?.bookingStartAt),
+            bookingEndAt = instant(current.bookingEnd, 1, old?.bookingEndAt),
             winnerCount = current.winnerCount.trim().toInt(),
             waitlistLimit = current.waitlistLimit.trim().toIntOrNull() ?: MAX_WAITLIST_LIMIT,
         )
@@ -184,18 +205,26 @@ class LotteryEditController(
     private fun edit(field: LotteryField, change: LotteryEditState.() -> LotteryEditState) {
         val current = state.value
         if (current.saving || current.locked) return
-        mutableState.value = current.change().copy(errors = current.errors - field, message = null)
+        // The booking check compares against registration, so changing either clears both errors.
+        val cleared = if (field == LotteryField.REGISTRATION || field == LotteryField.BOOKING) {
+            setOf(LotteryField.REGISTRATION, LotteryField.BOOKING)
+        } else {
+            setOf(field)
+        }
+        mutableState.value = current.change().copy(errors = current.errors - cleared, message = null)
     }
 }
 
 /**
- * Why a saved lottery can no longer be edited, or null if it can. Mirrors the update rule:
- * only before registration opens, while nobody has joined, and before the draw (US 02.04.06).
+ * Why a saved lottery can no longer be edited, or null if it can (US 02.04.06). Mirrors the update
+ * rule: an owner can edit until registration closes, because the draw starts then. Once
+ * registration opens its first day is fixed, and once entrants join the campsites are fixed and the
+ * limit cannot go below the number who joined; [validateLottery] checks those.
  */
 internal fun lockReason(lottery: Lottery, now: Date): String? = when {
     lottery.winnersDrawn -> "Winners have been drawn. This lottery can no longer be edited."
-    lottery.entrantCount > 0 -> "Entrants have already joined. This lottery can no longer be edited."
-    !now.before(lottery.registrationStartAt.toDate()) -> "Registration has opened. This lottery can no longer be edited."
+    !now.before(lottery.registrationEndAt.toDate()) ->
+        "Registration has closed and winners are being drawn. This lottery can no longer be edited."
     else -> null
 }
 
@@ -216,7 +245,7 @@ internal fun validateLottery(state: LotteryEditState, now: Date, zone: TimeZone)
         !registrationOk -> put(LotteryField.REGISTRATION, "Choose the first and last registration days.")
         state.registrationEnd < state.registrationStart ->
             put(LotteryField.REGISTRATION, "Registration must end on or after the day it opens.")
-        state.editing && !now.before(state.registrationStart.toTimestamp(zone).toDate()) ->
+        state.editing && !state.startLocked && !now.before(state.registrationStart.toTimestamp(zone).toDate()) ->
             put(LotteryField.REGISTRATION, "Registration must open after today.")
         !now.before(state.registrationEnd.toTimestamp(zone, plusDays = 1).toDate()) ->
             put(LotteryField.REGISTRATION, "Registration must end today or later.")
@@ -235,6 +264,8 @@ internal fun validateLottery(state: LotteryEditState, now: Date, zone: TimeZone)
     val limit = if (limitText.isEmpty()) MAX_WAITLIST_LIMIT else limitText.toIntOrNull()
     if (limit == null || limit < 1 || limit > MAX_WAITLIST_LIMIT) {
         put(LotteryField.LIMIT, "Enter 1 to $MAX_WAITLIST_LIMIT, or leave it empty for $MAX_WAITLIST_LIMIT.")
+    } else if (limit < state.entrantCount) {
+        put(LotteryField.LIMIT, "${state.entrantCount} entrants have joined, so the limit cannot be lower.")
     }
     when {
         winners == null || winners < 1 -> put(LotteryField.WINNERS, "Enter at least 1 winner.")

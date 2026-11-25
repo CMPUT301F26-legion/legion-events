@@ -8,6 +8,7 @@
 package com.example.legion_events
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -115,6 +116,33 @@ class LotteryNavigationTest {
             assertEquals(5, updates.single().winnerCount)
             assertEquals(listOf("lake"), updates.single().campsiteIds)
             assertEquals("owner/lottery/{lotteryId}", navigation.currentDestination?.route)
+        }
+    }
+
+    /**
+     * A lottery whose registration opened two days ago, with entrants, can still be edited
+     * (US 02.04.06). Its first registration day and campsites stay fixed.
+     */
+    @Test
+    fun openLotteryWithEntrantsCanStillBeEdited() {
+        val opened = daysFromToday(-2)
+        stored = stored.copy(registrationStartAt = opened, entrantCount = 2)
+        open()
+        compose.runOnIdle { navigation.navigate("owner/lottery/L1") }
+        waitFor("Waiting list (2)")
+
+        compose.onNodeWithText("Edit").assertIsEnabled().performClick()
+        waitFor("Edit lottery")
+        compose.onNodeWithText("Registration has opened, so its first day cannot change.").assertIsDisplayed()
+        compose.onNodeWithText("Entrants have joined, so the campsites cannot change.").assertIsDisplayed()
+        compose.onNode(hasText("Number of winners") and hasSetTextAction()).performTextReplacement("4")
+        compose.onNodeWithText("Save changes").performScrollTo().performClick()
+
+        waitFor("Waiting list (2)")
+        compose.runOnIdle {
+            assertEquals(4, updates.single().winnerCount)
+            assertEquals(opened, updates.single().registrationStartAt)
+            assertEquals(listOf("lake"), updates.single().campsiteIds)
         }
     }
 

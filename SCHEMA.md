@@ -81,7 +81,10 @@ document with any missing or extra field.
 
 The app picks days, not times: registration opens at the start of its first day and
 closes at the start of the day after its last day; booking works the same way.
-An owner can edit a lottery only before registration opens and while nobody has joined.
+An owner can edit a lottery until registration closes and the draw starts (US 02.04.06).
+Once registration opens, its first day cannot change. Once entrants have joined, the
+campsites cannot change and `waitlistLimit` cannot go below `entrantCount`. An unchanged
+day keeps its saved timestamp, so an edit from another time zone does not move it.
 
 ## Waitlist
 
