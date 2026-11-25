@@ -315,8 +315,14 @@ S19 is for profiles with `role == "admin"`. The deployed rules let an admin read
 | Remove a campsite (US 03.01.01) | `campsites/{id}`: `active: false`, `updatedAt` server timestamp |
 | Remove a profile (US 03.02.01) | `users/{uid}`: `disabled: true`, `updatedAt` server timestamp |
 | Remove an owner (US 03.07.01) | One batch: the profile write above, plus the campsite write for each of the owner's active campsites |
+| Remove an image (US 03.03.01) | Delete `photos/{id}`; the photo rules allow delete for its owner or an admin |
 
 These are the only fields the admin rules allow besides the optional `moderationReason`, which
 the app does not write. Search shows only `active == true` campsites, and a disabled profile is
 blocked at the next app launch. An owner's S13 edits never write `active`, so a removed listing
 stays removed. Admin accounts are not removed from S19; roles are changed only in the console.
+
+The S19 Images tab (US 03.06.01) reads every `photos/{id}`, newest `createdAt` first, and labels
+each one with the campsite named by `targetId`. Deleting a cover photo leaves the campsite's
+`photoId` pointing at a missing document, because the admin rule cannot change `photoId`; the
+gallery and cards already skip missing photos, and the owner can set a new cover in S13.

@@ -1,0 +1,29 @@
+// UML class diagram: admin images and logs (Person 4)
+// Render with: python3 render.py admin_images_logs.dot admin_images_logs.png  (needs Graphviz and Google Chrome)
+digraph G {
+  graph [rankdir=BT fontname="Liberation Sans" nodesep=0.5 ranksep=0.7 dpi=110 pad=0.3
+         label="Admin images and logs" labelloc=t fontsize=18];
+  node  [shape=plain fontname="Liberation Sans" fontsize=10];
+  edge  [fontname="Liberation Sans" fontsize=9 labeldistance=1.8 labelangle=35];
+  // Notation: extends (hollow triangle), one-way navigability (open arrow), association (plain line),
+  // aggregation (hollow diamond on the owner), composition (filled diamond on the owner).
+  // taillabel = source multiplicity, headlabel = target multiplicity. Extends has none.
+  // AdminRepository and its models are detailed in admin_moderation.dot.
+
+  Photo [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8f0e8"><I>«model»</I><BR/><B>Photo</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ id: String<BR/>+ ownerId: String<BR/>+ targetType: String<BR/>+ targetId: String<BR/>+ imageBase64: String<BR/>+ mimeType: String</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  AdminRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#eeeeee"><I>«interface»</I><BR/><B>AdminRepository</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getCampsites(): List&lt;ModeratedCampsite&gt;<BR/>+ getProfiles(): List&lt;UserProfile&gt;</TD></TR></TABLE>>];
+  AdminImageRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#eeeeee"><I>«interface»</I><BR/><B>AdminImageRepository</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getPhotos(): List&lt;Photo&gt;<BR/>+ removePhoto(photoId: String)</TD></TR></TABLE>>];
+  FirebaseAdminImageRepository [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><B>FirebaseAdminImageRepository</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- firestore: FirebaseFirestore<BR/>- PHOTOS = "photos"<BR/>+ instance: FirebaseAdminImageRepository</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ getPhotos(): List&lt;Photo&gt;<BR/>+ removePhoto(photoId: String)</TD></TR></TABLE>>];
+  AdminImagesController [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#e8eef8"><I>«controller» ViewModel</I><BR/><B>AdminImagesController</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">- images: AdminImageRepository<BR/>- admin: AdminRepository<BR/>- mutableState: MutableStateFlow&lt;AdminImagesState&gt;<BR/>+ state: StateFlow&lt;AdminImagesState&gt;<BR/>- request: Job?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ refresh()<BR/>+ requestRemove(photoId: String)<BR/>+ cancelRemove()<BR/>+ confirmRemove()</TD></TR></TABLE>>];
+  AdminImagesState [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«data»</I><BR/><B>AdminImagesState</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ loading: Boolean<BR/>+ error: String?<BR/>+ rows: List&lt;AdminImageRow&gt;<BR/>+ confirming: AdminImageRow?<BR/>+ removing: Boolean<BR/>+ result: String?<BR/>+ actionError: String?</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  AdminImageRow [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD><I>«data»</I><BR/><B>AdminImageRow</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ photo: Photo<BR/>+ placeName: String<BR/>+ ownerName: String<BR/>+ cover: Boolean</TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR></TABLE>>];
+  ImagesView [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4"><TR><TD BGCOLOR="#f8f0e0"><I>«view» composable</I><BR/><B>Admin images tab (S19)</B></TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1"> </TD></TR><TR><TD ALIGN="LEFT" BALIGN="LEFT" SIDES="T" BORDER="1">+ AdminImagesScreen(state, onBack, onRetry, onRemove, onConfirmRemove, onCancelRemove)</TD></TR></TABLE>>];
+  FirebaseAdminImageRepository -> AdminImageRepository [arrowhead=onormal];
+  AdminImageRepository -> Photo [arrowhead=vee label="returns / deletes" taillabel="0..*" headlabel="0..*"];
+  AdminImagesController -> AdminImageRepository [arrowhead=vee label="uses" taillabel="0..*" headlabel="1"];
+  AdminImagesController -> AdminRepository [arrowhead=vee label="names campsites and owners" taillabel="0..*" headlabel="1"];
+  AdminImagesController -> AdminImagesState [dir=back arrowtail=diamond label="exposes" taillabel="1" headlabel="1"];
+  AdminImagesState -> AdminImageRow [dir=back arrowtail=odiamond label="rows" taillabel="1" headlabel="0..*"];
+  AdminImageRow -> Photo [dir=back arrowtail=odiamond label="photo" taillabel="0..*" headlabel="1"];
+  ImagesView -> AdminImagesState [arrowhead=vee label="renders" taillabel="0..*" headlabel="1"];
+}
