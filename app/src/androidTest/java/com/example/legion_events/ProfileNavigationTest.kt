@@ -159,6 +159,23 @@ class ProfileNavigationTest {
         compose.runOnIdle { assertEquals("admin", navigation.currentDestination?.route) }
     }
 
+    /**
+     * An admin is also an ordinary entrant and campsite owner (US 03.11.01): the same account
+     * browses campsites, sees both dashboards in Profile, and opens the owner dashboard.
+     */
+    @Test
+    fun adminCanAlsoActAsEntrantAndOwner() {
+        WelcomePreferences(preferences).markWelcomeSeen()
+        profiles.role = "admin"
+        open()
+        waitFor("Explore campsites")
+        compose.onNodeWithText("Profile").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Admin dashboard").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Manage my campsites").performScrollTo().assertIsDisplayed().performClick()
+        waitFor("My Campsites")
+        compose.runOnIdle { assertEquals("owner", navigation.currentDestination?.route) }
+    }
+
     @Test
     fun deletingProfileOpensNewAccount() {
         WelcomePreferences(preferences).markWelcomeSeen()
