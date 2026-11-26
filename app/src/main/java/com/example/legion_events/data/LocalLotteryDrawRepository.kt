@@ -12,25 +12,70 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.io.IOException
 
 /**
  * An open, undrawn lottery that the owner session should check.
  * @property id Lottery document ID.
  * @property registrationEndAt Saved deadline. A missing or malformed deadline is attempted and reported as an error.
+ * @property updatedAt Last saved change. A new value lets a lottery whose draw permanently failed be attempted again.
  */
-data class LocalLotteryDrawCandidate(val id: String, val registrationEndAt: Timestamp?)
+data class LocalLotteryDrawCandidate(val id: String, val registrationEndAt: Timestamp?, val updatedAt: Timestamp? = null)
+
+/** A draw that failed only because entrants joined or left meanwhile; a later attempt can succeed. */
+class LotteryWaitlistChangedException : IllegalStateException("The waiting list changed. The next check will retry the draw.")
+
+/** Whether retrying a failed draw or listener can help. */
+enum class LocalLotteryDrawFailureKind {
+    /** Network, contention, or a concurrent waitlist change; the next check may succeed. */
+    RETRYABLE,
+    /** The security rules rejected the owner; retrying cannot help until the rules change. */
+    PERMISSION_DENIED,
+    /** The lottery's saved data cannot be drawn; retrying cannot help until it changes. */
+    INVALID,
+}
+
+/**
+ * A classified draw or listener failure, so callers need no Firestore error codes.
+ * @property kind Whether a retry can succeed.
+ */
+class LocalLotteryDrawException(val kind: LocalLotteryDrawFailureKind, cause: Throwable) : Exception(cause.message, cause)
+
+/** Classifies [error] using Firestore's code; unrecognized failures are treated as invalid data. */
+fun classifyLocalLotteryDrawFailure(error: Throwable): LocalLotteryDrawException = when (error) {
+    is LocalLotteryDrawException -> error
+    is LotteryWaitlistChangedException, is IOException -> LocalLotteryDrawException(LocalLotteryDrawFailureKind.RETRYABLE, error)
+    is FirebaseFirestoreException -> LocalLotteryDrawException(when (error.code) {
+        FirebaseFirestoreException.Code.PERMISSION_DENIED -> LocalLotteryDrawFailureKind.PERMISSION_DENIED
+        FirebaseFirestoreException.Code.UNAVAILABLE, FirebaseFirestoreException.Code.DEADLINE_EXCEEDED,
+        FirebaseFirestoreException.Code.ABORTED, FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED,
+        FirebaseFirestoreException.Code.INTERNAL, FirebaseFirestoreException.Code.UNKNOWN,
+        FirebaseFirestoreException.Code.CANCELLED, FirebaseFirestoreException.Code.ALREADY_EXISTS,
+        -> LocalLotteryDrawFailureKind.RETRYABLE
+        else -> LocalLotteryDrawFailureKind.INVALID
+    }, error)
+    else -> LocalLotteryDrawException(LocalLotteryDrawFailureKind.INVALID, error)
+}
 
 /** Supplies owned lotteries and commits a draw when its registration has ended. */
 interface LocalLotteryDrawRepository {
-    /** Watches the signed-in owner's lotteries, including saved deadline changes. */
+    /** Watches the signed-in owner's lotteries, including saved deadline changes. Fails with [LocalLotteryDrawException]. */
     fun observeOwnedLotteries(ownerId: String): Flow<List<LocalLotteryDrawCandidate>>
 
-    /** Returns true when this call commits the draw and false when it is no longer eligible. */
+    /**
+     * Returns true when this call commits the draw and false when it is no longer eligible.
+     * @throws LocalLotteryDrawException When the draw fails, classified by whether a retry can help.
+     */
     suspend fun draw(lotteryId: String): Boolean
+
+    /** Names the lottery for an owner-facing message, or returns null when no name is available. */
+    suspend fun lotteryName(lotteryId: String): String?
 }
 
 /**
@@ -47,26 +92,42 @@ class FirebaseLocalLotteryDrawRepository(
 ) : LocalLotteryDrawRepository {
     /** Registers an owner-scoped listener and removes it when the foreground session ends. */
     override fun observeOwnedLotteries(ownerId: String): Flow<List<LocalLotteryDrawCandidate>> = callbackFlow {
-        check(ownerId == ownerId()) { "The signed-in owner changed." }
+        if (ownerId != auth.currentUser?.uid) {
+            close(classifyLocalLotteryDrawFailure(IllegalStateException("The signed-in owner changed.")))
+            return@callbackFlow
+        }
         val listener = firestore.collection("lotteries").whereEqualTo("ownerId", ownerId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    close(classifyLocalLotteryDrawFailure(error))
                 } else {
                     val result = runCatching {
                         check(ownerId == ownerId()) { "The signed-in owner changed." }
                         snapshot?.documents.orEmpty()
                             .filter { it.get("status") == "open" && it.get("winnersDrawn") != true }
-                            .map { LocalLotteryDrawCandidate(it.id, it.get("registrationEndAt") as? Timestamp) }
+                            .map {
+                                LocalLotteryDrawCandidate(
+                                    it.id, it.get("registrationEndAt") as? Timestamp, it.get("updatedAt") as? Timestamp,
+                                )
+                            }
                     }
-                    result.onSuccess { trySend(it) }.onFailure { close(it) }
+                    result.onSuccess { trySend(it) }.onFailure { close(classifyLocalLotteryDrawFailure(it)) }
                 }
             }
         awaitClose { listener.remove() }
     }
 
+    /** Classifies any failure of [drawOnce] so the caller knows whether to retry. */
+    override suspend fun draw(lotteryId: String): Boolean = try {
+        drawOnce(lotteryId)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        throw classifyLocalLotteryDrawFailure(error)
+    }
+
     /** Commits the immutable draw record, waitlist results, offers, Inbox notices, and pending push events. */
-    override suspend fun draw(lotteryId: String): Boolean {
+    private suspend fun drawOnce(lotteryId: String): Boolean {
         require(lotteryId.isNotBlank() && '/' !in lotteryId) { "A single lottery ID is required." }
         val ownerId = ownerId()
         val reference = firestore.collection("lotteries").document(lotteryId)
@@ -98,9 +159,7 @@ class FirebaseLocalLotteryDrawRepository(
             check(!transaction.get(drawReference).exists()) { "This lottery already has a draw record. Reload it." }
             val entries = candidates.map { transaction.get(it.reference) }
             val entriesByUser = entries.groupBy { entry -> entry.entrantId(lotteryId) }
-            check(entriesByUser.size == lottery.entrantCount) {
-                "The waiting list changed. The next check will retry the draw."
-            }
+            if (entriesByUser.size != lottery.entrantCount) throw LotteryWaitlistChangedException()
             val winners = entriesByUser.keys.shuffled().take(lottery.winnerCount).toSet()
             val timestamp = FieldValue.serverTimestamp()
             transaction.set(drawReference, mapOf(
@@ -136,10 +195,20 @@ class FirebaseLocalLotteryDrawRepository(
 
     /** Rejects a withdrawn, unrelated, missing, or malformed entry during the draw's transaction. */
     private fun DocumentSnapshot.entrantId(lotteryId: String): String {
-        check(exists() && getString("lotteryId") == lotteryId && getString("status") == "joined") {
-            "The waiting list changed. The next check will retry the draw."
+        if (!exists() || getString("lotteryId") != lotteryId || getString("status") != "joined") {
+            throw LotteryWaitlistChangedException()
         }
         return checkNotNull(getString("userId")?.takeIf { it.isNotBlank() && '/' !in it }) { "An entrant has no valid user ID." }
+    }
+
+    /** Uses the first campsite's name, read from the cache when offline, so failures stay identifiable. */
+    override suspend fun lotteryName(lotteryId: String): String? {
+        val lottery = firestore.collection("lotteries").document(lotteryId).get().await()
+        val campsiteIds = (lottery.get("campsiteIds") as? List<*>)?.filterIsInstance<String>().orEmpty()
+        val first = campsiteIds.firstOrNull() ?: return null
+        val name = firestore.collection("campsites").document(first).get().await()
+            .getString("name")?.takeIf(String::isNotBlank) ?: return null
+        return if (campsiteIds.size > 1) "$name +${campsiteIds.size - 1}" else name
     }
 
     /** Returns the authenticated owner's UID before reading or committing a draw. */
