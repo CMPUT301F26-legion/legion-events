@@ -280,6 +280,21 @@ private fun dayFormat(zone: TimeZone) = SimpleDateFormat("yyyy-MM-dd", Locale.US
     isLenient = false
 }
 
+/**
+ * One line summarizing the lottery's timeline on S15, such as
+ * "Registration Nov 24 – Nov 26 · Draw Nov 27 · Booking Nov 27 – Dec 3", or null until all four
+ * days are filled in.
+ */
+internal fun lotteryTimeline(state: LotteryEditState): String? {
+    val days = listOf(state.registrationStart, state.registrationEnd, state.bookingStart, state.bookingEnd)
+    if (!days.all(::isDay)) return null
+    val utc = TimeZone.getTimeZone("UTC")
+    val short = SimpleDateFormat("MMM d", Locale.US).apply { timeZone = utc }
+    fun label(day: String, plusDays: Int = 0) = short.format(day.toTimestamp(utc, plusDays).toDate())
+    return "Registration ${label(state.registrationStart)} – ${label(state.registrationEnd)} · " +
+        "Draw ${label(state.registrationEnd, 1)} · Booking ${label(state.bookingStart)} – ${label(state.bookingEnd)}"
+}
+
 /** Whether [value] is a real calendar day such as `2026-07-14`. */
 private fun isDay(value: String): Boolean =
     Regex("""\d{4}-\d{2}-\d{2}""").matches(value) &&

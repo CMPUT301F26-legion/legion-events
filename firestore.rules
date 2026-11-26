@@ -145,7 +145,9 @@ service cloud.firestore {
           && request.time < resource.data.registrationEndAt
           && changedOnly(['campsiteIds','registrationStartAt','registrationEndAt','bookingStartAt','bookingEndAt','winnerCount','waitlistLimit','updatedAt'])
           && validLottery(request.resource.data) && ownSites(request.resource.data.campsiteIds)
-          && request.resource.data.registrationEndAt > request.time
+          // Equal to request.time ends registration now (S16 "End registration now"); validLottery
+          // still requires it to be after registration opened.
+          && request.resource.data.registrationEndAt >= request.time
           && ((request.time < resource.data.registrationStartAt && request.resource.data.registrationStartAt > request.time)
             || request.resource.data.registrationStartAt == resource.data.registrationStartAt)
           && (resource.data.entrantCount == 0 || request.resource.data.campsiteIds == resource.data.campsiteIds)

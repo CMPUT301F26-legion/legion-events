@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -238,17 +239,85 @@ class LotteryManagementControllerTest {
     }
 
     /** In-memory repository for the read paths these screens use. */
+    /** The owner can end an open lottery's registration only while it is open. */
+    @Test
+    fun endRegistrationIsOfferedOnlyWhileOpen() = runTest(dispatcher) {
+        val repository = FakeRepository().apply {
+            lotteries = listOf(lottery("L1", "2026-11-01", "2026-11-20"))
+        }
+        assertTrue(manage(repository).state.value.canEndRegistration)
+        repository.lotteries = listOf(lottery("L1", "2026-11-10", "2026-11-20"))
+        assertFalse(manage(repository).state.value.canEndRegistration)
+        repository.lotteries = listOf(lottery("L1", "2026-10-20", "2026-11-04"))
+        assertFalse(manage(repository).state.value.canEndRegistration)
+        repository.lotteries = listOf(lottery("L1", "2026-11-01", "2026-11-20").copy(winnersDrawn = true))
+        assertFalse(manage(repository).state.value.canEndRegistration)
+    }
+
+    /** Cancel keeps registration open; nothing is saved. */
+    @Test
+    fun cancelKeepsRegistrationOpen() = runTest(dispatcher) {
+        val repository = FakeRepository().apply { lotteries = listOf(lottery("L1", "2026-11-01", "2026-11-20")) }
+        val controller = manage(repository)
+        controller.requestEndRegistration()
+        assertTrue(controller.state.value.confirmingEnd)
+        controller.cancelEndRegistration()
+        runCurrent()
+        assertFalse(controller.state.value.confirmingEnd)
+        assertTrue(repository.ended.isEmpty())
+    }
+
+    /** Confirming ends registration, reloads, and reloads again once the draw has had time to run. */
+    @Test
+    fun confirmEndsRegistrationAndReloadsForTheDraw() = runTest(dispatcher) {
+        val repository = FakeRepository().apply { lotteries = listOf(lottery("L1", "2026-11-01", "2026-11-20")) }
+        val controller = manage(repository)
+        val loadsBefore = repository.loads
+        controller.requestEndRegistration()
+        controller.confirmEndRegistration()
+        runCurrent()
+        assertEquals(listOf("L1"), repository.ended)
+        assertFalse(controller.state.value.confirmingEnd)
+        assertFalse(controller.state.value.canEndRegistration)
+        assertEquals(loadsBefore + 1, repository.loads)
+        advanceTimeBy(DRAW_RELOAD_DELAY_MS + 1)
+        runCurrent()
+        assertEquals(loadsBefore + 2, repository.loads)
+    }
+
+    /** A failed save explains itself and keeps registration open. */
+    @Test
+    fun failedEndShowsError() = runTest(dispatcher) {
+        val repository = FakeRepository().apply {
+            lotteries = listOf(lottery("L1", "2026-11-01", "2026-11-20"))
+            failEnd = true
+        }
+        val controller = manage(repository)
+        controller.requestEndRegistration()
+        controller.confirmEndRegistration()
+        runCurrent()
+        assertEquals("Could not end registration. Check your connection and retry.", controller.state.value.endError)
+        assertTrue(controller.state.value.canEndRegistration)
+        assertFalse(controller.state.value.ending)
+    }
+
     private class FakeRepository : LotteryRepository {
         var lotteries: List<Lottery> = emptyList()
         var waitlist: List<WaitlistEntrant> = emptyList()
         var failLottery = false
         var failWaitlist = false
         var waitlistRequestedFor: String? = null
+        var failEnd = false
+        /** Lotteries whose registration [endRegistrationNow] ended. */
+        val ended = mutableListOf<String>()
+        /** How many times [getLottery] was called. */
+        var loads = 0
 
         override suspend fun createLottery(lottery: Lottery) = error("unused")
         override suspend fun updateLottery(lottery: Lottery) = error("unused")
 
         override suspend fun getLottery(id: String): Lottery {
+            loads++
             if (failLottery) error("offline")
             return lotteries.first { it.id == id }
         }
@@ -262,6 +331,12 @@ class LotteryManagementControllerTest {
             waitlistRequestedFor = lotteryId
             if (failWaitlist) error("offline")
             return waitlist
+        }
+
+        override suspend fun endRegistrationNow(lotteryId: String) {
+            if (failEnd) error("offline")
+            ended += lotteryId
+            lotteries = lotteries.map { if (it.id == lotteryId) it.copy(registrationEndAt = Timestamp(0, 0)) else it }
         }
     }
 }

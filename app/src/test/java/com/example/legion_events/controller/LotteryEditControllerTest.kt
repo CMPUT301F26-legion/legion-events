@@ -393,4 +393,13 @@ class LotteryEditControllerTest {
         controller.setRegistrationEnd("2026-12-10")
         assertNull(controller.state.value.errors[LotteryField.BOOKING])
     }
+
+    /** S15 summarizes the four days as one timeline, with the draw the day after registration ends. */
+    @Test
+    fun timelineSummarizesTheFourDays() {
+        val state = LotteryEditState(registrationStart = "2026-11-24", registrationEnd = "2026-11-26",
+            bookingStart = "2026-11-27", bookingEnd = "2026-12-03")
+        assertEquals("Registration Nov 24 – Nov 26 · Draw Nov 27 · Booking Nov 27 – Dec 3", lotteryTimeline(state))
+        assertNull(lotteryTimeline(state.copy(bookingEnd = "")))
+    }
 }

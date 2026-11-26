@@ -34,6 +34,7 @@ import com.example.legion_events.ui.theme.LegioneventsTheme
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -87,6 +88,9 @@ class LotteryNavigationTest {
 
         override suspend fun getLottery(id: String) = stored.takeIf { it.id == id } ?: error("missing")
         override suspend fun getMyLotteries() = listOf(stored)
+        override suspend fun endRegistrationNow(lotteryId: String) {
+            stored = stored.copy(registrationEndAt = Timestamp.now())
+        }
         override suspend fun getWaitlist(lotteryId: String) = if (lotteryId == stored.id) waitlist else emptyList()
     }
 
@@ -144,6 +148,20 @@ class LotteryNavigationTest {
             assertEquals(opened, updates.single().registrationStartAt)
             assertEquals(listOf("lake"), updates.single().campsiteIds)
         }
+    }
+
+    /** The owner ends an open registration early from S16, after confirming (US 02.04.06). */
+    @Test
+    fun ownerEndsRegistrationNow() {
+        stored = stored.copy(registrationStartAt = daysFromToday(-2), entrantCount = 2)
+        open()
+        compose.runOnIdle { navigation.navigate("owner/lottery/L1") }
+        waitFor("End registration now")
+        compose.onNodeWithText("End registration now").performClick()
+        waitFor("End registration now?")
+        compose.onNodeWithText("End registration").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("End registration now").fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle { assertTrue(!stored.registrationEndAt.toDate().after(java.util.Date())) }
     }
 
     @Test

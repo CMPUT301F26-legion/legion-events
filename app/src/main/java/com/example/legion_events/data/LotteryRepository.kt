@@ -46,4 +46,13 @@ interface LotteryRepository {
      * @return The entries in no particular order.
      */
     suspend fun getWaitlist(lotteryId: String): List<WaitlistEntrant>
+
+    /**
+     * Ends an open lottery's registration now, so the draw can start (US 02.04.06, 02.05.01).
+     * Only the owner may do this, and only while registration is open.
+     * @param lotteryId The lottery document ID.
+     */
+    suspend fun endRegistrationNow(lotteryId: String) {
+        throw UnsupportedOperationException("Ending registration early is not supported here.")
+    }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.LotteryEditState
 import com.example.legion_events.controller.LotteryField
+import com.example.legion_events.controller.lotteryTimeline
 import com.example.legion_events.model.MAX_WAITLIST_LIMIT
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -96,15 +97,20 @@ fun LotteryEditScreen(
                     FieldError(state.errors[LotteryField.CAMPSITES])
 
                     Section("Registration period")
+                    Hint("Entrants can join the waitlist from the first day through the last day.")
                     if (state.startLocked) Hint("Registration has opened, so its first day cannot change.")
-                    DayButton("Opens", state.registrationStart, enabled && !state.startLocked, onRegistrationStart)
-                    DayButton("Closes (last day)", state.registrationEnd, enabled, onRegistrationEnd)
+                    DayButton("First day", state.registrationStart, enabled && !state.startLocked, onRegistrationStart)
+                    DayButton("Last day", state.registrationEnd, enabled, onRegistrationEnd)
                     FieldError(state.errors[LotteryField.REGISTRATION])
 
                     Section("Booking period")
-                    DayButton("Opens", state.bookingStart, enabled, onBookingStart)
-                    DayButton("Closes (last day)", state.bookingEnd, enabled, onBookingEnd)
+                    Hint("Winners can book from the first day through the last day. Offers not used by then expire.")
+                    DayButton("First day", state.bookingStart, enabled, onBookingStart)
+                    DayButton("Last day", state.bookingEnd, enabled, onBookingEnd)
                     FieldError(state.errors[LotteryField.BOOKING])
+                    lotteryTimeline(state)?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    }
 
                     NumberField("Number of winners", state.winnerCount, state.errors[LotteryField.WINNERS], enabled, onWinnersChange)
                     NumberField("Waitlist limit (optional)", state.waitlistLimit,
