@@ -29,10 +29,55 @@ detail routes also keep this bar visible with Lotteries selected.
 S01 (`WelcomeScreen`) appears once per device after setup; `WelcomePreferences`
 remembers it. S11 (`ProfileScreen`) edits name, email, and phone, sets
 `notificationsEnabled` (check it before sending a notification), and deletes the
-profile. Deleting removes `users/{uid}` and the anonymous account, then onboarding
+profile. Deleting removes `users/{uid}` and its current owned profile photo in one
+transaction, then deletes the anonymous account. After deletion, onboarding
 opens a new identity. `ProfileController` handles these actions through
 `ProfileRepository`, implemented by `FirebaseProfileRepository`. `PolicyScreen`
 shows the app policy and guidelines from S01 and S11.
+
+### Profile images
+
+S11 offers **Add image**, **Change image**, and **Remove image** (US 01.08.02).
+`ProfilePhotoController` manages these actions independently of contact drafts using
+the same `ProfileRepository`. The system photo picker is connected in `AppNavigation`;
+the shared `encodePhoto` helper resizes and compresses off the main thread. No gallery
+or camera permission is requested. `ProfilePhotoSection` renders the saved image and
+error/retry state.
+
+`FirebaseProfileRepository` creates an immutable `photos` document with `targetType:
+"user"`, changes only `users/{uid}.photoId` and `updatedAt`, and deletes the replaced
+owned profile image in one transaction. Removal clears the pointer and deletes the
+owned image atomically. Writes check the displayed image ID so a stale retry cannot
+replace or delete another session's newer image. **Retry image** repeats a failed
+operation; **Reload image** discards it and reads the current image. Recreating the
+screen does not automatically submit another image change or reset contact edits.
+Loading an image leaves contact Save and Delete available; an image change or
+removal temporarily disables them until its write finishes.
+
+## Private messages
+
+US 01.13.02 uses private entrant–owner chat, as distinct from public reviews or
+announcements. Start from **Campsite details → Message owner**. Either participant
+can reopen a thread through **Profile → Messages** or **Inbox → Messages**. Existing
+owner notices and lottery notifications keep their one-way behavior.
+
+`Conversation` and `ChatMessage` model the existing `conversations` and `messages`
+collections. `MessageRepository`, implemented by `FirebaseMessageRepository`, checks
+membership and derives the sender and receiver from Firebase Auth and the stored
+participants. `MessagesController` owns the thread list; `ChatController` owns one
+conversation, its draft, and explicit sends. Their separate screen files render
+state and callbacks. Register chat entry points only through `AppNavigation`.
+
+The repository queries only conversations where the current UID is the entrant or
+owner, and messages for the selected thread. Listeners stop while their screen is
+hidden. Draft text and an uncertain send's message ID/body survive recreation;
+recreation never sends automatically. **Retry send** reuses that ID, so a lost commit
+response does not duplicate a message or reset a newer preview. Messages are limited
+to 4000 characters. **Discard draft** releases a failed send so a new message can be
+written; it clears only the local draft, since the original may already be delivered.
+Each send rechecks conversation membership on the server without fetching its campsite label.
+Chat push notifications, read receipts, and paging are separate
+work. Existing admin logs continue to show only the owner's direction of messages.
 
 ## Campsite details
 
@@ -259,3 +304,19 @@ needed; `doc/api/` is ignored and should not be committed or edited by hand.
 
 Open `doc/api/index.html` to read the generated documentation. Use an isolated
 emulator for device tests and keep production credentials and infrastructure out of app changes.
+
+To check private-chat queries and atomic profile/photo deletion against the
+checked-in Firestore rules, start a local demo emulator in another terminal:
+
+```sh
+firebase emulators:start --only firestore --project demo-legion-chat-review
+```
+
+Then run the rules tests (use the port printed by the emulator):
+
+```sh
+CHAT_RULES_EMULATOR_HOST=127.0.0.1:8080 ./gradlew :app:testDebugUnitTest --tests 'com.example.legion_events.data.ProfileChatRulesIntegrationTest'
+```
+
+These tests load `firestore.rules` into a loopback emulator with isolated fixtures.
+They run only against `demo-` projects and are skipped when the host variable is absent.

@@ -59,6 +59,54 @@ where `targetType == "campsite"` and `targetId` matches the selected campsite.
 Its `photoId` identifies the cover, shown first when present in those results.
 Image data is Base64-encoded JPEG, WebP, or PNG, rather than a download URL.
 
+### Profile images
+
+Profile images use the same `photos` fields with `targetType: "user"`, and both
+`ownerId` and `targetId` equal the authenticated UID. A selected image is compressed
+to JPEG, at most 1024 pixels on its longest side and 280,000 Base64 characters.
+`users/{uid}.photoId` points to the current image or is null. Replacing creates a new
+immutable photo; the profile pointer update and deletion of the old owned profile
+photo commit together. Removing clears the pointer and deletes that owned photo in
+one transaction. No contact, role, preference, or profile creation fields are reset.
+Photos belonging to another user or to a campsite are never deleted as profile images.
+Deleting a profile reads its current photo pointer and removes that owned photo and
+`users/{uid}` in one transaction. Both deletions commit together; Auth deletion runs
+only after database success.
+
+## Private conversations and messages
+
+Private two-way chat uses the existing collections; announcements stay in
+`ownerNotices`. Conversation membership cannot be changed by a participant.
+
+| Collection | Fields |
+| --- | --- |
+| `conversations/{id}` | `campsiteId`, `lotteryId`, `reservationId`, `entrantId`, `ownerId`, `lastMessage`, `createdAt`, `updatedAt` |
+| `messages/{id}` | `conversationId`, `senderId`, `receiverId`, `text`, `read`, `createdAt`, `updatedAt` |
+
+IDs are string references and timestamps are Firestore server timestamps. Threads
+started from a campsite set `lotteryId` and `reservationId` to null. Their stable ID
+is the SHA-256 of `campsiteId/entrantId/ownerId`, preventing duplicate creates on
+recreation or retry. Only the entrant starts a thread, against an active campsite
+owned by a different user. Both participants can reply and reopen an existing thread,
+including when the listing is no longer available.
+
+Sending atomically creates an immutable message and updates only `lastMessage`
+and `updatedAt` on its conversation. Text is trimmed, nonempty, and at most 4000
+characters; `read` starts false. The sender is the current Auth UID and the receiver
+is the other stored participant. A retry uses the same message ID and checks an
+already committed message rather than overwriting it. This preserves later messages
+and their preview after an uncertain response. Read receipts are not exposed yet.
+Discarding a failed draft only clears local pending-send state; it never deletes a
+message that may already have been delivered.
+
+Conversation reads use separate `entrantId == uid` and `ownerId == uid` queries;
+message reads use `conversationId == selectedId`. The existing rules enforce private
+membership, sender identity, recipient identity, allowed fields, and timestamps.
+The client never queries other users' private profile/contact documents to label chats.
+The checked-in `participant` rule uses separate entrant/owner comparisons so each
+UID-scoped conversation query can prove access. Keep that rule in sync with the
+infrastructure repository; app builds do not deploy it.
+
 ## Lotteries
 
 Lotteries are stored at `lotteries/{id}`. Any user can create one for active campsites

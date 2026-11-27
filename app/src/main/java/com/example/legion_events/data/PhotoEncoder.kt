@@ -2,7 +2,7 @@
  * PhotoEncoder.kt
  *
  * Purpose: Shrinks and compresses a picked image into the Base64 JPEG the schema stores.
- * Role: Data layer helper used by CampsiteEditScreen.
+ * Role: Shared data layer helper for campsite covers and profile images.
  * Outstanding issues: None.
  */
 package com.example.legion_events.data
@@ -18,7 +18,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlin.math.max
 
-/** Longest side of a stored campsite photo, in pixels. */
+/** Longest side of a stored photo, in pixels. */
 private const val MAX_SIDE = 1024
 
 /** Largest stored JPEG. The Firestore rules allow 280,000 Base64 characters, which is 210,000 bytes. */
@@ -31,7 +31,7 @@ private const val MAX_BYTES = 200_000
  * @param uri The image chosen in the photo picker.
  * @return Base64 JPEG data, or null if the image cannot be read or made small enough.
  */
-internal fun encodeCampsitePhoto(resolver: ContentResolver, uri: Uri): String? = try {
+internal fun encodePhoto(resolver: ContentResolver, uri: Uri): String? = try {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) null

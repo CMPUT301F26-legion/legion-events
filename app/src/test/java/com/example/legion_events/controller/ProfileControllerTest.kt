@@ -215,6 +215,9 @@ class ProfileControllerTest {
         var deletes = 0
         var deleteResult: CompletableDeferred<Unit>? = null
 
+        override suspend fun getPhoto(): com.example.legion_events.model.Photo? = null
+        override suspend fun setPhoto(photoId: String, jpegBase64: String, previousPhotoId: String?): com.example.legion_events.model.Photo = error("Unexpected photo write")
+        override suspend fun removePhoto(photoId: String): Unit = error("Unexpected photo removal")
         override suspend fun getProfile(): UserProfile {
             if (failLoad) error("offline")
             return UserProfile("entrant", "Alex Morgan", "alex@example.com", "780-555-0142", role, notificationsEnabled = false)

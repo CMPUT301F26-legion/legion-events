@@ -20,6 +20,9 @@ class MockitoAgentArguments(@get:Classpath val classpath: FileCollection) : Comm
 
 tasks.withType<Test>().configureEach {
     jvmArgumentProviders.add(MockitoAgentArguments(mockitoAgent))
+    inputs.property("chatRulesEmulatorHost", providers.environmentVariable("CHAT_RULES_EMULATOR_HOST").orElse(""))
+    inputs.property("chatRulesProjectId", providers.environmentVariable("CHAT_RULES_PROJECT_ID").orElse("demo-legion-chat-review"))
+    inputs.file(rootProject.layout.projectDirectory.file("firestore.rules"))
 }
 
 android {
