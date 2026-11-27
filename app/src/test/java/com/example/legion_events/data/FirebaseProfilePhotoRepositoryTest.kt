@@ -113,6 +113,68 @@ class FirebaseProfilePhotoRepositoryTest {
         verify(transaction, never()).set(any(DocumentReference::class.java), anyMap<String, Any>())
     }
 
+    @Test fun deletingProfileRemovesItsCurrentOwnedPhotoBeforeDeletingAuthIdentity() = runTest {
+        `when`(user.delete()).thenReturn(Tasks.forResult<Void>(null))
+        repository.deleteProfile()
+        val order = inOrder(transaction, user)
+        order.verify(transaction).delete(old)
+        order.verify(transaction).delete(profile)
+        order.verify(user).delete()
+    }
+
+    @Test fun profileDeletionUsesTheLatestPointerAndHandlesMissingPhotos() = runTest {
+        val latestProfile = doc(mapOf("photoId" to "new"), profile)
+        val latestPhoto = image(id = "new", reference = fresh)
+        `when`(transaction.get(profile)).thenReturn(latestProfile)
+        `when`(transaction.get(fresh)).thenReturn(latestPhoto)
+        `when`(user.delete()).thenReturn(Tasks.forResult<Void>(null))
+        repository.deleteProfile()
+        verify(transaction).delete(fresh)
+        verify(transaction, never()).delete(old)
+        val missingPhoto = doc(emptyMap(), fresh, false)
+        `when`(transaction.get(fresh)).thenReturn(missingPhoto)
+        repository.deleteProfile()
+        verify(transaction, times(1)).delete(fresh)
+        verify(transaction, times(2)).delete(profile)
+    }
+
+    @Test fun deletingAProfileNeverDeletesAForeignOrCampsitePhoto() = runTest {
+        `when`(user.delete()).thenReturn(Tasks.forResult<Void>(null))
+        for (fields in listOf(mapOf("ownerId" to "bob"), mapOf("targetType" to "campsite"), mapOf("targetId" to "bob"))) {
+            val foreign = image(extra = fields)
+            `when`(transaction.get(old)).thenReturn(foreign)
+            repository.deleteProfile()
+        }
+        verify(transaction, never()).delete(old)
+        verify(transaction, times(3)).delete(profile)
+    }
+
+    @Test fun deletingAProfileWithoutAPhotoStillDeletesTheProfileAndAccount() = runTest {
+        val withoutPhoto = doc(mapOf("photoId" to null), profile)
+        `when`(transaction.get(profile)).thenReturn(withoutPhoto)
+        `when`(user.delete()).thenReturn(Tasks.forResult<Void>(null))
+        repository.deleteProfile()
+        verify(transaction, never()).get(old)
+        verify(transaction, never()).delete(old)
+        verify(transaction).delete(profile)
+        verify(user).delete()
+    }
+
+    @Test fun failedCleanupLeavesAuthUntouchedAndAuthFailureAfterCleanupStillSignsOut() = runTest {
+        `when`(transaction.get(old)).thenThrow(IllegalStateException("Read failed"))
+        fails { repository.deleteProfile() }
+        verify(user, never()).delete()
+        verify(auth, never()).signOut()
+        verify(transaction, never()).delete(profile)
+        val owned = image()
+        doReturn(owned).`when`(transaction).get(old)
+        `when`(user.delete()).thenReturn(Tasks.forException(IllegalStateException("Auth unavailable")))
+        repository.deleteProfile()
+        verify(transaction).delete(old)
+        verify(transaction).delete(profile)
+        verify(auth).signOut()
+    }
+
     /** Builds a profile-target photo, allowing a test to replace individual ownership fields. */
     private fun image(id: String = "old", reference: DocumentReference = old, bytes: String = "old-jpeg", extra: Map<String, Any?> = emptyMap()) =
         doc(mapOf("ownerId" to "alice", "targetType" to "user", "targetId" to "alice", "imageBase64" to bytes, "mimeType" to "image/jpeg") + extra,

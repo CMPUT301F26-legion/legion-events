@@ -28,6 +28,7 @@ import com.example.legion_events.data.*
 import com.example.legion_events.model.*
 import com.example.legion_events.ui.theme.LegioneventsTheme
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.*
 import org.junit.Assert.*
 import java.io.File
@@ -82,8 +83,19 @@ class ProfilePhotoNavigationTest {
         compose.runOnIdle { assertEquals(2, profiles.writes); assertEquals(1, profiles.ids.distinct().size) }
     }
 
+    @Test fun passiveImageLoadingDoesNotDisableContactSaveOrProfileDeletion() {
+        val pending = CompletableDeferred<Photo?>()
+        profiles.load = { pending.await() }
+        open(waitForPhoto = false)
+        compose.onNodeWithText("Updating profile image…").assertIsDisplayed()
+        compose.onNodeWithText("Add image").assertIsNotEnabled()
+        compose.onNodeWithText("Save changes").performScrollTo().assertIsEnabled()
+        compose.onNodeWithText("Delete profile").performScrollTo().assertIsEnabled()
+        pending.complete(null)
+    }
+
     /** Starts the profile tab with synthetic account and profile data and a fake activity-result owner. */
-    private fun open(dark: Boolean = false) {
+    private fun open(dark: Boolean = false, waitForPhoto: Boolean = true) {
         lateinit var account: OnboardingController
         compose.runOnUiThread { account = OnboardingController(object : UserRepository { override suspend fun initializeUser() = UserProfile("alice") }) }
         val campsites = object : CampsiteRepository { override fun observeCampsites() = flowOf(emptyList<Campsite>()) }
@@ -97,7 +109,7 @@ class ProfilePhotoNavigationTest {
         waitFor("Explore campsites")
         compose.onNodeWithText("Profile").performClick()
         waitFor("Add image")
-        compose.onNodeWithText("Add image").assertIsEnabled()
+        if (waitForPhoto) compose.onNodeWithText("Add image").assertIsEnabled()
     }
 
     /** Generates an isolated PNG so the production encoder can read, resize, and compress a real image. */
@@ -128,7 +140,8 @@ class ProfilePhotoNavigationTest {
     private class FakeProfile : ProfileRepository {
         var image: Photo? = null; var fail = false; var writes = 0; var removals = 0
         val ids = mutableListOf<String>()
-        override suspend fun getPhoto() = image
+        var load: suspend () -> Photo? = { image }
+        override suspend fun getPhoto() = load()
         override suspend fun setPhoto(photoId: String, jpegBase64: String, previousPhotoId: String?): Photo {
             writes++; ids += photoId
             if (fail) error("Unavailable")

@@ -22,7 +22,8 @@ import com.example.legion_events.model.MAX_CHAT_LENGTH
 
 /** Displays a private conversation without any Firebase calls or automatic sends. */
 @Composable
-fun ChatScreen(state: ChatState, onBack: () -> Unit, onRetry: () -> Unit, onDraft: (String) -> Unit, onSend: () -> Unit) {
+fun ChatScreen(state: ChatState, onBack: () -> Unit, onRetry: () -> Unit, onDraft: (String) -> Unit,
+    onSend: () -> Unit, onDiscardDraft: () -> Unit) {
     val list = rememberLazyListState()
     LaunchedEffect(state.messages.lastOrNull()?.id) {
         if (state.messages.isNotEmpty()) list.animateScrollToItem(state.messages.lastIndex)
@@ -55,7 +56,11 @@ fun ChatScreen(state: ChatState, onBack: () -> Unit, onRetry: () -> Unit, onDraf
                 OutlinedTextField(state.draft, onValueChange = onDraft, label = { Text("Message") },
                     enabled = !state.sending && state.sendError == null, modifier = Modifier.fillMaxWidth(), maxLines = 4,
                     supportingText = { Text("${state.draft.length}/$MAX_CHAT_LENGTH") })
-                state.sendError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                state.sendError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                    Text("The message may already have been delivered. Discard only clears this draft.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = onDiscardDraft, enabled = !state.sending) { Text("Discard draft") }
+                }
                 Button(onClick = onSend, enabled = !state.sending && state.draft.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                     Text(if (state.sending) "Sending…" else if (state.sendError != null) "Retry send" else "Send")
                 }

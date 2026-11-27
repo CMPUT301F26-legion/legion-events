@@ -29,7 +29,8 @@ detail routes also keep this bar visible with Lotteries selected.
 S01 (`WelcomeScreen`) appears once per device after setup; `WelcomePreferences`
 remembers it. S11 (`ProfileScreen`) edits name, email, and phone, sets
 `notificationsEnabled` (check it before sending a notification), and deletes the
-profile. Deleting removes `users/{uid}` and the anonymous account, then onboarding
+profile. Deleting removes `users/{uid}` and its current owned profile photo in one
+transaction, then deletes the anonymous account. After deletion, onboarding
 opens a new identity. `ProfileController` handles these actions through
 `ProfileRepository`, implemented by `FirebaseProfileRepository`. `PolicyScreen`
 shows the app policy and guidelines from S01 and S11.
@@ -50,6 +51,8 @@ owned image atomically. Writes check the displayed image ID so a stale retry can
 replace or delete another session's newer image. **Retry image** repeats a failed
 operation; **Reload image** discards it and reads the current image. Recreating the
 screen does not automatically submit another image change or reset contact edits.
+Loading an image leaves contact Save and Delete available; an image change or
+removal temporarily disables them until its write finishes.
 
 ## Private messages
 
@@ -70,7 +73,10 @@ owner, and messages for the selected thread. Listeners stop while their screen i
 hidden. Draft text and an uncertain send's message ID/body survive recreation;
 recreation never sends automatically. **Retry send** reuses that ID, so a lost commit
 response does not duplicate a message or reset a newer preview. Messages are limited
-to 4000 characters. Chat push notifications, read receipts, and paging are separate
+to 4000 characters. **Discard draft** releases a failed send so a new message can be
+written; it clears only the local draft, since the original may already be delivered.
+Each send rechecks conversation membership on the server without fetching its campsite label.
+Chat push notifications, read receipts, and paging are separate
 work. Existing admin logs continue to show only the owner's direction of messages.
 
 ## Campsite details
@@ -298,3 +304,19 @@ needed; `doc/api/` is ignored and should not be committed or edited by hand.
 
 Open `doc/api/index.html` to read the generated documentation. Use an isolated
 emulator for device tests and keep production credentials and infrastructure out of app changes.
+
+To check private-chat queries and atomic profile/photo deletion against the
+checked-in Firestore rules, start a local demo emulator in another terminal:
+
+```sh
+firebase emulators:start --only firestore --project demo-legion-chat-review
+```
+
+Then run the rules tests (use the port printed by the emulator):
+
+```sh
+CHAT_RULES_EMULATOR_HOST=127.0.0.1:8080 ./gradlew :app:testDebugUnitTest --tests 'com.example.legion_events.data.ProfileChatRulesIntegrationTest'
+```
+
+These tests load `firestore.rules` into a loopback emulator with isolated fixtures.
+They run only against `demo-` projects and are skipped when the host variable is absent.

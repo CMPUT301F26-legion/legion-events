@@ -93,6 +93,14 @@ class ChatController(private val repository: MessageRepository, private val save
         mutableState.value = state.value.copy(draft = text)
     }
 
+    /** Clears a failed draft and retry ID without deleting a message that may already have been delivered. */
+    fun discardFailedDraft() {
+        if (state.value.sending || state.value.sendError == null) return
+        savedState.remove<String>("pendingMessageId"); savedState.remove<String>("pendingMessageText")
+        savedState["chatDraft"] = ""
+        mutableState.value = state.value.copy(draft = "", sendError = null)
+    }
+
     /** Sends or explicitly retries one stable message; recreation never resubmits automatically. */
     fun send() {
         val current = state.value

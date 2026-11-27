@@ -68,7 +68,7 @@ fun ProfileScreen(
     onReloadPhoto: () -> Unit,
     onMessages: () -> Unit,
 ) {
-    val enabled = !state.saving && !state.deleting && !photo.working
+    val enabled = !state.saving && !state.deleting && !photo.mutating
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(20.dp),

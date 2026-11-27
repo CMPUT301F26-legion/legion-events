@@ -77,6 +77,8 @@ class FirebaseMessageRepositoryTest {
         verify(batch).set(message, mapOf("conversationId" to id, "senderId" to "owner", "receiverId" to "alice",
             "text" to "Reply", "read" to false, "createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp()))
         verify(firestore, never()).collection("ownerNotices")
+        verify(site, never()).get()
+        verify(thread, times(2)).get(Source.SERVER)
     }
 
     @Test fun uncertainSendVerifiesTheSameImmutableMessageInsteadOfCreatingAnother() = runTest {

@@ -4,9 +4,8 @@
  * Purpose: Firebase implementation of ProfileRepository, backed by users/{uid} and the anonymous
  *   Firebase Auth account.
  * Role: Data layer (MVC model access). The only place profile edits and deletion reach Firestore.
- * Outstanding issues: Waitlist entries and reservations are left behind on delete. Firestore
- *   security rules must allow a user to update and delete their own users/{uid}; tests use fakes,
- *   so this is not covered automatically. initializeUser() still lives in FirebaseRepository and
+ * Outstanding issues: Waitlist entries and reservations are left behind on delete.
+ *   initializeUser() still lives in FirebaseRepository and
  *   should move here.
  */
 package com.example.legion_events.data
@@ -127,12 +126,27 @@ class FirebaseProfileRepository(
     }
 
     /**
-     * Deletes the profile document, then the anonymous account, so the next launch gets a new identity.
+     * Atomically deletes the profile and its current owned profile photo, then the anonymous account.
+     * Reading the pointer in the transaction handles a photo replacement racing with deletion.
      * If Firebase refuses to delete the account, signs out instead so the old identity is not reused.
      */
     override suspend fun deleteProfile() {
         val user = checkNotNull(auth.currentUser) { "No user is signed in." }
-        firestore.collection("users").document(user.uid).delete().await()
+        val profileRef = firestore.collection("users").document(user.uid)
+        firestore.runTransaction<Unit> { transaction ->
+            checkIdentity(user.uid)
+            val profile = transaction.get(profileRef)
+            check(profile.exists()) { "Your profile no longer exists." }
+            val photo = (profile.get("photoId") as? String)?.let { id ->
+                require(id.isNotBlank() && '/' !in id) { "Invalid profile photo ID." }
+                transaction.get(firestore.collection("photos").document(id))
+            }
+            checkIdentity(user.uid)
+            if (photo?.ownedProfilePhoto(user.uid) != null) transaction.delete(photo.reference)
+            transaction.delete(profileRef)
+            Unit
+        }.await()
+        checkIdentity(user.uid)
         try {
             user.delete().await()
         } catch (cancelled: CancellationException) {

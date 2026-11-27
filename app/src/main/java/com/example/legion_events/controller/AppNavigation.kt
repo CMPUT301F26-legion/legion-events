@@ -1055,7 +1055,7 @@ private fun ChatDestination(nav: NavHostController, repository: MessageRepositor
     })
     val state by chat.state.collectAsStateWithLifecycle()
     LifecycleResumeEffect(chat) { chat.resume(); onPauseOrDispose { chat.pause() } }
-    ChatScreen(state, { nav.popBackStack() }, chat::retry, chat::setDraft, chat::send)
+    ChatScreen(state, { nav.popBackStack() }, chat::retry, chat::setDraft, chat::send, chat::discardFailedDraft)
 }
 
 /**

@@ -14,6 +14,7 @@ import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.model.Photo
 import com.example.legion_events.model.UserProfile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
 import org.junit.*
@@ -68,6 +69,19 @@ class ProfilePhotoControllerTest {
         assertEquals(0, repository.writes)
     }
 
+    @Test fun passiveLoadingIsDistinctFromAnImageMutation() = runTest(dispatcher) {
+        val pending = CompletableDeferred<Photo?>()
+        repository.load = { pending.await() }
+        val controller = controller(); runCurrent()
+        assertTrue(controller.state.value.working)
+        assertFalse(controller.state.value.mutating)
+        pending.complete(old); runCurrent()
+        controller.changePhoto { "new-jpeg" }
+        assertTrue(controller.state.value.mutating)
+        runCurrent()
+        assertFalse(controller.state.value.mutating)
+    }
+
     /** Creates a lifecycle-owned controller so looking it up again never retries a save. */
     private fun controller(): ProfilePhotoController = ViewModelProvider.create(store, viewModelFactory {
         initializer { ProfilePhotoController(repository, dispatcher) }
@@ -80,7 +94,8 @@ class ProfilePhotoControllerTest {
         var writes = 0
         var removals = 0
         val ids = mutableListOf<String>()
-        override suspend fun getPhoto() = image
+        var load: suspend () -> Photo? = { image }
+        override suspend fun getPhoto() = load()
         override suspend fun setPhoto(photoId: String, jpegBase64: String, previousPhotoId: String?): Photo {
             writes++; ids += photoId
             if (fail) error("Unavailable")

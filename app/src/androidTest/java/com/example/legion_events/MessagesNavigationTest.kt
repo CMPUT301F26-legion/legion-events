@@ -99,6 +99,23 @@ class MessagesNavigationTest {
         waitFor("Message")
     }
 
+    @Test fun discardAfterSendFailureUnlocksComposerAndDoesNotRemoveADeliveredMessage() {
+        open()
+        compose.runOnIdle { navigation.navigate(chatRoute("thread")) }
+        waitFor("Message")
+        repository.failSend = true
+        compose.onNodeWithText("Message").performTextInput("Original")
+        compose.onNodeWithText("Send").performClick()
+        waitFor("Discard draft")
+        compose.onNodeWithText("Discard draft").performClick()
+        compose.onNodeWithText("Message").assertIsEnabled()
+        compose.runOnIdle { assertEquals("Original", repository.messages.value.single().text); repository.failSend = false }
+        compose.onNodeWithText("Message").performTextInput("New message")
+        compose.onNodeWithText("Send").performClick()
+        waitFor("New message")
+        compose.runOnIdle { assertEquals(2, repository.messages.value.size); assertEquals(2, repository.ids.distinct().size) }
+    }
+
     /** Starts the shared router with fake profile, campsite, lottery, and private-chat services. */
     private fun open(asOwner: Boolean = false, dark: Boolean = false) {
         repository.uid = if (asOwner) "owner" else "alice"

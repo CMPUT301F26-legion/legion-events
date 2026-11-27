@@ -13,7 +13,10 @@ service cloud.firestore {
     function lottery(id) { return get(/databases/$(database)/documents/lotteries/$(id)).data; }
     function offer(id) { return get(/databases/$(database)/documents/offers/$(id)).data; }
     function chat(id) { return get(/databases/$(database)/documents/conversations/$(id)).data; }
-    function participant(c) { return activeUser() && request.auth.uid in [c.entrantId, c.ownerId]; }
+    // Separate comparisons let either UID-scoped conversation query prove membership.
+    function participant(c) {
+      return activeUser() && (request.auth.uid == c.entrantId || request.auth.uid == c.ownerId);
+    }
     function openLottery(l) {
       return l.status == 'open' && l.winnersDrawn == false
         && request.time >= l.registrationStartAt && request.time < l.registrationEndAt;

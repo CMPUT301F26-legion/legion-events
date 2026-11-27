@@ -69,6 +69,9 @@ immutable photo; the profile pointer update and deletion of the old owned profil
 photo commit together. Removing clears the pointer and deletes that owned photo in
 one transaction. No contact, role, preference, or profile creation fields are reset.
 Photos belonging to another user or to a campsite are never deleted as profile images.
+Deleting a profile reads its current photo pointer and removes that owned photo and
+`users/{uid}` in one transaction. Both deletions commit together; Auth deletion runs
+only after database success.
 
 ## Private conversations and messages
 
@@ -93,11 +96,16 @@ characters; `read` starts false. The sender is the current Auth UID and the rece
 is the other stored participant. A retry uses the same message ID and checks an
 already committed message rather than overwriting it. This preserves later messages
 and their preview after an uncertain response. Read receipts are not exposed yet.
+Discarding a failed draft only clears local pending-send state; it never deletes a
+message that may already have been delivered.
 
 Conversation reads use separate `entrantId == uid` and `ownerId == uid` queries;
 message reads use `conversationId == selectedId`. The existing rules enforce private
 membership, sender identity, recipient identity, allowed fields, and timestamps.
 The client never queries other users' private profile/contact documents to label chats.
+The checked-in `participant` rule uses separate entrant/owner comparisons so each
+UID-scoped conversation query can prove access. Keep that rule in sync with the
+infrastructure repository; app builds do not deploy it.
 
 ## Lotteries
 

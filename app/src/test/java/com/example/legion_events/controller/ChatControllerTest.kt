@@ -78,6 +78,24 @@ class ChatControllerTest {
         assertEquals("Hi", controller.state.value.draft)
     }
 
+    @Test fun discardedFailedDraftUnlocksComposerWithoutDeletingDeliveredMessagesOrReusingItsId() = runTest(dispatcher) {
+        val saved = SavedStateHandle()
+        val controller = controller(saved); controller.resume(); runCurrent()
+        controller.setDraft("Original"); repository.failSend = true
+        controller.send(); runCurrent()
+        repository.messages.value = listOf(ChatMessage("delivered", "thread", "alice", "owner", "Original", false, Timestamp(1, 0), null))
+        runCurrent()
+        controller.discardFailedDraft()
+        assertEquals("", controller.state.value.draft)
+        assertNull(controller.state.value.sendError)
+        assertNull(saved.get<String>("pendingMessageId"))
+        assertNull(saved.get<String>("pendingMessageText"))
+        assertEquals("Original", controller.state.value.messages.single().text)
+        repository.failSend = false
+        controller.setDraft("New message"); controller.send(); runCurrent()
+        assertEquals(2, repository.ids.distinct().size)
+    }
+
     @Test fun conversationListSubscriptionsAreReplacedAndRemovedOnPause() = runTest(dispatcher) {
         val controller = MessagesController(repository)
         controller.resume(); runCurrent()

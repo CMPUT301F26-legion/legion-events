@@ -122,9 +122,12 @@ class FirebaseMessageRepository(private val auth: FirebaseAuth, private val fire
         val body = text.trim()
         require(body.isNotEmpty() && body.length <= MAX_CHAT_LENGTH) { "Write 1 to $MAX_CHAT_LENGTH characters." }
         val uid = userId()
-        val summary = checkNotNull(getConversation(conversationId)) { "This conversation is unavailable." }
+        // Send needs fresh membership, not the optional campsite label used by the screens.
+        val document = firestore.collection("conversations").document(conversationId).get(Source.SERVER).await()
         checkIdentity(uid)
-        val receiver = summary.conversation.receiverFor(uid)
+        check(document.exists()) { "This conversation is unavailable." }
+        val conversation = document.toConversation(uid)
+        val receiver = conversation.receiverFor(uid)
         val reference = firestore.collection("messages").document(messageId)
         val batch = firestore.batch()
         batch.set(reference, mapOf("conversationId" to conversationId, "senderId" to uid, "receiverId" to receiver,
@@ -136,7 +139,7 @@ class FirebaseMessageRepository(private val auth: FirebaseAuth, private val fire
             val saved = reference.get(Source.SERVER).await()
             checkIdentity(uid)
             if (!saved.exists()) throw error
-            val message = saved.toChatMessage(summary.conversation)
+            val message = saved.toChatMessage(conversation)
             check(message.senderId == uid && message.text == body && message.receiverId == receiver) { "This message ID is already used." }
         }
         checkIdentity(uid)

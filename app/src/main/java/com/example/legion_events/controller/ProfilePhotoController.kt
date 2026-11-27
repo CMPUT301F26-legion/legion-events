@@ -24,8 +24,9 @@ import java.util.UUID
  * @property photo Current saved profile image, or null.
  * @property working Whether loading, encoding, or saving is in progress.
  * @property error A recoverable image error, or null.
+ * @property mutating Whether encoding or an image write is pending; passive reads do not block contact actions.
  */
-data class ProfilePhotoState(val photo: Photo? = null, val working: Boolean = true, val error: String? = null)
+data class ProfilePhotoState(val photo: Photo? = null, val working: Boolean = true, val error: String? = null, val mutating: Boolean = false)
 
 /**
  * Keeps image changes separate from contact drafts and never retries a write automatically.
@@ -44,7 +45,7 @@ class ProfilePhotoController(private val repository: ProfileRepository,
     /** Loads the current image; failure does not discard contact fields or a previous image. */
     fun load() {
         retryAction = null
-        perform { mutableState.value = state.value.copy(photo = repository.getPhoto()) }
+        perform(mutating = false) { mutableState.value = state.value.copy(photo = repository.getPhoto()) }
     }
 
     /** Encodes a picked image off the main thread, then saves it with one stable operation ID. */
@@ -81,12 +82,12 @@ class ProfilePhotoController(private val repository: ProfileRepository,
     fun pickerUnavailable() { mutableState.value = state.value.copy(error = "No image picker is available on this device.") }
 
     /** Serializes image actions and keeps the previous image visible until a write succeeds. */
-    private fun perform(action: suspend () -> Unit) {
-        mutableState.value = state.value.copy(working = true, error = null)
+    private fun perform(mutating: Boolean = true, action: suspend () -> Unit) {
+        mutableState.value = state.value.copy(working = true, mutating = mutating, error = null)
         viewModelScope.launch {
-            try { action(); retryAction = null; mutableState.value = state.value.copy(working = false) }
+            try { action(); retryAction = null; mutableState.value = state.value.copy(working = false, mutating = false) }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { mutableState.value = state.value.copy(working = false, error = "Could not update your profile image. Try a readable image or Retry.") }
+            catch (_: Exception) { mutableState.value = state.value.copy(working = false, mutating = false, error = "Could not update your profile image. Try a readable image or Retry.") }
         }
     }
 }
