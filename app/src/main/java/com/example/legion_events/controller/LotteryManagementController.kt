@@ -17,6 +17,7 @@ import com.example.legion_events.model.WaitlistEntrant
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -70,6 +71,10 @@ private fun label(index: Int) = "Entrant ${index + 1}"
  * @property winners Entrants the draw picked; empty before the draw (US 02.05.01).
  * @property waitlistError Why the entries could not be loaded, or null.
  * @property tab The list being shown.
+ * @property canEndRegistration Whether registration is open, so the owner can end it now.
+ * @property confirmingEnd Whether the owner is being asked to confirm ending registration.
+ * @property ending Whether ending registration is being saved.
+ * @property endError Why ending registration failed, or null.
  */
 data class LotteryManagementState(
     val loading: Boolean = true,
@@ -82,6 +87,10 @@ data class LotteryManagementState(
     val winners: List<WaitlistRow> = emptyList(),
     val waitlistError: String? = null,
     val tab: ManagementTab = ManagementTab.WAITLIST,
+    val canEndRegistration: Boolean = false,
+    val confirmingEnd: Boolean = false,
+    val ending: Boolean = false,
+    val endError: String? = null,
 )
 
 /**
@@ -143,6 +152,8 @@ class LotteryManagementController(
                     winners = waitlistRows(all, STATUS_WON),
                     waitlistError = if (entries.isFailure) "Could not load the waiting list. Tap Retry to try again." else null,
                     tab = tab,
+                    canEndRegistration = !lottery.winnersDrawn && !time.before(lottery.registrationStartAt.toDate()) &&
+                        time.before(lottery.registrationEndAt.toDate()),
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -152,8 +163,48 @@ class LotteryManagementController(
         }
     }
 
+    /** Asks the owner to confirm ending registration now. */
+    fun requestEndRegistration() {
+        val current = state.value
+        if (current.canEndRegistration && !current.ending) {
+            mutableState.value = current.copy(confirmingEnd = true, endError = null)
+        }
+    }
+
+    /** Closes the confirmation without ending registration. */
+    fun cancelEndRegistration() {
+        if (!state.value.ending) mutableState.value = state.value.copy(confirmingEnd = false)
+    }
+
+    /**
+     * Ends registration now (US 02.04.06), then reloads. The draw starts on its own within a few
+     * seconds while this app is open (US 02.05.01), so the screen reloads again to show the winners.
+     */
+    fun confirmEndRegistration() {
+        val current = state.value
+        if (!current.confirmingEnd || current.ending) return
+        mutableState.value = current.copy(ending = true)
+        viewModelScope.launch {
+            try {
+                repository.endRegistrationNow(lotteryId)
+                mutableState.value = state.value.copy(ending = false, confirmingEnd = false, canEndRegistration = false)
+                refresh()
+                delay(DRAW_RELOAD_DELAY_MS)
+                refresh()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                mutableState.value = state.value.copy(ending = false, confirmingEnd = false,
+                    endError = "Could not end registration. Check your connection and retry.")
+            }
+        }
+    }
+
     /** Shows the waiting list or the winners. */
     fun selectTab(tab: ManagementTab) {
         mutableState.value = state.value.copy(tab = tab)
     }
 }
+
+/** How long after ending registration S16 reloads to show the draw's result. */
+internal const val DRAW_RELOAD_DELAY_MS = 8_000L

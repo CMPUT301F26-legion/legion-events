@@ -36,6 +36,9 @@ import com.example.legion_events.model.Lottery
  * @param onRetry Reloads after a failed load.
  * @param onEdit Opens S15 for this lottery; only enabled while editing is allowed.
  * @param onTab Switches between the waiting list and winners.
+ * @param onEndRegistration Asks to end registration now; shown only while registration is open.
+ * @param onConfirmEnd Ends registration after the owner confirms.
+ * @param onCancelEnd Closes the confirmation.
  */
 @Composable
 fun LotteryManagementScreen(
@@ -44,6 +47,9 @@ fun LotteryManagementScreen(
     onRetry: () -> Unit,
     onEdit: () -> Unit,
     onTab: (ManagementTab) -> Unit,
+    onEndRegistration: () -> Unit = {},
+    onConfirmEnd: () -> Unit = {},
+    onCancelEnd: () -> Unit = {},
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -71,6 +77,14 @@ fun LotteryManagementScreen(
                 }
                 lottery != null -> {
                     item { StatusCard(lottery, state.badge, state.editBlockedReason) }
+                    if (state.canEndRegistration || state.endError != null) item {
+                        if (state.canEndRegistration) {
+                            OutlinedButton(onClick = onEndRegistration, enabled = !state.ending, modifier = Modifier.fillMaxWidth()) {
+                                Text("End registration now")
+                            }
+                        }
+                        state.endError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
                     item {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             StatTile(lottery.entrantCount.toString(), "Joined", Modifier.weight(1f))
@@ -129,6 +143,22 @@ fun LotteryManagementScreen(
             }
         }
     }
+    if (state.confirmingEnd) {
+        AlertDialog(
+            onDismissRequest = onCancelEnd,
+            title = { Text("End registration now?") },
+            text = {
+                Text("Nobody else can join. Winners are drawn within a few seconds while this app stays open. " +
+                    "This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmEnd, enabled = !state.ending) {
+                    Text(if (state.ending) "Ending…" else "End registration")
+                }
+            },
+            dismissButton = { TextButton(onClick = onCancelEnd, enabled = !state.ending) { Text("Cancel") } },
+        )
+    }
 }
 
 /**
@@ -155,11 +185,11 @@ private fun StatusCard(lottery: Lottery, badge: LotteryBadge?, editBlockedReason
                     Step(label, done = index < reached)
                 }
             }
-            Text("Registration " + periodText(lottery.registrationStartAt, lottery.registrationEndAt) +
+            Text("Registration: " + periodText(lottery.registrationStartAt, lottery.registrationEndAt) +
                 if (LocalLotteryDrawController.ENABLED)
                     " · Draw runs while the owner's app is open" else " · Draw runs automatically",
                 style = MaterialTheme.typography.bodySmall)
-            Text("Booking " + periodText(lottery.bookingStartAt, lottery.bookingEndAt), style = MaterialTheme.typography.bodySmall)
+            Text("Booking: " + periodText(lottery.bookingStartAt, lottery.bookingEndAt), style = MaterialTheme.typography.bodySmall)
             editBlockedReason?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

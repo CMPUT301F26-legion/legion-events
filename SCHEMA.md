@@ -85,6 +85,8 @@ An owner can edit a lottery until registration closes and the draw starts (US 02
 Once registration opens, its first day cannot change. Once entrants have joined, the
 campsites cannot change and `waitlistLimit` cannot go below `entrantCount`. An unchanged
 day keeps its saved timestamp, so an edit from another time zone does not move it.
+The owner can also end an open registration early from S16 by setting `registrationEndAt`
+to the server time; the draw then starts as for a registration that closed on schedule.
 
 ## Waitlist
 

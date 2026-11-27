@@ -74,6 +74,13 @@ class FirebaseLotteryRepository(
             )
         }
 
+    override suspend fun endRegistrationNow(lotteryId: String) {
+        // Both fields take the server's time, which the rules compare with request.time.
+        lotteries.document(lotteryId).update(
+            mapOf("registrationEndAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp()),
+        ).await()
+    }
+
     /** Fields the owner may set when creating or editing (US 02.04.01–02.04.07). */
     private fun Lottery.editableFields(): Map<String, Any> = mapOf(
         "campsiteIds" to campsiteIds,
