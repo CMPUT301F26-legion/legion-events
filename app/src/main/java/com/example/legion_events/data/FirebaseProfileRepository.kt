@@ -12,6 +12,7 @@
 package com.example.legion_events.data
 
 import com.example.legion_events.model.UserProfile
+import com.example.legion_events.model.Photo
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -29,6 +30,81 @@ class FirebaseProfileRepository(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
 ) : ProfileRepository {
+    /** Resolves only a photo owned by this profile, checking identity again after each read. */
+    override suspend fun getPhoto(): Photo? {
+        val uid = checkNotNull(auth.currentUser).uid
+        val profile = firestore.collection("users").document(uid).get().await()
+        checkIdentity(uid)
+        val id = profile.get("photoId") as? String ?: return null
+        require(id.isNotBlank() && '/' !in id) { "Invalid profile photo ID." }
+        val photo = firestore.collection("photos").document(id).get().await()
+        checkIdentity(uid)
+        return photo.ownedProfilePhoto(uid)
+    }
+
+    /** Creates an immutable photo and updates only the profile pointer and server time in one transaction. */
+    override suspend fun setPhoto(photoId: String, jpegBase64: String, previousPhotoId: String?): Photo {
+        require(photoId.isNotBlank() && '/' !in photoId) { "Invalid photo ID." }
+        require(jpegBase64.isNotBlank() && jpegBase64.length <= 280_000) { "Choose a smaller image." }
+        val uid = checkNotNull(auth.currentUser).uid
+        val profileRef = firestore.collection("users").document(uid)
+        val photoRef = firestore.collection("photos").document(photoId)
+        firestore.runTransaction<Unit> { transaction ->
+            checkIdentity(uid)
+            val profile = transaction.get(profileRef)
+            check(profile.exists() && profile.get("disabled") != true) { "Profile is unavailable." }
+            val oldId = profile.get("photoId") as? String
+            val newPhoto = transaction.get(photoRef)
+            if (newPhoto.exists()) {
+                check(oldId == photoId && newPhoto.ownedProfilePhoto(uid)?.imageBase64 == jpegBase64) { "Your photo changed. Reload it first." }
+                return@runTransaction
+            }
+            val old = oldId?.let {
+                require(it.isNotBlank() && '/' !in it) { "Invalid existing photo ID." }
+                transaction.get(firestore.collection("photos").document(it))
+            }
+            check(oldId == previousPhotoId || (previousPhotoId == null && old != null && !old.exists())) {
+                "Your photo changed. Reload it first."
+            }
+            checkIdentity(uid)
+            transaction.set(photoRef, mapOf("ownerId" to uid, "targetType" to "user", "targetId" to uid,
+                "imageBase64" to jpegBase64, "mimeType" to "image/jpeg",
+                "createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp()))
+            transaction.update(profileRef, mapOf("photoId" to photoId, "updatedAt" to FieldValue.serverTimestamp()))
+            if (old?.ownedProfilePhoto(uid) != null) transaction.delete(old.reference)
+        }.await()
+        checkIdentity(uid)
+        return Photo(photoId, uid, "user", uid, jpegBase64, "image/jpeg")
+    }
+
+    /** Removes the displayed image only; a stale retry cannot delete a replacement from another session. */
+    override suspend fun removePhoto(photoId: String) {
+        require(photoId.isNotBlank() && '/' !in photoId) { "Invalid photo ID." }
+        val uid = checkNotNull(auth.currentUser).uid
+        val profileRef = firestore.collection("users").document(uid)
+        firestore.runTransaction<Unit> { transaction ->
+            checkIdentity(uid)
+            val profile = transaction.get(profileRef)
+            check(profile.exists() && profile.get("disabled") != true) { "Profile is unavailable." }
+            val current = profile.get("photoId") as? String ?: return@runTransaction
+            check(current == photoId) { "Your photo changed. Reload it first." }
+            val photo = transaction.get(firestore.collection("photos").document(photoId))
+            checkIdentity(uid)
+            transaction.update(profileRef, mapOf("photoId" to null, "updatedAt" to FieldValue.serverTimestamp()))
+            if (photo.ownedProfilePhoto(uid) != null) transaction.delete(photo.reference)
+        }.await()
+        checkIdentity(uid)
+    }
+
+    /** Refuses to return another identity's image after an account change. */
+    private fun checkIdentity(uid: String) { check(auth.currentUser?.uid == uid) { "The signed-in account changed." } }
+
+    /** Validates ownership and target before displaying or deleting a photo. */
+    private fun DocumentSnapshot.ownedProfilePhoto(uid: String): Photo? {
+        if (!exists() || get("ownerId") != uid || get("targetType") != "user" || get("targetId") != uid) return null
+        return Photo(id, uid, "user", uid, get("imageBase64") as? String ?: "", get("mimeType") as? String ?: "")
+    }
+
     /** Reads the profile; onboarding has already created it. */
     override suspend fun getProfile(): UserProfile {
         val document = profileDocument().get().await()

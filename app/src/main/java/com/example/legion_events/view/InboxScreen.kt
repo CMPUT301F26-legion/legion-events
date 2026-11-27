@@ -39,6 +39,7 @@ fun InboxScreen(
     onOffer: (String) -> Unit,
     onEnablePush: (() -> Unit)? = null,
     onReservation: (String) -> Unit,
+    onMessages: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -48,6 +49,7 @@ fun InboxScreen(
         item {
             Text("Inbox", style = MaterialTheme.typography.headlineMedium)
             Text("Your lottery results, cancellation confirmations, and owner notices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onMessages) { Text("Messages") }
         }
         if (onEnablePush != null) {
             item { OutlinedButton(onClick = onEnablePush) { Text("Allow push notifications") } }

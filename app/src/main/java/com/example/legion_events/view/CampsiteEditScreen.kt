@@ -35,7 +35,7 @@ import com.example.legion_events.controller.CampsiteEditState
 import com.example.legion_events.controller.CampsiteField
 import com.example.legion_events.controller.utcDayFormat
 import com.example.legion_events.data.currentLocation
-import com.example.legion_events.data.encodeCampsitePhoto
+import com.example.legion_events.data.encodePhoto
 import com.example.legion_events.data.hasLocationPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -291,7 +291,7 @@ private fun PhotoPicker(state: CampsiteEditState, enabled: Boolean, actions: Cam
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
             actions.onPhotoPicked()
-            scope.launch { actions.onPhoto(withContext(Dispatchers.IO) { encodeCampsitePhoto(resolver, uri) }) }
+            scope.launch { actions.onPhoto(withContext(Dispatchers.IO) { encodePhoto(resolver, uri) }) }
         }
     }
     OutlinedCard(

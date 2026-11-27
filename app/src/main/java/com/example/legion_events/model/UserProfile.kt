@@ -5,8 +5,8 @@
  *   01.09.01, 01.10.01).
  * Role: Model in MVC. Plain data with no Firebase calls; ProfileRepository and UserRepository read
  *   and write it.
- * Outstanding issues: role is a plain string ("user" or "admin") rather than an enum. Nothing sets
- *   photoId or fcmToken yet; profile photos and push tokens come later.
+ * Outstanding issues: role is a plain string ("user" or "admin") rather than an enum.
+ *   Roles are assigned only by trusted project administration.
  */
 package com.example.legion_events.model
 

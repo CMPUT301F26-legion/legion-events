@@ -12,6 +12,7 @@ import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
@@ -68,6 +69,11 @@ import com.example.legion_events.view.OnboardingScreen
 import com.example.legion_events.view.PlaceholderScreen
 import com.example.legion_events.view.PolicyScreen
 import com.example.legion_events.view.ProfileScreen
+import com.example.legion_events.view.ChatScreen
+import com.example.legion_events.view.MessagesScreen
+import com.example.legion_events.data.MessageRepository
+import com.example.legion_events.data.FirebaseMessageRepository
+import com.example.legion_events.data.encodePhoto
 import com.example.legion_events.view.WelcomeScreen
 import com.example.legion_events.view.BookingOfferScreen
 import com.example.legion_events.view.BookingOffersScreen
@@ -130,6 +136,22 @@ internal const val QR_SCAN_ROUTE = "qr_scan"
 internal const val LOTTERIES_ROUTE = "lotteries"
 /** S07: notification inbox. */
 internal const val INBOX_ROUTE = "inbox"
+/** Private conversations are separate destinations from notices and lottery notifications. */
+internal const val MESSAGES_ROUTE = "messages"
+internal const val CHAT_PATTERN = "message/{conversationId}"
+internal const val CONTACT_OWNER_PATTERN = "message/new/{campsiteId}"
+
+/** Builds a private thread route without exposing participant IDs as caller-controlled arguments. */
+internal fun chatRoute(id: String): String {
+    require(id.isNotBlank() && '/' !in id)
+    return "message/${Uri.encode(id)}"
+}
+
+/** Starts or reopens the signed-in entrant's stable conversation for a campsite. */
+internal fun contactOwnerRoute(id: String): String {
+    require(id.isNotBlank() && '/' !in id)
+    return "message/new/${Uri.encode(id)}"
+}
 /** S08 entry: list owned offers; campsite/date selection remains a later booking feature. */
 internal const val BOOKING_OFFER_ROUTE = "booking_offer"
 /** One owned offer, opened by the list or a winning notification. */
@@ -312,6 +334,7 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param ratings Loads and saves the entrant's score from a completed stay on S10c.
  * @param images Reads and removes every uploaded image on the S19 Images tab.
  * @param logs Reads every notification and owner-to-entrant message on S20.
+ * @param messages Supplies private chat, independently of announcements.
  */
 @Composable
 fun AppNavigation(
@@ -337,6 +360,7 @@ fun AppNavigation(
     ratings: RatingRepository = FirebaseRatingRepository.instance,
     images: AdminImageRepository = FirebaseAdminImageRepository.instance,
     logs: AdminLogRepository = FirebaseAdminLogRepository.instance,
+    messages: MessageRepository = FirebaseMessageRepository.instance,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -353,6 +377,7 @@ fun AppNavigation(
     }
     // Detail screens keep their parent tab selected, including direct links from other screens.
     val entrantTab = when (currentRoute) {
+        MESSAGES_ROUTE, CHAT_PATTERN, CONTACT_OWNER_PATTERN -> INBOX_ROUTE
         BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
         RESERVATION_DETAILS_PATTERN, RESERVATION_CONFIRMATION_PATTERN, RATE_STAY_PATTERN -> BOOKINGS_ROUTE
         else -> currentRoute
@@ -414,7 +439,10 @@ fun AppNavigation(
                         initializer { CampsiteLotteryController(checkNotNull(entry.arguments?.getString("campsiteId")), waitlists) }
                     })
                     val joining by join.state.collectAsStateWithLifecycle()
-                    CampsiteDetailsScreen(information, { navController.popBackStack() }, detail::retry, detail::retryPhotos) {
+                    CampsiteDetailsScreen(information, { navController.popBackStack() }, detail::retry, detail::retryPhotos,
+                        onMessageOwner = information.campsite?.takeIf { it.ownerId != userId }?.let { site ->
+                            { navController.navigate(contactOwnerRoute(site.id)) { launchSingleTop = true } }
+                        }) {
                         CampsiteLotterySection(joining, join::join, join::retry) {
                             navController.navigate(LOTTERIES_ROUTE) {
                                 popUpTo(HOME_ROUTE) { saveState = true }
@@ -587,6 +615,9 @@ fun AppNavigation(
                         initializer { ProfileController(profiles) }
                     })
                     val settings by profile.state.collectAsStateWithLifecycle()
+                    val image: ProfilePhotoController = viewModel(factory = viewModelFactory { initializer { ProfilePhotoController(profiles) } })
+                    val photo by image.state.collectAsStateWithLifecycle()
+                    val pickPhoto = rememberProfileImagePicker(image, photo)
                     LaunchedEffect(settings.deleted) {
                         if (settings.deleted) {
                             // Clear every screen, then open a new device identity.
@@ -608,6 +639,8 @@ fun AppNavigation(
                         onConfirmDelete = profile::confirmDelete,
                         onCancelDelete = profile::cancelDelete,
                         onRetry = profile::retry,
+                        photo = photo, onPickPhoto = pickPhoto, onRemovePhoto = image::removePhoto, onRetryPhoto = image::retry, onReloadPhoto = image::load,
+                        onMessages = { navController.navigate(MESSAGES_ROUTE) { launchSingleTop = true } },
                     )
                 }
             }
@@ -795,8 +828,25 @@ fun AppNavigation(
                         onOffer = { id -> navController.navigate(bookingOfferRoute(id)) { launchSingleTop = true } },
                         onEnablePush = onEnablePush,
                         onReservation = { id -> navController.navigate(reservationConfirmationRoute(id)) { launchSingleTop = true } },
+                        onMessages = { navController.navigate(MESSAGES_ROUTE) { launchSingleTop = true } },
                     )
                 }
+            }
+            composable(MESSAGES_ROUTE) {
+                RequireAccount(state, controller) {
+                    val list: MessagesController = viewModel(factory = viewModelFactory { initializer { MessagesController(messages) } })
+                    val threads by list.state.collectAsStateWithLifecycle()
+                    LifecycleResumeEffect(list) { list.resume(); onPauseOrDispose { list.pause() } }
+                    MessagesScreen(threads, { navController.popBackStack() }, list::resume) { id ->
+                        navController.navigate(chatRoute(id)) { launchSingleTop = true }
+                    }
+                }
+            }
+            composable(CHAT_PATTERN, arguments = listOf(navArgument("conversationId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) { ChatDestination(navController, messages, conversationId = entry.arguments?.getString("conversationId")) }
+            }
+            composable(CONTACT_OWNER_PATTERN, arguments = listOf(navArgument("campsiteId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) { ChatDestination(navController, messages, campsiteId = entry.arguments?.getString("campsiteId")) }
             }
             composable(OWNER_NOTIFICATIONS_ROUTE) {
                 RequireAccount(state, controller) {
@@ -965,6 +1015,36 @@ fun AppNavigation(
             }
         }
     }
+}
+
+/** Opens Android's photo picker; restored results wait for image loading and never encode in the view. */
+@Composable
+private fun rememberProfileImagePicker(controller: ProfilePhotoController, state: ProfilePhotoState): () -> Unit {
+    val resolver = LocalContext.current.contentResolver
+    var pending by rememberSaveable { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { pending = it?.toString() }
+    LaunchedEffect(pending, state.working) {
+        val uri = pending ?: return@LaunchedEffect
+        if (!state.working) {
+            pending = null
+            controller.changePhoto { encodePhoto(resolver, Uri.parse(uri)) }
+        }
+    }
+    return {
+        try { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+        catch (_: ActivityNotFoundException) { controller.pickerUnavailable() }
+    }
+}
+
+/** Binds either chat entry route to one entry-scoped controller and lifecycle-aware subscription. */
+@Composable
+private fun ChatDestination(nav: NavHostController, repository: MessageRepository, conversationId: String? = null, campsiteId: String? = null) {
+    val chat: ChatController = viewModel(factory = viewModelFactory {
+        initializer { ChatController(repository, createSavedStateHandle(), conversationId, campsiteId) }
+    })
+    val state by chat.state.collectAsStateWithLifecycle()
+    LifecycleResumeEffect(chat) { chat.resume(); onPauseOrDispose { chat.pause() } }
+    ChatScreen(state, { nav.popBackStack() }, chat::retry, chat::setDraft, chat::send)
 }
 
 /**

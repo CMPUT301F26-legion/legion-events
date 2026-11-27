@@ -174,7 +174,10 @@ class BookingOfferNavigationTest {
         }
         val profiles = object : ProfileRepository {
             /** Returns a synthetic profile so the real Profile screen can render its offers link. */
-            override suspend fun getProfile() = UserProfile("alice", name = "Alice")
+            override suspend fun getPhoto(): com.example.legion_events.model.Photo? = null
+        override suspend fun setPhoto(photoId: String, jpegBase64: String, previousPhotoId: String?): com.example.legion_events.model.Photo = error("Unexpected photo write")
+        override suspend fun removePhoto(photoId: String): Unit = error("Unexpected photo removal")
+        override suspend fun getProfile() = UserProfile("alice", name = "Alice")
             /** Contact editing is outside these tests. */
             override suspend fun updateContact(name: String, email: String, phone: String): Unit = error("Unexpected edit")
             /** Notification settings are outside these tests. */

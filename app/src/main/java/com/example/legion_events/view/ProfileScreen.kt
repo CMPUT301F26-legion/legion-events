@@ -4,7 +4,7 @@
  * Purpose: S11 Profile & settings: edit name, email, and phone, opt out of notifications, open the
  *   dashboards and policy, and delete the profile.
  * Role: View in MVC. Renders ProfileState and forwards actions to ProfileController.
- * Outstanding issues: No profile photo or accessibility settings (S11b) yet; both are deferred.
+ * Outstanding issues: Accessibility settings (S11b) remain separate work.
  */
 package com.example.legion_events.view
 
@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.legion_events.controller.ProfileState
+import com.example.legion_events.controller.ProfilePhotoState
 
 /**
  * S11: edits contact details, the notification opt-out, and profile deletion.
@@ -38,6 +39,12 @@ import com.example.legion_events.controller.ProfileState
  * @param onConfirmDelete Deletes the profile.
  * @param onCancelDelete Closes the delete confirmation.
  * @param onRetry Reloads the profile after a failed load.
+ * @param photo Profile image state, independent of unsaved contact edits.
+ * @param onPickPhoto Opens the system image picker.
+ * @param onRemovePhoto Removes the displayed profile image.
+ * @param onRetryPhoto Retries the failed image operation.
+ * @param onReloadPhoto Discards a failed image operation and reloads the current image.
+ * @param onMessages Opens private conversations separately from announcements.
  */
 @Composable
 fun ProfileScreen(
@@ -54,7 +61,14 @@ fun ProfileScreen(
     onConfirmDelete: () -> Unit,
     onCancelDelete: () -> Unit,
     onRetry: () -> Unit,
+    photo: ProfilePhotoState,
+    onPickPhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+    onRetryPhoto: () -> Unit,
+    onReloadPhoto: () -> Unit,
+    onMessages: () -> Unit,
 ) {
+    val enabled = !state.saving && !state.deleting && !photo.working
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(20.dp),
@@ -68,18 +82,19 @@ fun ProfileScreen(
                     Button(onClick = onRetry) { Text("Retry") }
                 }
                 else -> {
+                    ProfilePhotoSection(photo, !state.saving && !state.deleting, onPickPhoto, onRemovePhoto, onRetryPhoto, onReloadPhoto)
                     Text("Identified by this device. No username or password needed.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ProfileField("Name", state.name, state.nameError, onNameChange, KeyboardType.Text)
                     ProfileField("Email", state.email, state.emailError, onEmailChange, KeyboardType.Email)
                     ProfileField("Phone", state.phone, state.phoneError, onPhoneChange, KeyboardType.Phone)
-                    Button(onClick = onSave, enabled = !state.saving && !state.deleting, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onSave, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                         Text("Save changes")
                     }
                     state.message?.let { Text(it) }
                     Row(
                         modifier = Modifier.fillMaxWidth().toggleable(
-                            value = state.notificationsEnabled, enabled = !state.saving && !state.deleting,
+                            value = state.notificationsEnabled, enabled = enabled,
                             role = Role.Switch, onValueChange = onNotificationsChange,
                         ),
                         verticalAlignment = Alignment.CenterVertically,
@@ -91,9 +106,10 @@ fun ProfileScreen(
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     // Any user can own campsites, so the owner dashboard is not limited by role.
                     TextButton(onClick = onOwnerDashboard) { Text("Manage my campsites") }
+                    TextButton(onClick = onMessages) { Text("Messages") }
                     if (state.admin) TextButton(onClick = onAdminDashboard) { Text("Admin dashboard") }
                     TextButton(onClick = onPolicy) { Text("App policy & guidelines") }
-                    TextButton(onClick = onDelete, enabled = !state.deleting) {
+                    TextButton(onClick = onDelete, enabled = enabled) {
                         Text(if (state.deleting) "Deleting profile…" else "Delete profile", color = MaterialTheme.colorScheme.error)
                     }
                 }

@@ -38,6 +38,7 @@ import java.util.Locale
  * @param onRetry Reloads an unavailable or failed listing.
  * @param onRetryPhotos Reloads photos while keeping campsite information visible.
  * @param lotterySection Join controls for the campsite's open lotteries (US 01.01.06), shown below its name.
+ * @param onMessageOwner Opens private chat when this is another user's campsite.
  */
 @Composable
 fun CampsiteDetailsScreen(
@@ -45,6 +46,7 @@ fun CampsiteDetailsScreen(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onRetryPhotos: () -> Unit,
+    onMessageOwner: (() -> Unit)? = null,
     lotterySection: @Composable () -> Unit = {},
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
@@ -101,6 +103,9 @@ fun CampsiteDetailsScreen(
                         } else Text("No ratings yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     item { DetailSection("About this campsite", site.description.ifBlank { "No description provided." }) }
+                    if (onMessageOwner != null) item {
+                        OutlinedButton(onClick = onMessageOwner, modifier = Modifier.fillMaxWidth()) { Text("Message owner") }
+                    }
                     item { DetailSection("Amenities", site.amenities.joinToString(" · ").ifBlank { "Not provided." }) }
                     if (site.tags.isNotEmpty()) item { DetailSection("Tags", site.tags.joinToString(" · ")) }
                     site.location?.let { point ->

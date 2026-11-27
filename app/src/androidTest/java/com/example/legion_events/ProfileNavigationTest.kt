@@ -231,6 +231,9 @@ class ProfileNavigationTest {
         var deletes = 0
         var role = "user"
 
+        override suspend fun getPhoto(): com.example.legion_events.model.Photo? = null
+        override suspend fun setPhoto(photoId: String, jpegBase64: String, previousPhotoId: String?): com.example.legion_events.model.Photo = error("Unexpected photo write")
+        override suspend fun removePhoto(photoId: String): Unit = error("Unexpected photo removal")
         override suspend fun getProfile() = UserProfile("entrant", "Alex Morgan", "alex@example.com", "780-555-0142", role)
 
         override suspend fun updateContact(name: String, email: String, phone: String) {
