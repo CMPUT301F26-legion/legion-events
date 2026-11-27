@@ -9,7 +9,7 @@ package com.example.legion_events.view
 
 import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -20,7 +20,8 @@ import java.util.Locale
  * @return The first and last day, inclusive.
  */
 internal fun periodText(start: Timestamp, end: Timestamp): String {
-    val lastDay = Calendar.getInstance().apply { time = end.toDate(); add(Calendar.DAY_OF_MONTH, -1) }.time
+    // The end is exclusive: midnight after the last day, or the moment registration was ended early.
+    val lastDay = Date(end.toDate().time - 1)
     val short = SimpleDateFormat("MMM d", Locale.getDefault())
     val long = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
     return "${short.format(start.toDate())} – ${long.format(lastDay)}"

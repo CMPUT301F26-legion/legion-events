@@ -99,8 +99,9 @@ class MainActivity : ComponentActivity() {
             val snackbar = remember { SnackbarHostState() }
             LaunchedEffect(drawError) {
                 val error = drawError ?: return@LaunchedEffect
-                if (snackbar.showSnackbar(error, "Retry", duration = SnackbarDuration.Indefinite) == SnackbarResult.ActionPerformed) {
-                    localDraws.retry()
+                when (snackbar.showSnackbar(error, "Retry", withDismissAction = true, duration = SnackbarDuration.Indefinite)) {
+                    SnackbarResult.ActionPerformed -> localDraws.retry()
+                    SnackbarResult.Dismissed -> localDraws.dismiss()
                 }
             }
             LaunchedEffect(profile?.uid) {

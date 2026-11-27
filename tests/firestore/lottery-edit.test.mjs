@@ -80,3 +80,14 @@ test('only the owner can edit', async () => {
   await assertFails(updateDoc(doc(environment.authenticatedContext('other').firestore(), 'lotteries/other'),
     { winnerCount: 3, updatedAt: serverTimestamp() }));
 });
+
+test('the owner can end an open registration now, but not one that has not opened', async () => {
+  await seed('lotteries/endNow', lottery({ startOffset: -day }));
+  await assertSucceeds(updateDoc(doc(owner(), 'lotteries/endNow'),
+    { registrationEndAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  await assertFails(edit('endNow', { winnerCount: 3 }));
+
+  await seed('lotteries/notYet', lottery());
+  await assertFails(updateDoc(doc(owner(), 'lotteries/notYet'),
+    { registrationEndAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+});

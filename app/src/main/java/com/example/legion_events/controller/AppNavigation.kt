@@ -811,6 +811,9 @@ fun AppNavigation(
                         onRetry = manage::refresh,
                         onEdit = { navController.navigate(lotteryEditRoute(lotteryId)) { launchSingleTop = true } },
                         onTab = manage::selectTab,
+                        onEndRegistration = manage::requestEndRegistration,
+                        onConfirmEnd = manage::confirmEndRegistration,
+                        onCancelEnd = manage::cancelEndRegistration,
                     )
                 }
             }
@@ -929,6 +932,10 @@ fun AppNavigation(
                     val gallery: AdminImagesController = viewModel(factory = viewModelFactory {
                         initializer { AdminImagesController(images, admin) }
                     })
+                    LifecycleResumeEffect(gallery) {
+                        gallery.refresh()
+                        onPauseOrDispose { }
+                    }
                     val imageState by gallery.state.collectAsStateWithLifecycle()
                     AdminImagesScreen(imageState, { navController.popBackStack() }, gallery::refresh,
                         gallery::requestRemove, gallery::confirmRemove, gallery::cancelRemove)
@@ -939,6 +946,10 @@ fun AppNavigation(
                     val history: AdminLogsController = viewModel(factory = viewModelFactory {
                         initializer { AdminLogsController(logs, admin) }
                     })
+                    LifecycleResumeEffect(history) {
+                        history.refresh()
+                        onPauseOrDispose { }
+                    }
                     val logState by history.state.collectAsStateWithLifecycle()
                     AdminLogsScreen(logState, { navController.popBackStack() }, history::refresh, history::selectTab)
                 }

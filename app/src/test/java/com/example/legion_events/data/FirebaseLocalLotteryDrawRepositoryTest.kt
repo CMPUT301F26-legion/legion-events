@@ -1,6 +1,7 @@
 /* Tests the Android draw transaction at Firebase SDK boundaries with synthetic snapshots. */
 package com.example.legion_events.data
 
+import android.util.SparseArray
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -101,19 +102,89 @@ class FirebaseLocalLotteryDrawRepositoryTest {
         assertTrue(writes.isEmpty())
     }
 
-    /** A stale entrant query fails before saving a partial selection. */
+    /** A stale entrant query fails as retryable before saving a partial selection. */
     @Test fun entrantCountMismatchRequiresAFreshQuery() = runTest {
         entrants = 2
         try { repository.draw("pine"); fail("Expected an incomplete-list failure") }
-        catch (_: IllegalStateException) { assertTrue(writes.isEmpty()) }
+        catch (error: LocalLotteryDrawException) {
+            assertEquals(LocalLotteryDrawFailureKind.RETRYABLE, error.kind)
+            assertTrue(error.cause is LotteryWaitlistChangedException)
+            assertTrue(writes.isEmpty())
+        }
+    }
+
+    /** An entry withdrawn between the query and the transaction is also a retryable waitlist change. */
+    @Test fun withdrawnEntryIsARetryableWaitlistChange() = runTest {
+        val withdrawn = document("waitlist/pine_alice", mapOf("lotteryId" to "pine", "userId" to "alice", "status" to "withdrawn"))
+        snapshots["waitlist/pine_alice"] = withdrawn
+        try { repository.draw("pine"); fail("Expected a waitlist change") }
+        catch (error: LocalLotteryDrawException) {
+            assertEquals(LocalLotteryDrawFailureKind.RETRYABLE, error.kind)
+            assertTrue(writes.isEmpty())
+        }
+    }
+
+    /** The owner-facing name is the first campsite's name, with a count of any others. */
+    @Test fun lotteryNameUsesTheCampsiteName() = runTest {
+        val lottery = document("lotteries/oak", mapOf("campsiteIds" to listOf("camp", "other")))
+        val campsite = document("campsites/camp", mapOf("name" to "Camore"))
+        `when`(reference("lotteries/oak").get()).thenReturn(Tasks.forResult(lottery))
+        `when`(reference("campsites/camp").get()).thenReturn(Tasks.forResult(campsite))
+        assertEquals("Camore +1", repository.lotteryName("oak"))
+    }
+
+    /** A lottery without campsites has no name, so the controller falls back to its ID. */
+    @Test fun lotteryNameIsNullWithoutCampsites() = runTest {
+        val lottery = document("lotteries/oak", mapOf("campsiteIds" to emptyList<String>()))
+        `when`(reference("lotteries/oak").get()).thenReturn(Tasks.forResult(lottery))
+        assertNull(repository.lotteryName("oak"))
     }
 
     /** Another authenticated user cannot use this repository to draw an owner's lottery. */
     @Test fun anotherOwnerCannotDrawTheLottery() = runTest {
         `when`(user.uid).thenReturn("other")
         try { repository.draw("pine"); fail("Expected an owner check") }
-        catch (_: IllegalStateException) { verifyNoInteractions(transaction) }
+        catch (error: LocalLotteryDrawException) {
+            assertEquals(LocalLotteryDrawFailureKind.INVALID, error.kind)
+            verifyNoInteractions(transaction)
+        }
     }
+
+    /** Invalid lottery data is a permanent failure that keeps the repository's explanation. */
+    @Test fun invalidWinnerCountIsNotRetryable() = runTest {
+        `when`(current.getLong("winnerCount")).thenReturn(0L)
+        try { repository.draw("pine"); fail("Expected an invalid lottery") }
+        catch (error: LocalLotteryDrawException) {
+            assertEquals(LocalLotteryDrawFailureKind.INVALID, error.kind)
+            assertTrue(error.message!!.contains("invalid winner count"))
+        }
+    }
+
+    /** Offline and contention errors retry; rule denials and data errors do not. */
+    @Test fun firestoreErrorsAreClassifiedByCode() {
+        assertEquals(LocalLotteryDrawFailureKind.RETRYABLE, classifyLocalLotteryDrawFailure(firestoreError("UNAVAILABLE")).kind)
+        assertEquals(LocalLotteryDrawFailureKind.RETRYABLE, classifyLocalLotteryDrawFailure(firestoreError("ABORTED")).kind)
+        assertEquals(LocalLotteryDrawFailureKind.PERMISSION_DENIED,
+            classifyLocalLotteryDrawFailure(firestoreError("PERMISSION_DENIED")).kind)
+        assertEquals(LocalLotteryDrawFailureKind.INVALID, classifyLocalLotteryDrawFailure(firestoreError("INVALID_ARGUMENT")).kind)
+        assertEquals(LocalLotteryDrawFailureKind.RETRYABLE, classifyLocalLotteryDrawFailure(java.io.IOException("reset")).kind)
+    }
+
+    /** Supplies the Android map used to initialize real SDK error codes in a local JVM test. */
+    private fun firestoreError(code: String): FirebaseFirestoreException =
+        mockConstruction(SparseArray::class.java) { array, _ ->
+            val entries = mutableMapOf<Int, Any?>()
+            doAnswer { entries[it.getArgument<Int>(0)] }.`when`(array).get(anyInt())
+            @Suppress("UNCHECKED_CAST")
+            val values = array as SparseArray<Any?>
+            doAnswer {
+                entries[it.getArgument<Int>(0)] = it.getArgument<Any?>(1)
+                null
+            }.`when`(values).put(anyInt(), any())
+        }.use {
+            val sdkCode = FirebaseFirestoreException.Code.valueOf(code)
+            mock(FirebaseFirestoreException::class.java).also { error -> `when`(error.code).thenReturn(sdkCode) }
+        }
 
     /** Resolves stable document references so writes can be checked by their real paths. */
     private fun reference(path: String): DocumentReference = references.getOrPut(path) {
