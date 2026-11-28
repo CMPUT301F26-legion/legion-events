@@ -35,6 +35,33 @@ data class Conversation(val id: String, val campsiteId: String, val entrantId: S
 }
 
 /**
+ * Returns the other participants of [userId]'s conversations that contain at least one message,
+ * most recently active first, each listed once. Empty threads (preview still blank) are not contacts.
+ * @param conversations Conversations [userId] belongs to; others are ignored.
+ * @param userId The participant whose contacts are wanted.
+ */
+fun pastContacts(conversations: List<Conversation>, userId: String): List<String> =
+    conversations.filter { userId in listOf(it.entrantId, it.ownerId) && it.entrantId != it.ownerId && it.lastMessage.isNotEmpty() }
+        .sortedWith(compareByDescending<Conversation> { it.updatedAt }.thenBy { it.id })
+        .map { it.receiverFor(userId) }
+        .distinct()
+
+/**
+ * Lists everyone related to [userId]: past chat contacts first, in their given order, then entrants who
+ * booked one of [userId]'s campsites but have never messaged, most recent booking first. Each UID appears once
+ * and [userId] itself is never included.
+ * @param userId The owner or entrant whose related users are wanted.
+ * @param pastContacts Result of `MessageRepository.getPastContacts(userId)`.
+ * @param campsiteReservations Bookings at [userId]'s campsites, in any status; others' bookings are ignored.
+ */
+fun listRelatedUsers(userId: String, pastContacts: List<String>, campsiteReservations: List<Reservation>): List<String> {
+    val unmessaged = campsiteReservations.filter { it.ownerId == userId }
+        .sortedWith(compareByDescending<Reservation> { it.createdAt }.thenBy { it.id })
+        .map { it.userId }
+    return (pastContacts + unmessaged).filter { it != userId }.distinct()
+}
+
+/**
  * A message stored separately at messages/{id}; only its recipient can mark it read.
  * @property id Stable client-generated document ID, reused for retries.
  * @property conversationId Parent conversation ID.

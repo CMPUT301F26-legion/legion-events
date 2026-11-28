@@ -124,6 +124,37 @@ class FirebaseMessageRepositoryTest {
         fails { repository.getConversation(id) }
     }
 
+    @Test fun pastContactsComeFromBothMembershipQueriesAndOnlyForTheSignedInUser() = runTest {
+        val asEntrant = mock(Query::class.java); val asOwner = mock(Query::class.java)
+        `when`(threads.whereEqualTo("entrantId", "alice")).thenReturn(asEntrant)
+        `when`(threads.whereEqualTo("ownerId", "alice")).thenReturn(asOwner)
+        val empty = doc(mapOf("campsiteId" to "pine", "entrantId" to "alice", "ownerId" to "quiet", "lastMessage" to "",
+            "createdAt" to Timestamp(1, 0), "updatedAt" to Timestamp(9, 0)), "empty")
+        val hosted = doc(mapOf("campsiteId" to "lake", "entrantId" to "bob", "ownerId" to "alice", "lastMessage" to "Hi",
+            "createdAt" to Timestamp(1, 0), "updatedAt" to Timestamp(5, 0)), "hosted")
+        val entrantThreads = snapshot(conversation(), empty); val ownerThreads = snapshot(hosted)
+        `when`(asEntrant.get()).thenReturn(Tasks.forResult(entrantThreads))
+        `when`(asOwner.get()).thenReturn(Tasks.forResult(ownerThreads))
+        assertEquals(listOf("bob", "owner"), repository.getPastContacts("alice"))
+        clearInvocations(firestore)
+        assertThrows(SecurityException::class.java) { kotlinx.coroutines.runBlocking { repository.getPastContacts("bob") } }
+        verifyNoInteractions(firestore)
+    }
+
+    @Test fun pastContactsSkipEmptyAndForeignThreadsAndListEachPersonOnce() {
+        fun c(id: String, entrant: String, owner: String, last: String, at: Long) =
+            Conversation(id, "site", entrant, owner, last, Timestamp(1, 0), Timestamp(at, 0))
+        val threads = listOf(c("a", "alice", "owner", "Hi", 2), c("b", "alice", "owner", "Again", 4),
+            c("c", "bob", "alice", "Yo", 3), c("d", "alice", "quiet", "", 9), c("e", "bob", "carol", "Not mine", 10))
+        assertEquals(listOf("owner", "bob"), pastContacts(threads, "alice"))
+        assertEquals(emptyList<String>(), pastContacts(threads, "nobody"))
+    }
+
+    /** Wraps document mocks in a query result. */
+    private fun snapshot(vararg documents: DocumentSnapshot) = mock(QuerySnapshot::class.java).also {
+        `when`(it.documents).thenReturn(documents.toList())
+    }
+
     /** Builds stored conversation membership with an existing preview. */
     private fun conversation() = doc(mapOf("campsiteId" to "pine", "entrantId" to "alice", "ownerId" to "owner",
         "lastMessage" to "Previous message", "createdAt" to Timestamp(1, 0), "updatedAt" to Timestamp(2, 0)), id)

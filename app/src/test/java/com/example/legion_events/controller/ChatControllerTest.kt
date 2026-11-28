@@ -121,6 +121,7 @@ class ChatControllerTest {
         val ids = mutableListOf<String>()
         override suspend fun startConversation(campsiteId: String): String { starts++; return "thread" }
         override suspend fun getConversation(conversationId: String) = summary.takeIf { available }
+        override suspend fun getPastContacts(userId: String) = emptyList<String>()
         override fun observeMessages(conversationId: String) = messages.onStart { listeners++ }.onCompletion { listeners-- }
         override fun observeConversations() = flow {
             listListeners++

@@ -116,6 +116,18 @@ class FirebaseMessageRepository(private val auth: FirebaseAuth, private val fire
         awaitClose { listener.remove() }
     }
 
+    /** Uses the same two UID-scoped membership queries as [observeConversations], read once. */
+    override suspend fun getPastContacts(userId: String): List<String> {
+        validId(userId)
+        val uid = userId()
+        if (userId != uid) throw SecurityException("Contacts are only available for the signed-in user.")
+        val conversations = listOf("entrantId", "ownerId").flatMap { field ->
+            firestore.collection("conversations").whereEqualTo(field, uid).get().await().documents.map { it.toConversation(uid) }
+        }.distinctBy { it.id }
+        checkIdentity(uid)
+        return pastContacts(conversations, uid)
+    }
+
     /** Creates an immutable message and preview atomically; a retry verifies the existing message instead of duplicating it. */
     override suspend fun send(conversationId: String, messageId: String, text: String) {
         validId(conversationId); validId(messageId)

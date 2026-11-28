@@ -165,6 +165,7 @@ class MessagesNavigationTest {
         override fun observeConversations() = messages.map { listOf(summary()) }
         override suspend fun startConversation(campsiteId: String): String { starts++; assertEquals(site.id, campsiteId); return "thread" }
         override suspend fun getConversation(conversationId: String) = summary().takeIf { available }
+        override suspend fun getPastContacts(userId: String) = pastContacts(listOf(summary().conversation), userId)
         override fun observeMessages(conversationId: String) = messages.onStart { listeners++ }.onCompletion { listeners-- }
         override suspend fun send(conversationId: String, messageId: String, text: String) {
             sends++; ids += messageId

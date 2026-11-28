@@ -29,6 +29,12 @@ interface MessageRepository {
     suspend fun getConversation(conversationId: String): ConversationSummary?
     /** Observes only this participant's selected thread, in chronological order. */
     fun observeMessages(conversationId: String): Flow<List<ChatMessage>>
+    /**
+     * Reads the UIDs of everyone [userId] has exchanged at least one message with, most recent first.
+     * @param userId Must be the signed-in user; conversations are private to their participants.
+     * @throws SecurityException If [userId] is not the signed-in user.
+     */
+    suspend fun getPastContacts(userId: String): List<String>
     /** Atomically sends text and updates the preview; reuse messageId to retry an uncertain send. */
     suspend fun send(conversationId: String, messageId: String, text: String)
 }
