@@ -68,7 +68,7 @@ fun ReservationConfirmationScreen(state: ReservationDetailsState, onBack: () -> 
                             Text("Check-out: ${reservationDateText(reservation.endDate)}")
                             Text("Guests: ${reservation.guestCount}")
                             Text("Total: ${shortPrice(reservation.totalPrice)} CAD")
-                            if (reservation.cancellationCompleted()) reservation.updatedAt?.let { Text("Cancelled: ${reservationDateText(it)}") }
+                            if (reservation.cancellationCompleted()) reservation.updatedAt?.let { Text("Cancelled: ${reservationEventDateText(it)}") }
                         }
                     }
                     ReservationDownloadButton(state, onDownload)
