@@ -136,6 +136,12 @@ not treat winning offers as the user's full entry history. Offer views use the
 shared theme, outlined cards, and Back arrow, with decline/reload actions above
 the bottom navigation. Keep notification navigation compatible with direct offer links.
 
+PR 1 adds `BookingRepository` / `FirebaseBookingRepository` for current choices,
+explicit acceptance, and request recovery. `BookingRequest`, `BookingOptions`, and
+`BookedNight` define dates, price, policy, and lock contracts. The screens do not yet
+call the submission API; worker processing and UI integration follow in PRs 2–4.
+See [booking flow](doc/booking-flow.md) for lifecycle, rollout, and checks.
+
 ## Reservations
 
 The **Bookings** tab opens S10's Active, Past, and Cancelled tabs. A stay is
@@ -196,7 +202,7 @@ The notice opens S09; Cancelled bookings also open S10b and their confirmation/C
 S10b offers confirmation and CSV actions for confirmed bookings (including past
 stays) and completed cancellations. S09 (`ReservationConfirmationScreen`) shows the
 saved booking number, campsite, dates, guests, and total. Booking creation should
-call `reservationConfirmationRoute(reservationId)` after the reservation is saved;
+call `reservationConfirmationRoute(reservationId)` after the worker confirms the reservation;
 pass only its ID. S09 checks ownership and status before showing confirmation.
 
 `ReservationDetailsController` supports both screens and rechecks the owned booking
@@ -214,7 +220,7 @@ No profile information is included. A cancellation CSV adds `cancelledAtUtc` fro
 the worker-written `updatedAt`. A pending request cannot produce a cancellation
 receipt. Export rechecks the status after the Save dialog; it does not silently
 change a selected booking receipt into a cancellation receipt. Booking creation
-and booking notifications remain separate work.
+and booking notification integration remain follow-up work described in [booking flow](doc/booking-flow.md).
 
 ## Owner reservations
 
@@ -234,17 +240,16 @@ tab, and calendar month are kept in `SavedStateHandle`.
   `cancelled` and `rejected` bookings, most recently changed first. Switching tabs does not read again.
 - **View booking:** a dialog with the reservation number, dates, guests, total, and rules acceptance.
   The rules let only a profile's owner or an admin read `users/{uid}`, so entrant names are not shown.
-- **Accept:** requested bookings with no pending cancellation show **Accept** in the Active tab and the
-  details dialog. One transaction sets the booking to `confirmed` and writes an `ownerNotices` entry to
-  the entrant; its nights then show as booked on S17. The app does not reserve `bookedNights` (see the
-  known gaps in [SCHEMA.md](SCHEMA.md#owner-reservations)).
+- **Confirmation:** the entrant's explicit acceptance is the approval. Only the trusted worker
+  confirms a reservation, locks its nights, and consumes its offer. Owners monitor requested
+  and confirmed bookings; there is no owner Accept action. See [booking contracts](doc/booking-flow.md).
 - **Reject (US 02.08.01):** only bookings in the Active tab (`requested` or `confirmed`, before checkout). The dialog takes an optional reason (at most
   `Reservation.MAX_REJECTION_REASON_LENGTH`). One transaction sets the booking to `rejected` and writes an
   `ownerNotices` entry to that entrant, so it appears in their S07 inbox; the booking then moves to
   Cancelled. The app never writes `bookedNights` (the rules make them worker-only), so a rejected
   booking's nights are not released until the worker handles `rejected` bookings.
-- **Denied writes:** if Firestore denies an accept or reject, S17 shows "You don't have permission to
-  accept/reject this reservation." and logs the original error under the `OwnerReservations` tag
+- **Denied writes:** if Firestore denies a rejection, S17 shows "You don't have permission to
+  reject this reservation." and logs the original error under the `OwnerReservations` tag
   (`adb logcat -s OwnerReservations`). The usual cause is a booking whose `lotteryId` is not one of
   the owner's lotteries.
 

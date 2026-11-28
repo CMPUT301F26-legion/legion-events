@@ -75,15 +75,6 @@ data class Reservation(
         (status == STATUS_REQUESTED || status == STATUS_CONFIRMED) && endDate > at
 
     /**
-     * Returns true when the owner may accept this booking: still `requested`, before checkout, and
-     * with no cancellation pending.
-     * @param at The current time.
-     * @return Whether S17 offers Accept and the rules allow `requested -> confirmed`.
-     */
-    fun canOwnerAccept(at: Timestamp): Boolean =
-        status == STATUS_REQUESTED && !cancellationRequested && endDate > at
-
-    /**
      * Returns true when the entrant cancelled the booking or the owner rejected it.
      * @return Whether the booking belongs in an owner's Cancelled list.
      */
@@ -124,16 +115,6 @@ data class Reservation(
  */
 internal fun nightFormat(): SimpleDateFormat =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-
-/**
- * Writes the inbox message sent to an entrant whose requested booking the owner accepted.
- * @param reservation The accepted booking; its first night and checkout date are named.
- * @param campsiteName The campsite's current name, or null when unknown.
- * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
- */
-fun acceptanceNotice(reservation: Reservation, campsiteName: String?): String =
-    "The owner confirmed your reservation${placeText(campsiteName)} for ${stayText(reservation)}."
-        .take(MAX_NOTICE_LENGTH)
 
 /**
  * Writes the inbox message sent to an entrant whose booking the owner rejected (US 02.08.01).

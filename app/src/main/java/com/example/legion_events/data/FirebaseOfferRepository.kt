@@ -5,7 +5,6 @@ import com.example.legion_events.model.BookingOffer
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
-import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -38,7 +37,7 @@ class FirebaseOfferRepository(
         val userId = currentUserId()
         return withOfferAccess {
             val document = offerDocument(offerId).get().await()
-            if (document.exists()) document.toOwnedOffer(userId) else null
+            if (document.exists()) document.toOwnedBookingOffer(userId) else null
         }
     }
 
@@ -52,7 +51,7 @@ class FirebaseOfferRepository(
         val userId = currentUserId()
         return withOfferAccess {
             firestore.collection(COLLECTION).whereEqualTo("userId", userId).get().await()
-                .documents.map { it.toOwnedOffer(userId) }
+                .documents.map { it.toOwnedBookingOffer(userId) }
         }
     }
 
@@ -75,7 +74,7 @@ class FirebaseOfferRepository(
             firestore.runTransaction<Unit> { transaction ->
                 val document = transaction.get(reference)
                 check(document.exists()) { "Offer does not exist." }
-                val offer = document.toOwnedOffer(userId)
+                val offer = document.toOwnedBookingOffer(userId)
 
                 if (offer.status == BookingOffer.STATUS_DECLINED) return@runTransaction
                 check(offer.status == BookingOffer.STATUS_OPEN) { "This offer cannot be declined." }
@@ -94,7 +93,7 @@ class FirebaseOfferRepository(
 
             val saved = reference.get(Source.SERVER).await()
             check(saved.exists()) { "Offer no longer exists." }
-            saved.toOwnedOffer(userId).also {
+            saved.toOwnedBookingOffer(userId).also {
                 check(it.status == BookingOffer.STATUS_DECLINED) { "The offer changed. Please reload it." }
             }
         }
@@ -107,43 +106,6 @@ class FirebaseOfferRepository(
     private fun offerDocument(offerId: String): DocumentReference {
         require(offerId.isNotBlank() && '/' !in offerId) { "A single offer document ID is required." }
         return firestore.collection(COLLECTION).document(offerId)
-    }
-
-    /** Maps a saved offer only after confirming its owner and required fields. */
-    private fun DocumentSnapshot.toOwnedOffer(userId: String): BookingOffer {
-        val ownerId = requiredString("userId")
-        if (ownerId != userId) throw SecurityException("This offer belongs to another user.")
-        val status = when (val storedStatus = requiredString("status")) {
-            "pending" -> when (get("response")) {
-                null -> BookingOffer.STATUS_OPEN
-                "decline" -> BookingOffer.STATUS_DECLINED
-                else -> error("Offer has an invalid response.")
-            }
-            BookingOffer.STATUS_USED, BookingOffer.STATUS_DECLINED, BookingOffer.STATUS_EXPIRED -> storedStatus
-            else -> error("Offer has an invalid status.")
-        }
-        return BookingOffer(
-            id = id,
-            lotteryId = requiredString("lotteryId"),
-            userId = ownerId,
-            status = status,
-            expiresAt = optionalTimestamp("expiresAt"),
-            createdAt = optionalTimestamp("createdAt"),
-            updatedAt = optionalTimestamp("updatedAt"),
-        )
-    }
-
-    /** Reads required text without turning missing or blank fields into valid offer data. */
-    private fun DocumentSnapshot.requiredString(field: String): String =
-        checkNotNull((get(field) as? String)?.takeIf { it.isNotBlank() }) {
-            "Offer has a missing or invalid $field."
-        }
-
-    /** Accepts absent optional timestamps while rejecting fields stored with another type. */
-    private fun DocumentSnapshot.optionalTimestamp(field: String): Timestamp? {
-        val value = get(field)
-        check(value == null || value is Timestamp) { "Offer has an invalid $field." }
-        return value
     }
 
     /** Converts Firestore permission denials to the repository's access error; other failures propagate. */

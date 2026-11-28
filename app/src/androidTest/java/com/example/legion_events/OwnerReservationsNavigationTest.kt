@@ -93,19 +93,8 @@ class OwnerReservationsNavigationTest {
         // The card's status badge and the calendar legend for the requested night.
         compose.onAllNodesWithText("Requested").assertCountEquals(2)
         compose.onNodeWithText("0 nights booked").assertIsDisplayed()
-        compose.onNodeWithText("Reject").performScrollTo().assertIsDisplayed()
-    }
-
-    @Test
-    fun acceptingARequestedBookingConfirmsItAndBooksTheNight() {
-        bookings.stored = mutableListOf(entry("ava", today + day, today + 2 * day, Reservation.STATUS_REQUESTED))
-        openReservations()
-        compose.onNodeWithText("Accept").performScrollTo().performClick()
-        waitFor("Reservation accepted. The entrant was notified.")
-        compose.runOnIdle { assertEquals(listOf("ava"), bookings.accepted) }
-        compose.onNodeWithText("1 night booked").assertIsDisplayed()
-        compose.onNodeWithText("Confirmed").assertIsDisplayed()
         compose.onNodeWithText("Accept").assertDoesNotExist()
+        compose.onNodeWithText("Reject").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -225,7 +214,7 @@ class OwnerReservationsNavigationTest {
         Reservation(id, "lottery", "offer", campsite, "user-$id", "owner", Timestamp(start, 0), Timestamp(end, 0),
             2, 7600, true, status)
 
-    /** In-memory bookings; accepting or rejecting changes the stored status like the real transaction. */
+    /** In-memory bookings; rejecting changes the stored status like the real transaction. */
     private class FakeBookings : OwnerReservationRepository {
         /** Every stored booking. */
         var stored = mutableListOf<Reservation>()
@@ -233,8 +222,6 @@ class OwnerReservationsNavigationTest {
         val reads = mutableListOf<String>()
         /** Rejected reservation IDs with their reasons. */
         val rejected = mutableListOf<Pair<String, String?>>()
-        /** Accepted reservation IDs, in order. */
-        val accepted = mutableListOf<String>()
 
         override suspend fun getCampsiteReservations(campsiteId: String): List<Reservation> {
             reads += campsiteId
@@ -248,11 +235,5 @@ class OwnerReservationsNavigationTest {
             }.toMutableList()
         }
 
-        override suspend fun acceptReservation(reservationId: String) {
-            accepted += reservationId
-            stored = stored.map {
-                if (it.id == reservationId) it.copy(status = Reservation.STATUS_CONFIRMED) else it
-            }.toMutableList()
-        }
     }
 }

@@ -207,65 +207,6 @@ class OwnerReservationsControllerTest {
         assertTrue(controller.state.value.requestedNights.isEmpty())
     }
 
-    @Test fun acceptingARequestedBookingConfirmsItAndBooksItsNights() = runTest(dispatcher) {
-        val asked = entry("asked", at + day, at + 3 * day, Reservation.STATUS_REQUESTED, campsite = "creek")
-        repository.bookings["creek"] = listOf(asked)
-        val controller = loaded()
-        assertEquals(setOf("2027-07-05", "2027-07-06"), controller.state.value.requestedNights)
-        controller.viewBooking(asked)
-        controller.accept(asked)
-        assertEquals("asked", controller.state.value.accepting)
-        assertNull(controller.state.value.viewing)
-        // A second tap while saving, or a reject on the same booking, is ignored.
-        controller.accept(asked)
-        controller.requestReject(asked)
-        assertNull(controller.state.value.rejecting)
-        runCurrent()
-        assertEquals(listOf("asked"), repository.accepted)
-        assertNull(controller.state.value.accepting)
-        assertEquals("Reservation accepted. The entrant was notified.", controller.state.value.result)
-        assertEquals(Reservation.STATUS_CONFIRMED, controller.state.value.active.single().status)
-        assertEquals(setOf("2027-07-05", "2027-07-06"), controller.state.value.bookedNights)
-        assertTrue(controller.state.value.requestedNights.isEmpty())
-    }
-
-    @Test fun onlyUpcomingRequestedBookingsWithoutACancellationCanBeAccepted() = runTest(dispatcher) {
-        val controller = loaded()
-        listOf(
-            entry("confirmed", at + day, at + 2 * day),
-            entry("finished", at - 3 * day, at - day, Reservation.STATUS_REQUESTED),
-            entry("rejected", at + day, at + 2 * day, Reservation.STATUS_REJECTED),
-            entry("asked", at + day, at + 2 * day, Reservation.STATUS_REQUESTED).copy(cancellationRequested = true),
-        ).forEach(controller::accept)
-        runCurrent()
-        assertNull(controller.state.value.accepting)
-        assertTrue(repository.accepted.isEmpty())
-    }
-
-    @Test fun aFailedAcceptanceShowsWhyAndRefreshClearsIt() = runTest(dispatcher) {
-        val asked = entry("asked", at + day, at + 2 * day, Reservation.STATUS_REQUESTED, campsite = "creek")
-        repository.bookings["creek"] = listOf(asked)
-        val controller = loaded()
-        repository.accept = { throw IllegalStateException("You don't have permission to accept this reservation.") }
-        controller.accept(asked)
-        runCurrent()
-        assertEquals("You don't have permission to accept this reservation.", controller.state.value.actionError)
-        assertNull(controller.state.value.accepting)
-        repository.accept = { throw SecurityException("This reservation is not at your campsite.") }
-        controller.accept(asked)
-        runCurrent()
-        assertEquals("This reservation is not at your campsite.", controller.state.value.actionError)
-        repository.accept = { throw java.io.IOException("offline") }
-        controller.accept(asked)
-        runCurrent()
-        assertEquals("Could not accept the reservation. Check your connection and retry.",
-            controller.state.value.actionError)
-        assertEquals(listOf("asked"), controller.state.value.active.ids())
-        controller.refresh()
-        runCurrent()
-        assertNull(controller.state.value.actionError)
-    }
-
     @Test fun refreshClearsTheRejectionConfirmation() = runTest(dispatcher) {
         val stay = entry("stay", at + day, at + 2 * day, campsite = "creek")
         repository.bookings["creek"] = listOf(stay)
@@ -375,7 +316,7 @@ class OwnerReservationsControllerTest {
         Reservation(id, "lottery", "offer", campsite, "entrant-$id", "owner", Timestamp(start, 0), Timestamp(end, 0),
             2, 7600, true, status, updatedAt = updated?.let { Timestamp(it, 0) })
 
-    /** In-memory bookings; accepting or rejecting changes the stored status like the real transaction. */
+    /** In-memory bookings; rejecting changes the stored status like the real transaction. */
     private class FakeOwnerReservations : OwnerReservationRepository {
         /** Bookings by campsite ID. */
         val bookings = mutableMapOf<String, List<Reservation>>()
@@ -383,8 +324,6 @@ class OwnerReservationsControllerTest {
         val readCampsites = mutableListOf<String>()
         /** Rejected reservation IDs with their reasons. */
         val rejected = mutableListOf<Pair<String, String?>>()
-        /** Accepted reservation IDs, in order. */
-        val accepted = mutableListOf<String>()
         /** How many campsite reads happened. */
         val reads get() = readCampsites.size
         /** Replaces the read behaviour. */
@@ -401,21 +340,10 @@ class OwnerReservationsControllerTest {
             return load(campsiteId)
         }
 
-        /** Replaces the acceptance behaviour. */
-        var accept: suspend (String) -> Unit = { id ->
-            bookings.replaceAll { _, list ->
-                list.map { if (it.id == id) it.copy(status = Reservation.STATUS_CONFIRMED) else it }
-            }
-        }
-
         override suspend fun rejectReservation(reservationId: String, reason: String?) {
             reject(reservationId)
             rejected += reservationId to reason
         }
 
-        override suspend fun acceptReservation(reservationId: String) {
-            accept(reservationId)
-            accepted += reservationId
-        }
     }
 }

@@ -2,7 +2,7 @@
  * OwnerReservationsScreen.kt
  *
  * Purpose: S17 owner reservations: campsite dropdown, booked-night calendar, Active, Past, and
- *   Cancelled lists, booking details, acceptance, and rejection (US 02.06.01, 02.07.01 to 02.07.03, 02.08.01).
+ *   Cancelled lists, booking details, and rejection (US 02.06.01, 02.07.01 to 02.07.03, 02.08.01).
  * Role: View in MVC; renders OwnerReservationsState and forwards input to OwnerReservationsController.
  * Outstanding issues: None.
  */
@@ -77,7 +77,6 @@ import java.util.TimeZone
  * @property onMonth Moves the calendar by the given number of months.
  * @property onView Opens a booking's details.
  * @property onCloseView Closes the booking details.
- * @property onAccept Confirms a requested booking.
  * @property onReject Opens the rejection dialog for a booking.
  * @property onReason Updates the rejection reason.
  * @property onConfirmReject Rejects the booking.
@@ -90,7 +89,6 @@ data class OwnerReservationsActions(
     val onMonth: (Int) -> Unit = {},
     val onView: (Reservation) -> Unit = {},
     val onCloseView: () -> Unit = {},
-    val onAccept: (Reservation) -> Unit = {},
     val onReject: (Reservation) -> Unit = {},
     val onReason: (String) -> Unit = {},
     val onConfirmReject: () -> Unit = {},
@@ -132,20 +130,19 @@ fun OwnerReservationsScreen(state: OwnerReservationsState, actions: OwnerReserva
                     item { BookingCalendar(state, actions.onMonth) }
                     item { BookingTabs(state.selectedTab, actions.onTab) }
                     state.result?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
-                    state.actionError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
                     val entries = state.visibleEntries()
                     when {
                         state.loading -> item { Loading() }
                         entries.isEmpty() -> item { EmptyList(state.selectedTab) }
                         else -> items(entries, key = { it.id }) { entry ->
-                            BookingCard(entry, state.selectedTab == OwnerReservationTab.ACTIVE, state.accepting, actions)
+                            BookingCard(entry, state.selectedTab == OwnerReservationTab.ACTIVE, actions)
                         }
                     }
                 }
             }
         }
     }
-    state.viewing?.let { BookingDialog(it, state.selectedTab == OwnerReservationTab.ACTIVE, state.accepting, actions) }
+    state.viewing?.let { BookingDialog(it, state.selectedTab == OwnerReservationTab.ACTIVE, actions) }
     state.rejecting?.let { RejectDialog(it, actions) }
 }
 
@@ -321,12 +318,10 @@ private fun EmptyList(tab: OwnerReservationTab) {
  * One booking with its status, dates, and actions.
  * @param booking The booking.
  * @param canReject Whether to offer Reject (Active tab only: requested or confirmed, before checkout).
- *   Requested bookings without a pending cancellation also offer Accept.
- * @param accepting The ID of the booking being accepted, or null.
- * @param actions Opens the details, accepts, or opens the rejection dialog.
+ * @param actions Opens the details or opens the rejection dialog.
  */
 @Composable
-private fun BookingCard(booking: Reservation, canReject: Boolean, accepting: String?, actions: OwnerReservationsActions) {
+private fun BookingCard(booking: Reservation, canReject: Boolean, actions: OwnerReservationsActions) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -348,16 +343,10 @@ private fun BookingCard(booking: Reservation, canReject: Boolean, accepting: Str
                 TextButton(onClick = { actions.onView(booking) }) { Text("View booking") }
                 Spacer(Modifier.weight(1f))
                 if (canReject) {
-                    val saving = accepting == booking.id
-                    OutlinedButton(onClick = { actions.onReject(booking) }, enabled = !saving,
+                    OutlinedButton(onClick = { actions.onReject(booking) },
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
                         Text("Reject")
-                    }
-                    if (canAccept(booking)) {
-                        Button(onClick = { actions.onAccept(booking) }, enabled = accepting == null) {
-                            Text(if (saving) "Accepting…" else "Accept")
-                        }
                     }
                 }
             }
@@ -386,12 +375,11 @@ private fun StatusBadge(status: String) {
  * Booking details: reservation number, dates, guests, total, and rules acceptance. Entrant profiles
  * are private under the Firestore rules, so no name is shown.
  * @param booking The booking.
- * @param canReject Whether to offer Reject, and Accept for requested bookings.
- * @param accepting The ID of the booking being accepted, or null.
- * @param actions Closes the dialog, accepts, or opens the rejection dialog.
+ * @param canReject Whether to offer Reject.
+ * @param actions Closes the dialog or opens the rejection dialog.
  */
 @Composable
-private fun BookingDialog(booking: Reservation, canReject: Boolean, accepting: String?, actions: OwnerReservationsActions) {
+private fun BookingDialog(booking: Reservation, canReject: Boolean, actions: OwnerReservationsActions) {
     AlertDialog(
         onDismissRequest = actions.onCloseView,
         title = { Text("Booking details") },
@@ -409,9 +397,6 @@ private fun BookingDialog(booking: Reservation, canReject: Boolean, accepting: S
         },
         confirmButton = {
             Row {
-                if (canReject && canAccept(booking)) {
-                    TextButton(onClick = { actions.onAccept(booking) }, enabled = accepting == null) { Text("Accept") }
-                }
                 TextButton(onClick = actions.onCloseView) { Text("Close") }
             }
         },
@@ -457,14 +442,6 @@ private fun RejectDialog(draft: RejectionDraft, actions: OwnerReservationsAction
         },
     )
 }
-
-/**
- * Whether to offer Accept; the controller rechecks checkout against its clock.
- * @param booking A booking in the Active tab.
- * @return True for requested bookings with no cancellation pending.
- */
-private fun canAccept(booking: Reservation): Boolean =
-    booking.status == Reservation.STATUS_REQUESTED && !booking.cancellationRequested
 
 /**
  * Names a tab.

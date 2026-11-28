@@ -1,0 +1,28 @@
+// PR 1 implemented booking data contracts. Worker and screens are later PRs.
+// Render: dot -Tsvg booking_contracts.dot -o booking_contracts.svg
+digraph BookingContracts {
+  graph [rankdir=BT, fontname="Arial", nodesep=0.5, ranksep=0.7, pad=0.3,
+    label="Winner booking contracts (PR 1)", labelloc=t, fontsize=18];
+  node [shape=record, fontname="Arial", fontsize=11];
+  edge [fontname="Arial", fontsize=10];
+  BookingRepository [label="{«interface» BookingRepository|+ getBookingOptions(offerId): BookingOptions\l+ acceptOffer(request): Reservation\l+ getRequestsForOffer(offerId): List\<Reservation\>\l}"];
+  FirebaseBookingRepository [label="{FirebaseBookingRepository|- auth: FirebaseAuth\l- firestore: FirebaseFirestore\l- now: () to Timestamp\l|server reads; atomic request + offer claim\l}"];
+  BookingOptions [label="{BookingOptions|+ offer: BookingOffer\l+ lottery: Lottery\l+ campsites: List\<BookingCampsite\>\l|+ canAccept(at): Boolean\l}"];
+  BookingCampsite [label="{BookingCampsite|+ campsite: Campsite\l+ bookedNightKeys: Set\<String\>\l|+ availableNightKeys: Set\<String\>\l}"];
+  BookingRequest [label="{BookingRequest|+ id, offerId, campsiteId: String\l+ startDate, endDate: Timestamp\l+ guestCount: Int\l+ totalPrice: Long (CAD cents)\l+ terms: BookingTerms\l+ rulesAccepted: Boolean\l|+ validate()\l+ validateFor(campsite)\l}"];
+  BookingTerms [label="{BookingTerms|+ rules: List\<String\>\l+ cancellationPolicy: String\l}"];
+  BookedNight [label="{BookedNight|+ campsiteId, reservationId, date: String\l|+ id: campsiteId_date\l}"];
+  BookingOffer [label="{BookingOffer|+ id, lotteryId, userId, status: String\l+ campsiteIds: List\<String\>\l+ reservationId: String?\l+ expiresAt, createdAt, updatedAt: Timestamp?\l}"];
+  Reservation [label="{Reservation|+ id, offerId, campsiteId, userId, ownerId: String\l+ status: requested / confirmed / rejected / cancelled\l+ startDate, endDate: Timestamp\l+ guestCount: Int\l+ totalPrice: Long\l+ rulesAccepted: Boolean\l}"];
+  Campsite [label="{Campsite|+ availableNights: List\<String\>\l+ rules, cancellationPolicy\l+ maxGuests, pricePerNight\l}"];
+  FirebaseBookingRepository -> BookingRepository [arrowhead=onormal];
+  BookingRepository -> BookingRequest [arrowhead=vee, label="accepts"];
+  BookingRepository -> BookingOptions [arrowhead=vee, label="returns"];
+  BookingRepository -> Reservation [arrowhead=vee, label="creates requested / recovers"];
+  BookingOptions -> BookingOffer [arrowhead=none, label="1"];
+  BookingOptions -> BookingCampsite [dir=both, arrowtail=odiamond, arrowhead=none, label="0..8"];
+  BookingCampsite -> Campsite [arrowhead=none, label="1"];
+  BookingRequest -> BookingTerms [dir=both, arrowtail=diamond, arrowhead=none, label="1"];
+  BookingOffer -> Reservation [arrowhead=none, label="pending/used link: 0..1"];
+  BookedNight -> Reservation [arrowhead=none, label="worker-only lock: 1"];
+}
