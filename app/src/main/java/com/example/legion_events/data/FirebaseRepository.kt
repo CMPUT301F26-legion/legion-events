@@ -147,7 +147,7 @@ class FirebaseRepository(
                 }.await()
             } catch (error: FirebaseFirestoreException) {
                 if (error.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw error
-                // The deployed policy allows creating users, but denies reading a missing
+                // Older deployed policies allow creating users, but deny reading a missing
                 // profile. A create-only precondition makes that first launch safe too.
                 val projectId = firestore.app.options.projectId
                     ?: throw UserInitializationException("Firebase project configuration is missing.")
