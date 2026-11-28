@@ -64,6 +64,31 @@ class CampsiteListControllerTest {
         assertFalse(controller.state.value.loading)
     }
 
+    @Test fun dateAndGuestFiltersNarrowTheVisibleListingsTogether() {
+        val nights = listOf(sites[0].copy(availableNights = listOf("2026-12-04")), sites[1], sites[2].copy(availableNights = listOf("2026-12-04")))
+        assertEquals(listOf("pine", "meadow"), CampsiteListState(nights, availableAt = "2026-12-04").visible.map { it.id })
+        assertEquals(listOf("pine"), CampsiteListState(nights, guestsMoreThan = 4).visible.map { it.id })
+        assertEquals(listOf("spruce"), CampsiteListState(nights, guestsLessThan = 4).visible.map { it.id })
+        assertEquals(listOf("meadow"), CampsiteListState(nights, availableAt = "2026-12-04", guestsMoreThan = 3, guestsLessThan = 5).visible.map { it.id })
+        assertEquals(listOf("meadow"), CampsiteListState(nights, "banff", availableAt = "2026-12-04", guestsLessThan = 6).visible.map { it.id })
+    }
+
+    @Test fun dateAndGuestFiltersAreSavedRestoredAndValidated() = runTest(dispatcher) {
+        val repository = object : CampsiteRepository { override fun observeCampsites() = flowOf(sites) }
+        val saved = SavedStateHandle(mapOf("availableAt" to "2026-12-04", "guestsMoreThan" to 2, "guestsLessThan" to -1))
+        val controller = controller(repository, saved)
+        runCurrent()
+        assertEquals("2026-12-04", controller.state.value.availableAt)
+        assertEquals(2, controller.state.value.guestsMoreThan)
+        assertNull(controller.state.value.guestsLessThan)
+        controller.setAvailableAt(null); controller.setGuestsMoreThan(null); controller.setGuestsLessThan(5)
+        assertNull(saved.get<String>("availableAt")); assertNull(saved.get<Int>("guestsMoreThan"))
+        assertEquals(5, saved.get<Int>("guestsLessThan"))
+        assertThrows(IllegalArgumentException::class.java) { controller.setAvailableAt("2026-13-01") }
+        assertThrows(IllegalArgumentException::class.java) { controller.setGuestsMoreThan(-1) }
+        assertEquals(5, controller.state.value.guestsLessThan)
+    }
+
     @Test fun guestComparisonsAreStrictAgainstMaxGuests() {
         val meadow = sites.single { it.id == "meadow" }   // maxGuests = 4
         assertTrue(campsiteGuestMoreThan(meadow, 3))

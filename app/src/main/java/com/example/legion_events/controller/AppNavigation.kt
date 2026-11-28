@@ -423,7 +423,9 @@ fun AppNavigation(
                     })
                     val listings by search.state.collectAsStateWithLifecycle()
                     HomeScreen(listings, search::search, search::filter, search::retry,
-                        onScanQr = { navController.navigate(QR_SCAN_ROUTE) { launchSingleTop = true } }) { campsiteId ->
+                        onScanQr = { navController.navigate(QR_SCAN_ROUTE) { launchSingleTop = true } },
+                        onAvailableAt = search::setAvailableAt, onGuestsMoreThan = search::setGuestsMoreThan,
+                        onGuestsLessThan = search::setGuestsLessThan) { campsiteId ->
                         navController.navigate("campsite/${Uri.encode(campsiteId)}") { launchSingleTop = true }
                     }
                 } else OnboardingScreen(state, controller::retry)

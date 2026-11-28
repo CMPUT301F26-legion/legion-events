@@ -55,6 +55,21 @@ class CampsiteSearchTest {
         compose.onNodeWithText("Pine Ridge").assertIsDisplayed()
     }
 
+    @Test fun guestMoreAndLessThanFieldsFilterByCapacity() {
+        openSearch()
+        compose.onNodeWithText("Available at").assertIsDisplayed()
+        compose.onNodeWithText("Guests more than").performTextInput("3")
+        compose.onNodeWithText("Pine Ridge").assertIsDisplayed()
+        compose.onNodeWithText("Spruce Creek").assertDoesNotExist()
+        compose.onNodeWithText("Guests more than").performTextClearance()
+        compose.onNodeWithText("Guests less than").performTextInput("4x")
+        compose.onNodeWithText("Spruce Creek").assertIsDisplayed()
+        compose.onNodeWithText("Pine Ridge").assertDoesNotExist()
+        compose.onNodeWithText("Guests less than").performTextClearance()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Pine Ridge"))
+        compose.onNodeWithText("Pine Ridge").assertIsDisplayed()
+    }
+
     private fun openSearch() {
         lateinit var onboarding: OnboardingController
         compose.runOnUiThread {

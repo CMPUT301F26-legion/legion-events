@@ -3,7 +3,7 @@
  *
  * Purpose: Searches and filters active campsites for S02/S03 (US 01.01.01, 01.01.03, 01.01.04).
  * Role: Controller in MVC; HomeScreen renders its state and CampsiteRepository streams the listings.
- * Outstanding issues: Location and date filters (US 01.01.02) are a later part.
+ * Outstanding issues: The location filter (US 01.01.02) is a later part; the date filter checks offered nights, not bookings.
  */
 package com.example.legion_events.controller
 
@@ -29,6 +29,9 @@ enum class CampsiteFilter { ALL, GROUPS, BUDGET }
  * @property campsites Active listings returned by Firestore.
  * @property query Search words entered by the user.
  * @property filter Selected guest-capacity or price filter.
+ * @property availableAt Only show campsites offering this `YYYY-MM-DD` night, or null for any date.
+ * @property guestsMoreThan Only show campsites whose capacity is strictly greater than this, or null.
+ * @property guestsLessThan Only show campsites whose capacity is strictly less than this, or null.
  * @property loading Whether the initial result is pending.
  * @property error Request failure message, or null.
  */
@@ -36,10 +39,13 @@ data class CampsiteListState(
     val campsites: List<Campsite> = emptyList(),
     val query: String = "",
     val filter: CampsiteFilter = CampsiteFilter.ALL,
+    val availableAt: String? = null,
+    val guestsMoreThan: Int? = null,
+    val guestsLessThan: Int? = null,
     val loading: Boolean = true,
     val error: String? = null,
 ) {
-    /** Listings matching every search word and the selected filter. Prices are compared in cents. */
+    /** Listings matching every search word, the selected filter, and each set date or guest filter. Prices are in cents. */
     val visible: List<Campsite> get() {
         val words = normalized(query).split(Regex("\\s+")).filter(String::isNotBlank)
         return campsites.filter { site ->
@@ -49,10 +55,19 @@ data class CampsiteListState(
                 CampsiteFilter.ALL -> true
                 CampsiteFilter.GROUPS -> site.maxGuests >= 4
                 CampsiteFilter.BUDGET -> site.pricePerNight <= 10_000
-            }
+            } && (availableAt == null || campsiteAvailableAt(site, availableAt))
+                && (guestsMoreThan == null || campsiteGuestMoreThan(site, guestsMoreThan))
+                && (guestsLessThan == null || campsiteGuestLessThan(site, guestsLessThan))
         }
     }
 }
+
+/**
+ * Returns whether a campsite's owner offers one night. Nights already held by bookings are not checked.
+ * @param campsite The listing; its [Campsite.availableNights] are checked.
+ * @param date A `YYYY-MM-DD` night.
+ */
+fun campsiteAvailableAt(campsite: Campsite, date: String): Boolean = date in campsite.availableNights
 
 /**
  * Returns whether a campsite's capacity is strictly greater than a guest count.
@@ -88,6 +103,9 @@ class CampsiteListController(
         query = savedState["query"] ?: "",
         filter = runCatching { CampsiteFilter.valueOf(savedState["filter"] ?: "ALL") }
             .getOrDefault(CampsiteFilter.ALL),
+        availableAt = savedState.get<String>("availableAt")?.takeIf(::isNightKey),
+        guestsMoreThan = savedState.get<Int>("guestsMoreThan")?.takeIf { it >= 0 },
+        guestsLessThan = savedState.get<Int>("guestsLessThan")?.takeIf { it >= 0 },
     ))
     /** Read-only state for the screen. */
     val state = mutableState.asStateFlow()
@@ -118,7 +136,38 @@ class CampsiteListController(
      */
     fun filterByDate(date: String, campsiteId: String): Boolean {
         require(isNightKey(date)) { "Use a YYYY-MM-DD date." }
-        return state.value.campsites.find { it.id == campsiteId }?.availableNights?.contains(date) == true
+        return state.value.campsites.find { it.id == campsiteId }?.let { campsiteAvailableAt(it, date) } == true
+    }
+
+    /**
+     * Shows only campsites offering one night, and saves the choice.
+     * @param date A `YYYY-MM-DD` night, or null to show any date.
+     * @throws IllegalArgumentException If [date] is not a real `YYYY-MM-DD` date.
+     */
+    fun setAvailableAt(date: String?) {
+        require(date == null || isNightKey(date)) { "Use a YYYY-MM-DD date." }
+        savedState["availableAt"] = date
+        mutableState.value = state.value.copy(availableAt = date)
+    }
+
+    /**
+     * Shows only campsites whose capacity is strictly greater than a guest count, and saves it.
+     * @param guests A count of zero or more, or null to turn the filter off.
+     */
+    fun setGuestsMoreThan(guests: Int?) {
+        require(guests == null || guests >= 0) { "Use zero or more guests." }
+        savedState["guestsMoreThan"] = guests
+        mutableState.value = state.value.copy(guestsMoreThan = guests)
+    }
+
+    /**
+     * Shows only campsites whose capacity is strictly less than a guest count, and saves it.
+     * @param guests A count of zero or more, or null to turn the filter off.
+     */
+    fun setGuestsLessThan(guests: Int?) {
+        require(guests == null || guests >= 0) { "Use zero or more guests." }
+        savedState["guestsLessThan"] = guests
+        mutableState.value = state.value.copy(guestsLessThan = guests)
     }
 
     /** Reloads listings after a failure, keeping only one active listener. */
