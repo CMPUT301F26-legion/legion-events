@@ -7,6 +7,7 @@
  */
 package com.example.legion_events.view
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -20,11 +21,12 @@ import com.example.legion_events.controller.MessagesState
 
 /** Displays only the participant's private conversations; announcements stay in Inbox/Notices. */
 @Composable
-fun MessagesScreen(state: MessagesState, onBack: () -> Unit, onRetry: () -> Unit, onConversation: (String) -> Unit) {
+fun MessagesScreen(state: MessagesState, onBack: () -> Unit, onRetry: () -> Unit, onConversation: (String) -> Unit,
+    onStartChat: (String) -> Unit = {}) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Row { BackArrow(onBack); Text("Messages", style = MaterialTheme.typography.headlineSmall) } }
-            relatedUsers(state, onRetry, onConversation)
+            relatedUsers(state, onRetry, onConversation, onStartChat)
             if (state.relatedUsers.isNotEmpty()) item { Text("Conversations", style = MaterialTheme.typography.titleMedium) }
             when {
                 state.loading -> item { CircularProgressIndicator() }
@@ -48,9 +50,10 @@ fun MessagesScreen(state: MessagesState, onBack: () -> Unit, onRetry: () -> Unit
 
 /**
  * Lists related users: everyone messaged before, then unmessaged entrants of the viewer's campsites.
- * A messaged person opens their most recent thread; owners cannot start a new thread yet.
+ * A messaged person opens their most recent thread; an unmessaged one starts a peer-to-peer chat.
  */
-private fun LazyListScope.relatedUsers(state: MessagesState, onRetry: () -> Unit, onConversation: (String) -> Unit) {
+private fun LazyListScope.relatedUsers(state: MessagesState, onRetry: () -> Unit, onConversation: (String) -> Unit,
+    onStartChat: (String) -> Unit) {
     if (state.relatedError != null) item {
         Text(state.relatedError, color = MaterialTheme.colorScheme.error)
         TextButton(onClick = onRetry) { Text("Retry") }
@@ -58,16 +61,25 @@ private fun LazyListScope.relatedUsers(state: MessagesState, onRetry: () -> Unit
     val people = state.relatedUsers
     if (people.isEmpty()) return
     item { Text("People", style = MaterialTheme.typography.titleMedium) }
+    state.startError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
     items(people, key = { "user-${it.userId}" }) { person ->
         val open = person.conversationId?.let { id -> { onConversation(id) } }
+        val starting = state.startingUserId == person.userId
+        val tap = open ?: { onStartChat(person.userId) }
         ListItem(
             headlineContent = { Text("${person.role} …${person.userId.takeLast(6)}") },
             supportingContent = {
                 Text(if (open != null) person.campsiteNames.joinToString().ifEmpty { "Messaged" }
                     else "Booked your campsite · not messaged yet", maxLines = 1, overflow = TextOverflow.Ellipsis)
             },
-            trailingContent = { if (open != null) TextButton(onClick = open) { Text("Open") } },
-            modifier = Modifier.fillMaxWidth(),
+            trailingContent = {
+                when {
+                    open != null -> TextButton(onClick = open) { Text("Open") }
+                    starting -> CircularProgressIndicator(Modifier.size(24.dp))
+                    else -> TextButton(onClick = tap, enabled = state.startingUserId == null) { Text("Message") }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().clickable(enabled = state.startingUserId == null, onClick = tap),
         )
     }
 }

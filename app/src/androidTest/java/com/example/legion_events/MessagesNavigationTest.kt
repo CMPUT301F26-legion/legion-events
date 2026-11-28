@@ -82,6 +82,19 @@ class MessagesNavigationTest {
         compose.onNodeWithText("Hi owner").assertIsDisplayed()
     }
 
+    @Test fun tappingAnUnmessagedEntrantStartsAChatWithTheOpeningMessage() {
+        open(asOwner = true)
+        compose.runOnIdle { navigation.navigate(MESSAGES_ROUTE) }
+        waitFor("Entrant …bob")
+        compose.onNodeWithText("Entrant …bob").performClick()
+        waitFor(PEER_START_MESSAGE)
+        compose.onNodeWithText("Send").assertExists()
+        compose.runOnIdle {
+            assertEquals(listOf("bob"), repository.peerStarts)
+            assertEquals(PEER_START_MESSAGE, repository.messages.value.single().text)
+        }
+    }
+
     @Test fun failedSendsKeepTheirIdAcrossRecreationAndRetryDoesNotDuplicateTheMessage() {
         open()
         compose.runOnIdle { navigation.navigate(chatRoute("thread")) }
@@ -197,7 +210,8 @@ class MessagesNavigationTest {
             messages.value.lastOrNull()?.text ?: "", null, null), "Pine Ridge", uid)
         override fun observeConversations() = messages.map { listOf(summary()) }
         override suspend fun startConversation(campsiteId: String): String { starts++; assertEquals(site.id, campsiteId); return "thread" }
-        override suspend fun startPeerToPeerConversation(otherUserId: String): String = error("Unexpected peer start")
+        val peerStarts = mutableListOf<String>()
+        override suspend fun startPeerToPeerConversation(otherUserId: String): String { peerStarts += otherUserId; return "thread" }
         override suspend fun getConversation(conversationId: String) = summary().takeIf { available }
         override suspend fun getPastContacts(userId: String) = pastContacts(listOf(summary().conversation), userId)
         override fun observeMessages(conversationId: String) = messages.onStart { listeners++ }.onCompletion { listeners-- }

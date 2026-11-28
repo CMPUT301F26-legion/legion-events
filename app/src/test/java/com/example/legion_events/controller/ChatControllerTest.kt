@@ -116,6 +116,36 @@ class ChatControllerTest {
         controller.pause()
     }
 
+    @Test fun startingAPeerChatPostsTheOpeningMessageOnceThenOpensTheThread() = runTest(dispatcher) {
+        val controller = MessagesController(repository) { listOf("bob") }
+        val opened = mutableListOf<String>()
+        controller.startPeerChat("bob") { opened += it }; runCurrent()
+        assertEquals(listOf("bob"), repository.peerStarts)
+        assertEquals(listOf(peerStartMessageId("thread", "alice") to PEER_START_MESSAGE), repository.sent)
+        assertEquals(listOf("thread"), opened)
+        assertNull(controller.state.value.startingUserId)
+        controller.startPeerChat("bob") { opened += it }; runCurrent()
+        assertEquals(1, repository.sends)
+        assertEquals(listOf("thread", "thread"), opened)
+    }
+
+    @Test fun aFailedOpeningMessageIsRetriedWithTheSameIdAndAFailedStartShowsAnError() = runTest(dispatcher) {
+        val controller = MessagesController(repository)
+        val opened = mutableListOf<String>()
+        repository.failSend = true
+        controller.startPeerChat("bob") { opened += it }; runCurrent()
+        assertEquals("Could not start a conversation. Try again.", controller.state.value.startError)
+        repository.failSend = false
+        controller.startPeerChat("bob") { opened += it }; runCurrent()
+        assertEquals(1, repository.ids.distinct().size)
+        assertEquals(listOf("thread"), opened)
+        assertNull(controller.state.value.startError)
+        repository.failPeerStart = true
+        controller.startPeerChat("carol") { opened += it }; runCurrent()
+        assertNotNull(controller.state.value.startError)
+        assertEquals(listOf("thread"), opened)
+    }
+
     @Test fun peerThreadsListTheirUserAsAContact() = runTest(dispatcher) {
         repository.preview = "Hello"; repository.campsite = null
         val controller = MessagesController(repository) { listOf("owner") }
@@ -151,7 +181,13 @@ class ChatControllerTest {
         var available = true; var failSend = false
         val ids = mutableListOf<String>()
         override suspend fun startConversation(campsiteId: String): String { starts++; return "thread" }
-        override suspend fun startPeerToPeerConversation(otherUserId: String): String = error("Unexpected peer start")
+        val peerStarts = mutableListOf<String>(); val sent = mutableListOf<Pair<String, String>>()
+        var failPeerStart = false
+        override suspend fun startPeerToPeerConversation(otherUserId: String): String {
+            peerStarts += otherUserId
+            if (failPeerStart) error("Denied")
+            return "thread"
+        }
         override suspend fun getConversation(conversationId: String) = summary.takeIf { available }
         override suspend fun getPastContacts(userId: String) = emptyList<String>()
         override fun observeMessages(conversationId: String) = messages.onStart { listeners++ }.onCompletion { listeners-- }
@@ -160,8 +196,9 @@ class ChatControllerTest {
             try { emit(listOf(summary)); awaitCancellation() } finally { listListeners-- }
         }
         override suspend fun send(conversationId: String, messageId: String, text: String) {
-            sends++; ids += messageId
+            sends++; ids += messageId; sent += messageId to text
             if (failSend) error("Response lost")
+            preview = text
         }
     }
 }

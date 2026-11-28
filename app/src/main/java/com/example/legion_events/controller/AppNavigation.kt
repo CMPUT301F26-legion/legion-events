@@ -843,9 +843,9 @@ fun AppNavigation(
                     })
                     val threads by list.state.collectAsStateWithLifecycle()
                     LifecycleResumeEffect(list) { list.resume(); onPauseOrDispose { list.pause() } }
-                    MessagesScreen(threads, { navController.popBackStack() }, list::resume) { id ->
-                        navController.navigate(chatRoute(id)) { launchSingleTop = true }
-                    }
+                    val openChat = { id: String -> navController.navigate(chatRoute(id)) { launchSingleTop = true } }
+                    MessagesScreen(threads, { navController.popBackStack() }, list::resume, onConversation = openChat,
+                        onStartChat = { user -> list.startPeerChat(user, openChat) })
                 }
             }
             composable(CHAT_PATTERN, arguments = listOf(navArgument("conversationId") { type = NavType.StringType })) { entry ->

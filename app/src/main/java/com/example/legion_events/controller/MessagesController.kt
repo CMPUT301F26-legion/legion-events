@@ -34,9 +34,12 @@ data class RelatedUserRow(val userId: String, val role: String, val campsiteName
  * @property error Recoverable listener failure, or null.
  * @property relatedUserIds Past contacts, then unmessaged entrants of the viewer's campsites.
  * @property relatedError Recoverable failure loading related users, or null; threads still show.
+ * @property startingUserId User whose peer-to-peer chat is being opened, or null.
+ * @property startError Failure opening a peer-to-peer chat, or null; tapping the person again retries.
  */
 data class MessagesState(val conversations: List<ConversationSummary> = emptyList(), val loading: Boolean = true, val error: String? = null,
-    val relatedUserIds: List<String> = emptyList(), val relatedError: String? = null) {
+    val relatedUserIds: List<String> = emptyList(), val relatedError: String? = null,
+    val startingUserId: String? = null, val startError: String? = null) {
     /** Joins related users with live threads; newest thread first because conversations are sorted that way. */
     val relatedUsers: List<RelatedUserRow> get() = relatedUserIds.map { uid ->
         val threads = conversations.filter { it.conversation.lastMessage.isNotEmpty() && uid in listOf(it.conversation.entrantId, it.conversation.ownerId) }
@@ -73,6 +76,33 @@ class MessagesController(private val repository: MessageRepository,
             catch (_: Exception) { mutableState.value = state.value.copy(relatedError = "Could not load people. Retry.") }
         }
     }
+    /**
+     * Opens a peer-to-peer chat with a person who has never messaged, posting [PEER_START_MESSAGE] into an empty thread.
+     * Safe to repeat: the thread and opening message have stable IDs, so a retry never duplicates either.
+     * @param userId The other person's UID.
+     * @param onStarted Called with the conversation ID once it is ready to open.
+     */
+    fun startPeerChat(userId: String, onStarted: (String) -> Unit) {
+        if (state.value.startingUserId != null) return
+        mutableState.value = state.value.copy(startingUserId = userId, startError = null)
+        viewModelScope.launch {
+            try {
+                val id = repository.startPeerToPeerConversation(userId)
+                val thread = checkNotNull(repository.getConversation(id)) { "Conversation unavailable." }
+                if (thread.conversation.lastMessage.isEmpty()) repository.send(id, peerStartMessageId(id, thread.myId), PEER_START_MESSAGE)
+                mutableState.value = state.value.copy(startingUserId = null)
+                onStarted(id)
+            } catch (cancelled: CancellationException) { mutableState.value = state.value.copy(startingUserId = null); throw cancelled }
+            catch (_: Exception) { mutableState.value = state.value.copy(startingUserId = null, startError = "Could not start a conversation. Try again.") }
+        }
+    }
+
     /** Removes membership listeners when the screen is hidden. */
     fun pause() { subscription?.cancel(); related?.cancel() }
 }
+
+/** Text posted when a peer-to-peer chat is opened from the Messages screen. */
+const val PEER_START_MESSAGE = "Private messaging started"
+
+/** Message ID for [PEER_START_MESSAGE], fixed per thread and sender so retries reuse the same message. */
+internal fun peerStartMessageId(conversationId: String, senderId: String) = "start-$conversationId-$senderId"
