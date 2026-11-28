@@ -382,8 +382,9 @@ S19 is for profiles with `role == "admin"`. The deployed rules let an admin read
 
 These are the only fields the admin rules allow besides the optional `moderationReason`, which
 the app does not write. Search shows only `active == true` campsites, and a disabled profile is
-blocked at the next app launch. An owner's S13 edits never write `active`, so a removed listing
-stays removed. Admin accounts are not removed from S19; roles are changed only in the console.
+blocked at the next app launch. A disabled user can still read their own `users/{uid}` document,
+so onboarding loads `disabled: true` and shows the blocked screen; every other read and write
+stays denied. An owner's S13 edits never write `active`, so a removed listing stays removed. Admin accounts are not removed from S19; roles are changed only in the console.
 
 The S19 Images tab (US 03.06.01) reads every `photos/{id}`, newest `createdAt` first, and labels
 each one with the campsite named by `targetId`. Deleting a cover photo leaves the campsite's

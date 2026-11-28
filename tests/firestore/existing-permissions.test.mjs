@@ -209,6 +209,14 @@ test('admin moderation and disabled-account restrictions remain enforced', async
   await assertFails(updateDoc(doc(client('entrant'), 'users/owner'), { disabled: true, updatedAt: serverTimestamp() }));
 });
 
+test('a disabled account can read only its own profile so the app can show the disabled screen', async () => {
+  await seed('users/removed', { ...profile(), disabled: true });
+  await assertSucceeds(getDoc(doc(client('removed'), 'users/removed')));
+  await assertFails(getDoc(doc(client('removed'), 'users/owner')));
+  await assertFails(updateDoc(doc(client('removed'), 'users/removed'), { name: 'Changed', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(client('removed'), 'users/removed'), { disabled: false, updatedAt: serverTimestamp() }));
+});
+
 test('unauthenticated clients and unknown collections remain denied', async () => {
   const db = environment.unauthenticatedContext().firestore();
   await assertFails(getDoc(doc(db, 'campsites/camp')));

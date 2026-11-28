@@ -118,7 +118,8 @@ service cloud.firestore {
         && d.notificationsEnabled is bool && (d.fcmToken == null || text(d.fcmToken, 4096));
     }
     match /users/{uid} {
-      allow read: if mine(uid) || admin();
+      // Disabled accounts may still read their own profile so the app can show the disabled screen.
+      allow read: if (signedIn() && request.auth.uid == uid) || admin();
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasAll(['name','email','phone','role','photoId','notificationsEnabled','fcmToken','disabled','createdAt','updatedAt'])
         && request.resource.data.keys().hasOnly(['name','email','phone','role','photoId','notificationsEnabled','fcmToken','disabled','createdAt','updatedAt'])
