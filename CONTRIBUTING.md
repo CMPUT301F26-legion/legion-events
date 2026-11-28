@@ -136,10 +136,13 @@ not treat winning offers as the user's full entry history. Offer views use the
 shared theme, outlined cards, and Back arrow, with decline/reload actions above
 the bottom navigation. Keep notification navigation compatible with direct offer links.
 
-PR 1 adds `BookingRepository` / `FirebaseBookingRepository` for current choices,
-explicit acceptance, and request recovery. `BookingRequest`, `BookingOptions`, and
-`BookedNight` define dates, price, policy, and lock contracts. The screens do not yet
-call the submission API; worker processing and UI integration follow in PRs 2–4.
+BookingRepository / FirebaseBookingRepository provide current choices, explicit
+acceptance, and request recovery. BookingRequest, BookingOptions, and BookedNight
+define dates, price, policy, and lock contracts. BookingFlowController uses these
+contracts for selection, policy agreement, fresh review, and explicit submission;
+see [booking UI](doc/booking-ui.md). Submission defaults off until the compatible
+worker is operational; build with `-PbookingRequestsEnabled=true` only after
+verifying that setup.
 See [booking flow](doc/booking-flow.md) for lifecycle, rollout, and checks.
 
 ## Reservations

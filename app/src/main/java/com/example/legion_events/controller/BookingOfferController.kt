@@ -3,7 +3,7 @@
  *
  * Purpose: Load an owned offer and confirm declines for US 01.04.03.
  * Role: Controller in MVC; supplies detail state through OfferRepository.
- * Outstanding issues: Offer acceptance and reservation creation are separate work.
+ * Outstanding issues: None. BookingFlowController owns selection and explicit acceptance.
  */
 package com.example.legion_events.controller
 
@@ -40,6 +40,10 @@ data class BookingOfferState(
     /** Whether the loaded offer can currently begin a decline interaction. */
     val canDecline: Boolean
         get() = !loading && !declining && !expired && offer?.status == BookingOffer.STATUS_OPEN
+
+    /** Complete open offers can enter selection; the booking screen rechecks the full booking window. */
+    val canReserve: Boolean
+        get() = canDecline && offer?.expiresAt != null && offer.campsiteIds.isNotEmpty()
 }
 
 /**

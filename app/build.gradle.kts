@@ -39,6 +39,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Enable only after the compatible rules and booking worker have been verified.
+        buildConfigField("boolean", "BOOKING_REQUESTS_ENABLED",
+            providers.gradleProperty("bookingRequestsEnabled").orElse("false").map { it.toBooleanStrict().toString() }.get())
     }
 
     buildTypes {
@@ -54,6 +57,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

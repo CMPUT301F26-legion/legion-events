@@ -1,0 +1,25 @@
+// Render: dot -Tsvg doc/uml/booking_ui.dot -o doc/uml/booking_ui.svg
+digraph BookingUI {
+  graph [rankdir=TB, fontname="Arial", nodesep=0.5, ranksep=0.7, pad=0.3,
+    label="Winner selection and review (PR 3)", labelloc=t, fontsize=18];
+  node [shape=record, fontname="Arial", fontsize=11];
+  edge [fontname="Arial", fontsize=10];
+  Navigation [label="{AppNavigation|booking_flow / offerId\laccount-scoped ViewModel\lsubmission build flag\l}"];
+  Offer [label="{BookingOfferScreen|Reserve a campsite\lcomplete open offers only\l}"];
+  Screen [label="{BookingFlowScreen|named campsite + dates + guests\lrules / cancellation agreement\limmutable review dialog\lrequested status + explicit retry\l}"];
+  Controller [label="{BookingFlowController|+ reload()\l+ selectCampsite / CheckIn / CheckOut / Guests\l+ acceptRules / review / dismissReview\l+ confirm / retrySubmission / chooseAgain\l}"];
+  State [label="{BookingFlowState|options / selection / rulesAccepted\lreview / pendingAttempt / result\lloading / reviewing / submitting\lsubmissionEnabled\l}"];
+  Draft [label="{BookingSelection|campsiteId / checkIn / checkOut / guests\l|problem(choice, at)\ltotal(campsite)\l}"];
+  Saved [label="{SavedStateHandle|account + offer scope\ldraft / accepted terms + price\limmutable request ID + details\l}"];
+  Repository [label="{«interface» BookingRepository|getBookingOptions(offerId)\lgetRequestsForOffer(offerId)\lacceptOffer(request)\l}"];
+  Navigation -> Offer;
+  Offer -> Navigation [label="offer ID"];
+  Navigation -> Screen;
+  Navigation -> Controller [label="creates"];
+  Screen -> Controller [label="explicit actions"];
+  Controller -> State [label="publishes"];
+  State -> Screen [label="renders"];
+  State -> Draft [arrowhead=none];
+  Controller -> Saved [label="restores; never auto-submits"];
+  Controller -> Repository [label="fresh reads / explicit write"];
+}

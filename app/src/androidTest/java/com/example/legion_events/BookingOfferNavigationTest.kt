@@ -21,6 +21,13 @@ import com.example.legion_events.data.OwnerNoticeRepository
 import com.example.legion_events.data.OwnerCampsiteRepository
 import com.example.legion_events.data.ProfileRepository
 import com.example.legion_events.data.UserRepository
+import com.example.legion_events.data.BookingRepository
+import com.example.legion_events.data.WaitlistRepository
+import com.example.legion_events.data.LotteryEntry
+import com.example.legion_events.model.BookingOptions
+import com.example.legion_events.model.BookingCampsite
+import com.example.legion_events.model.BookingRequest
+import com.example.legion_events.model.Reservation
 import com.example.legion_events.model.BookingOffer
 import com.example.legion_events.model.Campsite
 import com.example.legion_events.model.Lottery
@@ -46,6 +53,34 @@ class BookingOfferNavigationTest {
     private lateinit var navigation: NavHostController
     /** Saves and restores Compose/navigation state while retaining the entry's ViewModel. */
     private lateinit var restoration: StateRestorationTester
+
+    /** The winning offer opens selection with an encoded offer ID and keeps Lotteries selected. */
+    @Test fun completeWinningOfferOpensBookingChoicesAndBackReturnsWithoutAccepting() {
+        val offers = FakeOffers().apply { offer = offer!!.copy(campsiteIds = listOf("pine")) }
+        val bookings = object : BookingRepository {
+            override suspend fun getRequestsForOffer(offerId: String) = emptyList<Reservation>()
+            override suspend fun acceptOffer(request: BookingRequest): Reservation = error("Selection must not submit")
+            override suspend fun getBookingOptions(offerId: String): BookingOptions {
+                val offer = checkNotNull(offers.offer)
+                assertEquals(offer.id, offerId)
+                val site = Campsite("pine", "owner", "Pine A12", "Alberta", 4, 1500, availableNights = listOf("2090-07-16"))
+                return BookingOptions(offer, Lottery("pine", "owner", listOf("pine"), Timestamp(1, 0), Timestamp(2, 0),
+                    Timestamp(3, 0), checkNotNull(offer.expiresAt), 1, winnersDrawn = true),
+                    listOf(BookingCampsite(site, emptySet())))
+            }
+        }
+        open(offers, bookings = bookings)
+        compose.runOnIdle { navigation.navigate(bookingOfferRoute(offers.offer!!.id)) }
+        waitFor("Reserve a campsite")
+        compose.onNodeWithText("Reserve a campsite").performClick()
+        waitFor("Choose your stay")
+        compose.onNodeWithText("Lotteries").assertIsSelected()
+        compose.onNodeWithText("Pine A12").assertExists()
+        compose.runOnIdle { assertEquals(offers.offer!!.id, navigation.currentBackStackEntry?.arguments?.getString("offerId")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        waitFor("Reserve a campsite")
+        compose.runOnIdle { assertEquals(BookingOffer.STATUS_OPEN, offers.offer!!.status); assertEquals(0, offers.declines) }
+    }
 
     /** Lotteries entry, confirmation cancellation, decline, restoration, and list refresh work together. */
     @Test fun lotteriesOpenOffersAndConfirmedDeclinePersistsWhenReturning() {
@@ -154,6 +189,7 @@ class BookingOfferNavigationTest {
         offers: OfferRepository,
         darkTheme: Boolean = false,
         notifications: NotificationRepository = NotificationRepository { flowOf(emptyList()) },
+        bookings: BookingRepository? = null,
     ) {
         lateinit var onboarding: OnboardingController
         compose.runOnUiThread {
@@ -223,7 +259,18 @@ class BookingOfferNavigationTest {
             navigation = rememberNavController()
             LegioneventsTheme(darkTheme = darkTheme) {
                 AppNavigation(onboarding, navigation, campsites, details, profiles,
-                    lotteries = lotteries, owners = owners, offers = offers, notifications = notifications, notices = notices)
+                    lotteries = lotteries, owners = owners, offers = offers, notifications = notifications, notices = notices,
+                    bookings = bookings ?: object : BookingRepository {
+                        override suspend fun getBookingOptions(offerId: String): BookingOptions = error("Unexpected booking read")
+                        override suspend fun getRequestsForOffer(offerId: String): List<Reservation> = error("Unexpected request read")
+                        override suspend fun acceptOffer(request: BookingRequest): Reservation = error("Unexpected booking write")
+                    },
+                    waitlists = object : WaitlistRepository {
+                        override suspend fun getMyEntries() = emptyList<LotteryEntry>()
+                        override suspend fun getLotteriesForCampsite(campsiteId: String) = emptyList<LotteryEntry>()
+                        override suspend fun join(lotteryId: String): Unit = error("Unexpected join")
+                        override suspend fun leave(lotteryId: String): Unit = error("Unexpected leave")
+                    })
             }
         }
         waitFor("Explore campsites")

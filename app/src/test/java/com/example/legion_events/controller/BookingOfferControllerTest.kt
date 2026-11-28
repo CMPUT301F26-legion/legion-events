@@ -35,6 +35,16 @@ class BookingOfferControllerTest {
     /** Cancels remaining work and restores the platform dispatcher. */
     @After fun tearDown() { store.clear(); Dispatchers.resetMain() }
 
+    /** Legacy, accepted, expired, and incomplete offers never expose the new selection entry. */
+    @Test fun onlyCompleteOpenOffersCanEnterBookingSelection() {
+        val complete = open.copy(campsiteIds = listOf("pine"))
+        assertTrue(BookingOfferState(offer = complete, loading = false).canReserve)
+        assertFalse(BookingOfferState(offer = open, loading = false).canReserve)
+        assertFalse(BookingOfferState(offer = complete.copy(expiresAt = null), loading = false).canReserve)
+        assertFalse(BookingOfferState(offer = complete, loading = false, expired = true).canReserve)
+        assertFalse(BookingOfferState(offer = complete.copy(status = BookingOffer.STATUS_ACCEPTED), loading = false).canReserve)
+    }
+
     /** Loading remains visible until the repository supplies the selected offer. */
     @Test fun pendingReadBecomesOwnedOffer() = runTest(dispatcher) {
         val pending = CompletableDeferred<BookingOffer?>()
