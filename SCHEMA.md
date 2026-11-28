@@ -206,6 +206,7 @@ the same operation as the results and `winnersDrawn` flag.
 | `respondedAt` | Server timestamp set when the entrant accepts or declines |
 | `reservationId` | Request ID set atomically on acceptance and retained after successful confirmation |
 | `createdAt`, `updatedAt` | Server timestamps |
+| `replacementFor` | Optional declined offer ID on foreground-generated replacement offers |
 
 The app queries offers by the signed-in user's UID. To decline, the user must
 own a pending, unanswered offer before its response deadline. The repository
@@ -225,7 +226,8 @@ The app displays this as `accepted` / Awaiting confirmation; it is not `used`.
 The lottery's `bookingStartAt` and `bookingEndAt` define the submission window.
 Actual stay dates come from campsite night availability and the entrant's selection.
 The [booking lifecycle contract](doc/booking-flow.md) defines atomic acceptance,
-worker confirmation, conflict retries, and one replacement per declined offer.
+atomic confirmation, conflict retries, and one replacement per declined offer.
+For the active demo setup, see [foreground owner processing](doc/local-booking-processing.md).
 
 ## Reservations
 
@@ -285,10 +287,10 @@ outlines nights asked for by upcoming `requested` ones. Past lists only `confirm
 checkout; a `requested` booking whose checkout passes without confirmation is not listed.
 
 Entrants explicitly accept the reviewed campsite, dates, guests, and policies. The
-trusted worker then confirms the reservation while locking every occupied night and
+foreground owner processor then confirms the reservation while locking every occupied night and
 marking the offer used in the same transaction. There is no separate owner approval.
-S17's former Accept action and the owner's `requested -> confirmed` permission have
-been removed because they could confirm a stay without locking its nights.
+S17 has no manual Accept action. Owner confirmation is authorized only with the matching
+atomic offer transition; the bundled processor also writes all canonical night locks and the receipt.
 
 Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
 `requested` or `confirmed` with `endDate` in the future, then:
@@ -303,17 +305,20 @@ The optional reason is only sent in the notice; no extra reservation field is wr
 a booking whose `lotteryId` is missing or another owner's (for example, a hand-made test record) is
 denied, and S17 reports "You don't have permission to reject this reservation."
 
-The repository rules in [`firestore.rules`](firestore.rules) permit only these client updates:
+Manual entrant/owner actions use these updates in [`firestore.rules`](firestore.rules):
 
 - **Entrant:** set `cancellationRequested` to `true` on their own `confirmed` booking
   before checkout, changing only that flag and `updatedAt`. Requested bookings cannot be cancelled.
 - **Owner:** before checkout, change only `status` and `updatedAt` along
   `requested -> rejected` or `confirmed -> rejected`.
 
-**Remaining worker work:** PR 2 must confirm accepted requests and release the locks
-of owner-rejected confirmed bookings. The existing cancellation worker handles only
-entrant-cancelled confirmed bookings. Pending requests do not hold nights. No rules
-are deployed by this change; deployment must accompany the worker and UI rollout.
+The owner processor also confirms accepted requests, releases owner-rejected stays,
+completes entrant cancellations, and replaces declines. These operations use the
+owner-scoped atomic rules described in the [foreground booking guide](doc/local-booking-processing.md).
+The guide documents immutable release/replacement markers, confirmation notices,
+the empty eligibility-probe paths, and the demo's owner trust boundary. Entrants
+still cannot confirm requests, write locks, consume offers, or issue replacements.
+Rules must be deployed separately; an app build does not publish them.
 
 ## Ratings
 

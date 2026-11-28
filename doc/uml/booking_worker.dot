@@ -1,0 +1,26 @@
+// Render from the repository root:
+// dot -Tsvg doc/uml/booking_worker.dot -o doc/uml/booking_worker.svg
+digraph BookingWorker {
+  graph [rankdir=TB, fontname="Arial", nodesep=0.45, ranksep=0.65, pad=0.3,
+    label="Booking processing (PR 2)", labelloc=t, fontsize=18];
+  node [shape=record, fontname="Arial", fontsize=11];
+  edge [fontname="Arial", fontsize=10];
+
+  Main [label="{Main|process-bookings / serve-bookings\lBOOKING_PROCESSING_ENABLED guard\l}"];
+  Server [label="{BookingAutomationServer|POST /events\lPOST /sweep\l|validates source; rereads current state\l}"];
+  Processor [label="{BookingProcessor|+ sweep(): BookingProcessingResult\l+ reservationChanged(id)\l+ offerChanged(id)\l}"];
+  Confirmation [label="{ReservationConfirmationWorker|+ processPending(): Int\l+ processRequest(id): Boolean\l|matching explicit acceptance only\lvalidate all nights before writes\l}"];
+  Rejection [label="{ReservationRejectionWorker|+ processPending(): Int\l+ processRequest(id): Boolean\l|release own locks\lreopen matching pending acceptance\l}"];
+  Replacement [label="{OfferReplacementWorker|+ processPending(): Int\l+ processOffer(id): Boolean\l|one eligible replacement per decline\loriginal winners/deadline preserved\l}"];
+  Firestore [label="{Firestore|reservations / offers / bookedNights\lnotifications / lotteryNotificationOutbox\lofferReplacements / reservationReleases\l}"];
+
+  Main -> Server [label="starts"];
+  Main -> Processor [label="one sweep"];
+  Server -> Processor [label="events / recovery"];
+  Processor -> Confirmation [arrowhead=vee];
+  Processor -> Rejection [arrowhead=vee];
+  Processor -> Replacement [arrowhead=vee];
+  Confirmation -> Firestore [label="atomic confirmation + locks + notice"];
+  Rejection -> Firestore [label="atomic release + marker"];
+  Replacement -> Firestore [label="atomic offer + result + marker"];
+}

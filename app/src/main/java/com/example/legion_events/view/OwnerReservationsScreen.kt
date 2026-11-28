@@ -317,7 +317,7 @@ private fun EmptyList(tab: OwnerReservationTab) {
 /**
  * One booking with its status, dates, and actions.
  * @param booking The booking.
- * @param canReject Whether to offer Reject (Active tab only: requested or confirmed, before checkout).
+ * @param canReject Whether to offer cancellation or request rejection before checkout.
  * @param actions Opens the details or opens the rejection dialog.
  */
 @Composable
@@ -346,7 +346,7 @@ private fun BookingCard(booking: Reservation, canReject: Boolean, actions: Owner
                     OutlinedButton(onClick = { actions.onReject(booking) },
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Text("Reject")
+                        Text(if (booking.status == Reservation.STATUS_CONFIRMED) "Cancel reservation" else "Reject request")
                     }
                 }
             }
@@ -375,7 +375,7 @@ private fun StatusBadge(status: String) {
  * Booking details: reservation number, dates, guests, total, and rules acceptance. Entrant profiles
  * are private under the Firestore rules, so no name is shown.
  * @param booking The booking.
- * @param canReject Whether to offer Reject.
+ * @param canReject Whether to offer cancellation or request rejection.
  * @param actions Closes the dialog or opens the rejection dialog.
  */
 @Composable
@@ -401,25 +401,30 @@ private fun BookingDialog(booking: Reservation, canReject: Boolean, actions: Own
             }
         },
         dismissButton = if (canReject) {
-            { TextButton(onClick = { actions.onReject(booking) }) { Text("Reject", color = MaterialTheme.colorScheme.error) } }
+            { TextButton(onClick = { actions.onReject(booking) }) {
+                Text(if (booking.status == Reservation.STATUS_CONFIRMED) "Cancel reservation" else "Reject request",
+                    color = MaterialTheme.colorScheme.error)
+            } }
         } else null,
     )
 }
 
 /**
- * Confirms a rejection and takes an optional reason that is sent to the entrant (US 02.08.01).
+ * Confirms cancellation of a confirmed stay or rejection of a request, with an optional entrant notice reason.
  * @param draft The booking, reason, and progress.
  * @param actions Updates the reason, confirms, or cancels.
  */
 @Composable
 private fun RejectDialog(draft: RejectionDraft, actions: OwnerReservationsActions) {
     val booking = draft.reservation
+    val cancelling = booking.status == Reservation.STATUS_CONFIRMED
     AlertDialog(
         onDismissRequest = actions.onCancelReject,
-        title = { Text("Reject this reservation?") },
+        title = { Text(if (cancelling) "Cancel this reservation?" else "Reject this booking request?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("The booking for ${stayText(booking)} will move to Cancelled, and the entrant will be notified.")
+                Text(if (cancelling) "The reservation for ${stayText(booking)} will be cancelled. The entrant will be notified and the reserved dates will be released."
+                    else "The request for ${stayText(booking)} will be rejected, and the entrant will be notified.")
                 OutlinedTextField(
                     value = draft.reason, onValueChange = actions.onReason, enabled = !draft.inProgress,
                     label = { Text("Reason (optional)") }, minLines = 2, modifier = Modifier.fillMaxWidth(),
@@ -434,7 +439,11 @@ private fun RejectDialog(draft: RejectionDraft, actions: OwnerReservationsAction
             Button(onClick = actions.onConfirmReject, enabled = !draft.inProgress,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError)) {
-                Text(if (draft.inProgress) "Rejecting…" else "Reject booking")
+                Text(if (cancelling) {
+                    if (draft.inProgress) "Cancelling…" else "Cancel reservation"
+                } else {
+                    if (draft.inProgress) "Rejecting…" else "Reject request"
+                })
             }
         },
         dismissButton = {

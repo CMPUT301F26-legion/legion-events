@@ -11,9 +11,18 @@ import com.google.firebase.Timestamp
 import com.example.legion_events.model.Reservation
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 
-/** Formats an explicit check-in or checkout instant in the device's local time zone. */
+/**
+ * Formats a check-in or checkout date as its UTC calendar day. Stay dates are saved as UTC
+ * midnights, matching owner-listed nights and S17, so the device's time zone must not shift them.
+ */
 internal fun reservationDateText(date: Timestamp): String =
+    SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        .format(date.toDate())
+
+/** Formats a real event time, such as a completed cancellation, in the device's local time zone. */
+internal fun reservationEventDateText(date: Timestamp): String =
     SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(date.toDate())
 
 /** Maps stored reservation statuses to readable labels, with a fallback for unknown values. */
@@ -23,6 +32,7 @@ internal fun reservationStatusText(status: String): String = when (status) {
     "pending" -> "Pending"
     "completed" -> "Completed"
     "cancelled" -> "Cancelled"
-    "rejected" -> "Rejected"
+    // Owner cancellations retain the existing rejected state; processing releases their nights.
+    "rejected" -> "Cancelled"
     else -> "Unknown"
 }

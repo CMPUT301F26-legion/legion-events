@@ -83,6 +83,10 @@ class MainActivity : ComponentActivity() {
         val localDraws = ViewModelProvider(this, viewModelFactory {
             initializer { LocalLotteryDrawController(FirebaseLocalLotteryDrawRepository.instance) }
         })[LocalLotteryDrawController::class.java]
+        val localBookings = ViewModelProvider(this, viewModelFactory {
+            initializer { com.example.legion_events.controller.LocalBookingController(
+                com.example.legion_events.data.FirebaseLocalBookingRepository.instance) }
+        })[com.example.legion_events.controller.LocalBookingController::class.java]
         enableEdgeToEdge()
         setContent {
             val pushPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -92,16 +96,19 @@ class MainActivity : ComponentActivity() {
             val profile = (account as? OnboardingState.Ready)?.profile
             LifecycleStartEffect(profile?.uid) {
                 if (LocalLotteryDrawController.ENABLED && profile != null) localDraws.start(profile.uid)
-                onStopOrDispose { localDraws.stop() }
+                if (profile != null) localBookings.start(profile.uid)
+                onStopOrDispose { localDraws.stop(); localBookings.stop() }
             }
+            val bookingError by localBookings.error.collectAsStateWithLifecycle()
+            val bookingRevision by localBookings.revision.collectAsStateWithLifecycle()
             val drawError by localDraws.error.collectAsStateWithLifecycle()
             val completedDraws by localDraws.completedDraws.collectAsStateWithLifecycle()
             val snackbar = remember { SnackbarHostState() }
-            LaunchedEffect(drawError) {
-                val error = drawError ?: return@LaunchedEffect
+            LaunchedEffect(drawError, bookingError) {
+                val error = drawError ?: bookingError ?: return@LaunchedEffect
                 when (snackbar.showSnackbar(error, "Retry", withDismissAction = true, duration = SnackbarDuration.Indefinite)) {
-                    SnackbarResult.ActionPerformed -> localDraws.retry()
-                    SnackbarResult.Dismissed -> localDraws.dismiss()
+                    SnackbarResult.ActionPerformed -> if (drawError != null) localDraws.retry() else localBookings.retry()
+                    SnackbarResult.Dismissed -> if (drawError != null) localDraws.dismiss() else localBookings.dismiss()
                 }
             }
             LaunchedEffect(profile?.uid) {
@@ -134,6 +141,7 @@ class MainActivity : ComponentActivity() {
                             controller,
                             welcome = welcome,
                             localDrawRevision = completedDraws,
+                            localBookingRevision = bookingRevision,
                             inboxRecipient = inboxRecipient,
                             onInboxRequestConsumed = {
                                 inboxRecipient = null

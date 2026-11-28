@@ -100,7 +100,7 @@ data class Reservation(
         const val STATUS_CONFIRMED = "confirmed"
         /** Stored status of a booking the entrant cancelled; only the trusted worker writes it, after releasing its nights. */
         const val STATUS_CANCELLED = "cancelled"
-        /** Stored status of a booking the campsite owner rejected (US 02.08.01). */
+        /** Stored status for a failed request or owner cancellation (US 02.08.01); cleanup releases its dates. */
         const val STATUS_REJECTED = "rejected"
         /** Longest optional reason an owner can give when rejecting, so the notice stays within its limit. */
         const val MAX_REJECTION_REASON_LENGTH = 500
@@ -117,15 +117,16 @@ internal fun nightFormat(): SimpleDateFormat =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 
 /**
- * Writes the inbox message sent to an entrant whose booking the owner rejected (US 02.08.01).
- * @param reservation The rejected booking; its first night and checkout date are named.
+ * Writes the notice for an owner cancellation or request rejection (US 02.08.01).
+ * @param reservation The booking before the action; confirmed stays receive cancellation wording.
  * @param campsiteName The campsite's current name, or null when unknown.
  * @param reason The owner's optional reason, already trimmed.
  * @return A message within the owner notice limit of [MAX_NOTICE_LENGTH] characters.
  */
 fun rejectionNotice(reservation: Reservation, campsiteName: String?, reason: String?): String {
     val because = reason?.takeIf { it.isNotBlank() }?.let { " Reason: $it" } ?: ""
-    return "The owner rejected your reservation${placeText(campsiteName)} for ${stayText(reservation)}.$because"
+    val action = if (reservation.status == Reservation.STATUS_CONFIRMED) "cancelled" else "rejected"
+    return "The owner $action your reservation${placeText(campsiteName)} for ${stayText(reservation)}.$because"
         .take(MAX_NOTICE_LENGTH)
 }
 

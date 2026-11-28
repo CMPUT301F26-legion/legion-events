@@ -137,7 +137,7 @@ class FirebaseOwnerReservationRepositoryTest {
         assertEquals("owner", written["ownerId"])
         assertEquals("lottery", written["lotteryId"])
         assertEquals(listOf("entrant"), written["recipientIds"])
-        assertEquals("The owner rejected your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027. " +
+        assertEquals("The owner cancelled your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027. " +
             "Reason: Fire ban", written["message"])
         assertEquals(setOf("ownerId", "lotteryId", "message", "recipientIds", "createdAt", "updatedAt"), written.keys)
     }

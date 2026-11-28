@@ -3,7 +3,7 @@
  *
  * Purpose: Show owned offers, their status, and a confirmed decline action.
  * Role: View in MVC; renders controller state and forwards user actions.
- * Outstanding issues: Offer acceptance and campsite/date selection are separate work.
+ * Outstanding issues: None. The shared router opens the separate booking selection flow.
  */
 package com.example.legion_events.view
 
@@ -91,13 +91,14 @@ fun BookingOffersScreen(
 
 /**
  * Displays one offer with a bottom decline action and a separate confirmation dialog.
- * Reservation acceptance and campsite/date selection are separate work.
+ * Selection and explicit acceptance take place in the separate booking flow.
  * @param state Current offer and action state.
  * @param onBack Returns to the previous list or inbox entry.
  * @param onRetry Reloads the current offer after a read failure or uncertain action outcome.
  * @param onDecline Requests confirmation.
  * @param onConfirmDecline Submits the confirmed decline.
  * @param onCancelDecline Dismisses confirmation without writing.
+ * @param onReserve Opens offered campsite/date selection without accepting or holding anything.
  */
 @Composable
 fun BookingOfferScreen(
@@ -107,6 +108,7 @@ fun BookingOfferScreen(
     onDecline: () -> Unit,
     onConfirmDecline: () -> Unit,
     onCancelDecline: () -> Unit,
+    onReserve: () -> Unit = {},
 ) {
     val offer = state.offer
     val status = offer?.let { offerStatus(it, state.expired) }
@@ -139,7 +141,7 @@ fun BookingOfferScreen(
                                         style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                     Text(when (status) {
                                         "Open offer" -> "You have an opportunity to book through this lottery. Review the response deadline before deciding."
-                                        "Awaiting confirmation" -> "You accepted this offer. Your booking request is awaiting confirmation; no nights are reserved yet."
+                                        "Confirming reservation" -> "You accepted this offer. Your reservation is being processed automatically; no owner approval is needed. Dates are reserved only after confirmation."
                                         "Declined" -> "You declined this offer."
                                         "Used" -> "This offer has already been used to book."
                                         else -> "The response deadline has passed. This offer is no longer available."
@@ -160,6 +162,9 @@ fun BookingOfferScreen(
                 Surface(tonalElevation = 2.dp) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.canReserve) {
+                            Button(onClick = onReserve, modifier = Modifier.fillMaxWidth()) { Text("Reserve a campsite") }
+                        }
                         if (state.declining || status == "Open offer") {
                             OutlinedButton(
                                 onClick = onDecline, enabled = state.canDecline,
@@ -274,7 +279,7 @@ private fun offerStatus(offer: BookingOffer, expired: Boolean = false): String =
     expired || (offer.status == BookingOffer.STATUS_OPEN && offer.expiresAt?.let { it <= Timestamp.now() } == true) -> "Expired"
     offer.status == BookingOffer.STATUS_OPEN -> "Open offer"
     offer.status == BookingOffer.STATUS_DECLINED -> "Declined"
-    offer.status == BookingOffer.STATUS_ACCEPTED -> "Awaiting confirmation"
+    offer.status == BookingOffer.STATUS_ACCEPTED -> "Confirming reservation"
     offer.status == BookingOffer.STATUS_USED -> "Used"
     offer.status == BookingOffer.STATUS_EXPIRED -> "Expired"
     else -> "Unavailable"

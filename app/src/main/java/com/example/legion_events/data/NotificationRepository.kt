@@ -11,6 +11,7 @@ import com.example.legion_events.model.LotteryNotification
 import com.example.legion_events.model.LotteryResult
 import com.example.legion_events.model.InboxNotification
 import com.example.legion_events.model.CancellationNotification
+import com.example.legion_events.model.ReservationConfirmedNotification
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -59,6 +60,10 @@ class FirebaseNotificationRepository(
 internal fun DocumentSnapshot.toInboxNotification(userId: String): InboxNotification? {
     if (get("toUserId") != userId) return null
     val createdAt = get("createdAt") as? Timestamp ?: return null
+    if (get("type") == "reservation_confirmed") {
+        val reservationId = (get("reservationId") as? String)?.takeIf { it.isNotBlank() && '/' !in it } ?: return null
+        return ReservationConfirmedNotification(id, reservationId, createdAt)
+    }
     if (get("type") == "reservation_cancelled") {
         val reservationId = (get("reservationId") as? String)?.takeIf { it.isNotBlank() && '/' !in it } ?: return null
         return CancellationNotification(id, reservationId, createdAt)

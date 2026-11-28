@@ -47,6 +47,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.legion_events.R
+import com.example.legion_events.BuildConfig
+import com.example.legion_events.data.BookingRepository
+import com.example.legion_events.data.FirebaseBookingRepository
+import com.example.legion_events.view.BookingFlowActions
+import com.example.legion_events.view.BookingFlowScreen
 import com.example.legion_events.view.HomeScreen
 import com.example.legion_events.view.InboxScreen
 import com.example.legion_events.view.QrScanScreen
@@ -152,10 +157,18 @@ internal fun contactOwnerRoute(id: String): String {
     require(id.isNotBlank() && '/' !in id)
     return "message/new/${Uri.encode(id)}"
 }
-/** S08 entry: list owned offers; campsite/date selection remains a later booking feature. */
+/** S08 entry: list owned offers and open winner campsite/date selection. */
 internal const val BOOKING_OFFER_ROUTE = "booking_offer"
 /** One owned offer, opened by the list or a winning notification. */
 internal const val BOOKING_OFFER_DETAILS_ROUTE = "booking_offer/{offerId}"
+/** Winner selection receives only its offer ID; repositories derive ownership and lottery details. */
+internal const val BOOKING_FLOW_PATTERN = "booking_flow/{offerId}"
+
+/** Encodes one offer ID without passing selected dates, policies, or ownership in a route. */
+internal fun bookingFlowRoute(offerId: String): String {
+    require(offerId.isNotBlank() && '/' !in offerId) { "A single offer document ID is required." }
+    return "booking_flow/${Uri.encode(offerId)}"
+}
 
 /**
  * Builds the shared destination for a winning offer using only its document ID.
@@ -335,6 +348,8 @@ private fun campsiteEditRoute(campsiteId: String?) =
  * @param images Reads and removes every uploaded image on the S19 Images tab.
  * @param logs Reads every notification and owner-to-entrant message on S20.
  * @param messages Supplies private chat, independently of announcements.
+ * @param bookings Supplies offered choices and explicit request submission.
+ * @param bookingRequestsEnabled Enables submission only after the trusted backend is operational.
  */
 @Composable
 fun AppNavigation(
@@ -349,6 +364,7 @@ fun AppNavigation(
     offers: OfferRepository = FirebaseOfferRepository.instance,
     notifications: NotificationRepository = FirebaseNotificationRepository.instance,
     localDrawRevision: Int = 0,
+    localBookingRevision: Int = 0,
     waitlists: WaitlistRepository = FirebaseWaitlistRepository.instance,
     notices: OwnerNoticeRepository = FirebaseOwnerNoticeRepository.instance,
     inboxRecipient: String? = null,
@@ -361,6 +377,8 @@ fun AppNavigation(
     images: AdminImageRepository = FirebaseAdminImageRepository.instance,
     logs: AdminLogRepository = FirebaseAdminLogRepository.instance,
     messages: MessageRepository = FirebaseMessageRepository.instance,
+    bookings: BookingRepository = FirebaseBookingRepository.instance,
+    bookingRequestsEnabled: Boolean = BuildConfig.BOOKING_REQUESTS_ENABLED,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val current by navController.currentBackStackEntryAsState()
@@ -378,7 +396,7 @@ fun AppNavigation(
     // Detail screens keep their parent tab selected, including direct links from other screens.
     val entrantTab = when (currentRoute) {
         MESSAGES_ROUTE, CHAT_PATTERN, CONTACT_OWNER_PATTERN -> INBOX_ROUTE
-        BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE -> LOTTERIES_ROUTE
+        BOOKING_OFFER_ROUTE, BOOKING_OFFER_DETAILS_ROUTE, BOOKING_FLOW_PATTERN -> LOTTERIES_ROUTE
         RESERVATION_DETAILS_PATTERN, RESERVATION_CONFIRMATION_PATTERN, RATE_STAY_PATTERN -> BOOKINGS_ROUTE
         else -> currentRoute
     }
@@ -522,8 +540,56 @@ fun AppNavigation(
                         initializer { BookingOfferController(checkNotNull(entry.arguments?.getString("offerId")), offers) }
                     })
                     val information by offer.state.collectAsStateWithLifecycle()
+                    LifecycleResumeEffect(offer) {
+                        offer.retry()
+                        onPauseOrDispose {}
+                    }
                     BookingOfferScreen(information, { navController.popBackStack() }, offer::retry,
-                        offer::requestDecline, offer::confirmDecline, offer::cancelDecline)
+                        offer::requestDecline, offer::confirmDecline, offer::cancelDecline,
+                        onReserve = {
+                            if (information.canReserve) navController.navigate(
+                                bookingFlowRoute(checkNotNull(information.offer).id)) { launchSingleTop = true }
+                        })
+                }
+            }
+            composable(BOOKING_FLOW_PATTERN,
+                arguments = listOf(navArgument("offerId") { type = NavType.StringType })) { entry ->
+                RequireAccount(state, controller) {
+                    val booking: BookingFlowController = viewModel(key = "booking-flow-$userId", factory = viewModelFactory {
+                        initializer { BookingFlowController(checkNotNull(entry.arguments?.getString("offerId")),
+                            checkNotNull(userId), bookings, createSavedStateHandle(), bookingRequestsEnabled) }
+                    })
+                    val information by booking.state.collectAsStateWithLifecycle()
+                    // Open the saved receipt only after processing has actually reserved the nights.
+                    // Replace selection so Back cannot reopen an already accepted booking attempt.
+                    LaunchedEffect(information.result?.id, information.result?.status) {
+                        val confirmed = information.result?.takeIf {
+                            it.status == com.example.legion_events.model.Reservation.STATUS_CONFIRMED
+                        } ?: return@LaunchedEffect
+                        navController.navigate(reservationConfirmationRoute(confirmed.id)) {
+                            popUpTo(BOOKING_FLOW_PATTERN) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                    LifecycleResumeEffect(booking) {
+                        booking.startObserving()
+                        onPauseOrDispose { booking.stopObserving() }
+                    }
+                    BookingFlowScreen(information, BookingFlowActions(
+                        onBack = { navController.popBackStack() },
+                        onReload = booking::reload,
+                        onCampsite = booking::selectCampsite,
+                        onCheckIn = booking::selectCheckIn,
+                        onCheckOut = booking::selectCheckOut,
+                        onGuests = booking::selectGuests,
+                        onRules = booking::acceptRules,
+                        onReview = booking::review,
+                        onDismissReview = booking::dismissReview,
+                        onConfirm = booking::confirm,
+                        onRetrySubmission = booking::retrySubmission,
+                        onChooseAgain = booking::chooseAgain,
+                        onViewReservation = { id -> navController.navigate(reservationConfirmationRoute(id)) { launchSingleTop = true } },
+                    ))
                 }
             }
             composable(BOOKINGS_ROUTE) {
@@ -872,7 +938,7 @@ fun AppNavigation(
                     })
                     val bookingState by bookings.state.collectAsStateWithLifecycle()
                     // Reload on every return so campsites added in S13 and new bookings appear.
-                    LifecycleResumeEffect(bookings) {
+                    LifecycleResumeEffect(bookings, localBookingRevision) {
                         bookings.refresh()
                         onPauseOrDispose {}
                     }

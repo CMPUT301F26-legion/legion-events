@@ -160,14 +160,15 @@ class ReservationsControllerTest {
         assertEquals(1, reads)
     }
 
-    @Test fun completedCancellationsRemainAccessibleInTheirOwnTabNewestFirst() = runTest(dispatcher) {
+    @Test fun completedAndOwnerCancellationsRemainAccessibleInTheirOwnTabNewestFirst() = runTest(dispatcher) {
         val entries = listOf(entry("pending", at - 1, at + 10).let { it.copy(reservation = it.reservation.copy(cancellationRequested = true)) },
             entry("old", at - 20, at - 10, "cancelled").let { it.copy(reservation = it.reservation.copy(updatedAt = Timestamp(at - 5, 0))) },
+            entry("owner-cancelled", at + 1, at + 3, "rejected").let { it.copy(reservation = it.reservation.copy(updatedAt = Timestamp(at - 3, 0))) },
             entry("new", at - 20, at - 10, "cancelled").let { it.copy(reservation = it.reservation.copy(updatedAt = Timestamp(at - 1, 0))) })
         val controller = controller(FakeReservations { entries })
         controller.refresh(); runCurrent()
         controller.selectTab(ReservationTab.CANCELLED)
-        assertEquals(listOf("new", "old"), controller.state.value.cancelledEntries.map { it.reservation.id })
+        assertEquals(listOf("new", "owner-cancelled", "old"), controller.state.value.cancelledEntries.map { it.reservation.id })
         assertEquals(listOf("pending"), controller.state.value.entries.map { it.reservation.id })
         assertTrue(controller.state.value.pastEntries.isEmpty())
     }

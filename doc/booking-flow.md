@@ -1,5 +1,7 @@
 # Winner booking contracts (PR 1)
 
+This is the original PR 1 contract. The app now uses the [foreground owner processor](local-booking-processing.md) for the demo; submission and live confirmation are connected. References below to the trusted worker describe the original backend deployment.
+
 Person 6 owns US 01.04.01, US 01.04.02, US 02.11.01, and US 01.05.01. This PR
 supplies models, a working Firebase repository, permissions, and tests for the
 later worker and screens. The submission API is not wired into navigation yet.

@@ -101,6 +101,25 @@ test('owner commits one winner, one loser, their offers and Inbox notices atomic
   await assertFails(getDoc(doc(client(), 'lotteryNotificationOutbox', 'normal_u0')));
 });
 
+test('ending registration permits the foreground draw, including legacy booking dates', async () => {
+  const id = 'end-registration-draw';
+  const entrants = await seed(id, 2, 1, true);
+  await environment.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'lotteries', id), {
+      bookingStartAt: Timestamp.fromMillis(Date.now() - 30_000),
+    });
+  });
+  await assertFails(drawBatch(id, entrants, ['u0']));
+  await assertSucceeds(updateDoc(doc(client(), 'lotteries', id), {
+    registrationEndAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(drawBatch(id, entrants, ['u0']));
+  assert.equal((await getDoc(doc(client(), 'lotteries', id))).data().winnersDrawn, true);
+  assert.equal((await getDoc(doc(client('u0'), 'offers', `${id}_u0`))).data().status, 'pending');
+  assert.equal((await getDoc(doc(client('u0'), 'notifications', `${id}_u0`))).data().type, 'lottery_won');
+  await assertFails(drawBatch(id, entrants, ['u1']));
+});
+
 test('all 100 entrants and winners fit the atomic rules access limits', async () => {
   const entrants = await seed('capacity', 100, 100);
   await assertSucceeds(drawBatch('capacity', entrants, entrants));
