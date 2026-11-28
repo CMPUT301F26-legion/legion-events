@@ -8,6 +8,8 @@ import com.example.legion_events.data.LocalBookingRepository
 import com.example.legion_events.data.LocalBookingResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -20,9 +22,11 @@ class LocalBookingControllerTest {
     private val store = ViewModelStore()
     private val calls = mutableListOf<String>()
     private var result = LocalBookingResult(0)
+    private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     private val controller by lazy { ViewModelProvider.create(store, viewModelFactory {
         initializer { LocalBookingController(object : LocalBookingRepository {
             override suspend fun process(ownerId: String): LocalBookingResult { calls += ownerId; return result }
+            override fun reservationChanges(ownerId: String): Flow<Unit> = changes
         }, log = {}) }
     })[LocalBookingController::class] }
     @Before fun setUp() { Dispatchers.setMain(dispatcher) }
@@ -58,6 +62,25 @@ class LocalBookingControllerTest {
         result = LocalBookingResult(0)
         advanceTimeBy(5000); runCurrent()
         assertNull(controller.error.value)
+    }
+    @Test fun idleChecksBackOffToOneMinuteAndProgressRestoresFiveSeconds() = foregroundTest {
+        controller.start("owner"); runCurrent()
+        for (wait in listOf(5000L, 10000L, 20000L, 40000L)) { advanceTimeBy(wait); runCurrent() }
+        assertEquals(5, calls.size)
+        advanceTimeBy(59000); runCurrent()
+        assertEquals(5, calls.size)
+        result = LocalBookingResult(1)
+        advanceTimeBy(1000); runCurrent()
+        assertEquals(6, calls.size)
+        advanceTimeBy(5000); runCurrent()
+        assertEquals(7, calls.size)
+    }
+    @Test fun ownedReservationChangeWakesAnIdleCheckAtOnce() = foregroundTest {
+        controller.start("owner"); runCurrent()
+        changes.emit(Unit); runCurrent()
+        assertEquals(1, calls.size)
+        changes.emit(Unit); runCurrent()
+        assertEquals(2, calls.size)
     }
     private fun foregroundTest(test: suspend TestScope.() -> Unit) = runTest(dispatcher) {
         try { test() } finally { controller.stop() }

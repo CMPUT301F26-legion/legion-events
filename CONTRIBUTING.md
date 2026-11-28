@@ -140,9 +140,9 @@ BookingRepository / FirebaseBookingRepository provide current choices, explicit
 acceptance, and request recovery. BookingRequest, BookingOptions, and BookedNight
 define dates, price, policy, and lock contracts. BookingFlowController uses these
 contracts for selection, policy agreement, fresh review, and explicit submission;
-see [booking UI](doc/booking-ui.md). Submission defaults off until the compatible
-worker is operational; build with `-PbookingRequestsEnabled=true` only after
-verifying that setup.
+see [booking UI](doc/booking-ui.md). Submission is enabled by default because the
+owner's app processes requests (see [foreground booking](doc/local-booking-processing.md));
+build with `-PbookingRequestsEnabled=false` to allow selection and review only.
 See [booking flow](doc/booking-flow.md) for lifecycle, rollout, and checks.
 
 ## Reservations
