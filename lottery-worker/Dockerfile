@@ -4,4 +4,5 @@ WORKDIR /app
 COPY build/install/legion-lottery-worker/ ./
 RUN chmod +x bin/legion-lottery-worker
 USER 10001:10001
-ENTRYPOINT ["/app/bin/legion-lottery-worker", "serve"]
+ENTRYPOINT ["/app/bin/legion-lottery-worker"]
+CMD ["serve"]

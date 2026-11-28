@@ -1,9 +1,10 @@
 /*
  * Main.kt
  *
- * Purpose: Run lottery, notification, or cancellation processing from Actions or a local emulator.
+ * Purpose: Run lottery, booking, notification, or cancellation processing from Actions or a local emulator.
  * Role: Command-line entry point that selects the Firestore connection.
- * Trigger mode: CLOUD-ONLY. The Android app currently uses LocalLotteryDrawController instead.
+ * Lottery draws remain optional cloud work; Android currently uses LocalLotteryDrawController.
+ * Booking confirmation always requires the trusted backend and its independent enable flag.
  * This entry point runs only when explicitly started locally or by the optional cloud infrastructure.
  * Outstanding issues: None.
  */
@@ -29,18 +30,22 @@ import java.util.concurrent.CountDownLatch
  * Processes the selected worker step in `FIREBASE_PROJECT_ID` and prints its completed count.
  * When `FIRESTORE_EMULATOR_HOST` is set, the project ID must start with `demo-`.
  * Live runs require Google Application Default Credentials and the corresponding enable flag:
- * `RESERVATION_CANCELLATIONS_ENABLED` for cancellations, otherwise `LOTTERY_DRAW_ENABLED`.
+ * `BOOKING_PROCESSING_ENABLED` for bookings, `RESERVATION_CANCELLATIONS_ENABLED` for
+ * cancellations, otherwise `LOTTERY_DRAW_ENABLED`.
  *
- * @param args Empty to draw, `serve` for Cloud Run, `deliver-notifications`, or `process-cancellations`.
+ * @param args Empty to draw, `serve` for draw events, `serve-bookings` for booking events,
+ * `process-bookings`, `deliver-notifications`, or `process-cancellations`.
  * @throws IllegalStateException If required configuration is missing or processing fails.
  */
 fun main(args: Array<String>) {
-    require(args.isEmpty() || (args.size == 1 && args[0] in listOf("serve", "deliver-notifications", "process-cancellations"))) {
+    require(args.isEmpty() || (args.size == 1 && args[0] in listOf("serve", "deliver-notifications", "process-cancellations", "process-bookings", "serve-bookings"))) {
         "Unknown worker command."
     }
     val deliverNotifications = args.firstOrNull() == "deliver-notifications"
     val cancellations = args.firstOrNull() == "process-cancellations"
     val serve = args.firstOrNull() == "serve"
+    val bookings = args.firstOrNull() == "process-bookings"
+    val bookingServer = args.firstOrNull() == "serve-bookings"
     val projectId = checkNotNull(System.getenv("FIREBASE_PROJECT_ID")?.takeIf { it.isNotBlank() }) {
         "Set FIREBASE_PROJECT_ID before running the worker."
     }
@@ -49,7 +54,11 @@ fun main(args: Array<String>) {
         check(projectId.startsWith("demo-")) { "Use a demo project ID with the Firestore emulator." }
         FirestoreOptions.newBuilder().setProjectId(projectId).setEmulatorHost(emulatorHost).build()
             .service.use { firestore ->
-                if (serve) {
+                if (bookingServer) {
+                    serveBookingAutomation(firestore, projectId)
+                } else if (bookings) {
+                    println(BookingProcessor(firestore).sweep())
+                } else if (serve) {
                     serveLotteries(firestore, projectId)
                 } else if (cancellations) {
                     println("Completed ${ReservationCancellationWorker(firestore).processPending()} cancellation(s).")
@@ -63,7 +72,11 @@ fun main(args: Array<String>) {
         return
     }
 
-    val enableFlag = if (cancellations) "RESERVATION_CANCELLATIONS_ENABLED" else "LOTTERY_DRAW_ENABLED"
+    val enableFlag = when {
+        bookings || bookingServer -> "BOOKING_PROCESSING_ENABLED"
+        cancellations -> "RESERVATION_CANCELLATIONS_ENABLED"
+        else -> "LOTTERY_DRAW_ENABLED"
+    }
     check(System.getenv(enableFlag) == "true") { "Set $enableFlag to enable this live worker command." }
     val app = FirebaseApp.initializeApp(
         FirebaseOptions.builder()
@@ -73,7 +86,11 @@ fun main(args: Array<String>) {
     )
     try {
         val firestore = FirestoreClient.getFirestore(app)
-        if (serve) {
+        if (bookingServer) {
+            serveBookingAutomation(firestore, projectId)
+        } else if (bookings) {
+            println(BookingProcessor(firestore).sweep())
+        } else if (serve) {
             serveLotteries(firestore, projectId)
         } else if (cancellations) {
             println("Completed ${ReservationCancellationWorker(firestore).processPending()} cancellation(s).")
@@ -97,6 +114,18 @@ private fun serveLotteries(firestore: com.google.cloud.firestore.Firestore, proj
         Runtime.getRuntime().addShutdownHook(Thread { stopped.countDown() })
         server.start()
         println("Lottery automation listening on port ${server.port}.")
+        stopped.await()
+    }
+}
+
+/** Runs booking automation independently of the existing lottery deadline service. */
+private fun serveBookingAutomation(firestore: com.google.cloud.firestore.Firestore, projectId: String) {
+    val port = System.getenv("PORT")?.toInt() ?: 8080
+    val stopped = CountDownLatch(1)
+    BookingAutomationServer(firestore, projectId, InetSocketAddress("0.0.0.0", port)).use { server ->
+        Runtime.getRuntime().addShutdownHook(Thread { stopped.countDown() })
+        server.start()
+        println("Booking automation listening on port ${server.port}.")
         stopped.await()
     }
 }
