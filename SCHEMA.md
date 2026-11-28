@@ -202,8 +202,9 @@ the same operation as the results and `winnersDrawn` flag.
 | `campsiteIds` | Array of offered campsite IDs used by reservation rules |
 | `status` | String, initially `pending` |
 | `expiresAt` | Timestamp for the response deadline |
-| `response` | Absent or null while unanswered, `decline` after a decline |
-| `respondedAt` | Server timestamp set when the user declines |
+| `response` | Absent or null while unanswered, `accept` while a request awaits processing, `decline` after a decline |
+| `respondedAt` | Server timestamp set when the entrant accepts or declines |
+| `reservationId` | Request ID set atomically on acceptance and retained after successful confirmation |
 | `createdAt`, `updatedAt` | Server timestamps |
 
 The app queries offers by the signed-in user's UID. To decline, the user must
@@ -211,6 +212,20 @@ own a pending, unanswered offer before its response deadline. The repository
 leaves the stored status at `pending` and sets `response` to `decline` and both
 `respondedAt` and `updatedAt` to server time. The app displays Declined based on
 the response. Retrying an already declined offer leaves its document unchanged.
+
+The shared Android offer reader exposes the draw's `campsiteIds` and the optional
+`reservationId`. Legacy offers that omit campsite IDs remain readable and declineable;
+their missing metadata must not be treated as permission to book any campsite.
+Present campsite IDs must be a unique list of 1 to 8 nonblank document IDs. A
+reservation link, when present, must identify one document. The current draw does
+not create a reservation link. Explicit entrant acceptance sets the link atomically
+with a requested reservation; a pending offer with `response: "accept"` must have it.
+The app displays this as `accepted` / Awaiting confirmation; it is not `used`.
+
+The lottery's `bookingStartAt` and `bookingEndAt` define the submission window.
+Actual stay dates come from campsite night availability and the entrant's selection.
+The [booking lifecycle contract](doc/booking-flow.md) defines atomic acceptance,
+worker confirmation, conflict retries, and one replacement per declined offer.
 
 ## Reservations
 
@@ -256,7 +271,7 @@ same transaction as cancellation. It stores `toUserId`, `fromUserId: null`,
 it through its existing recipient-scoped query and opens that reservation's confirmation.
 Repeated worker runs do not rewrite the booking or notification. Entrant clients must
 not be allowed to create cancellation notices, set `status`, or release nights; the only
-client `status` writes are the owner's acceptance and rejection under [Owner reservations](#owner-reservations).
+client `status` writes are the owner's rejection under [Owner reservations](#owner-reservations).
 
 ## Owner reservations
 
@@ -269,16 +284,11 @@ index. Malformed records are left out instead of hiding the rest. Entrant profil
 outlines nights asked for by upcoming `requested` ones. Past lists only `confirmed` stays after
 checkout; a `requested` booking whose checkout passes without confirmation is not listed.
 
-Accepting is one transaction that rechecks that the owner owns the booking and that it is `requested`,
-before its `endDate`, with no cancellation pending, then:
-
-| Write | Fields |
-| --- | --- |
-| `reservations/{id}` update | `status: "confirmed"`, `updatedAt` server timestamp; nothing else changes |
-| `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
-
-`bookedNights` stay worker-only, so accepting does not reserve the nights itself, and the rule cannot
-check for clashes because it cannot list another booking's nights (see the known gaps below).
+Entrants explicitly accept the reviewed campsite, dates, guests, and policies. The
+trusted worker then confirms the reservation while locking every occupied night and
+marking the offer used in the same transaction. There is no separate owner approval.
+S17's former Accept action and the owner's `requested -> confirmed` permission have
+been removed because they could confirm a stay without locking its nights.
 
 Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the booking and that it is
 `requested` or `confirmed` with `endDate` in the future, then:
@@ -289,26 +299,21 @@ Rejecting (US 02.08.01) is one transaction that rechecks that the owner owns the
 | `ownerNotices/{newId}` create | The existing notice shape, with `recipientIds: [userId]` and the booking's `lotteryId` |
 
 The optional reason is only sent in the notice; no extra reservation field is written. The
-`ownerNotices` rule allows the accept and reject notices because the owner owns the booking's lottery;
+`ownerNotices` rule allows rejection notices because the owner owns the booking's lottery;
 a booking whose `lotteryId` is missing or another owner's (for example, a hand-made test record) is
-denied, and S17 reports "You don't have permission to accept/reject this reservation."
+denied, and S17 reports "You don't have permission to reject this reservation."
 
-The deployed rules are in [`firestore.rules`](firestore.rules). The reservation `allow update` has two
-branches:
+The repository rules in [`firestore.rules`](firestore.rules) permit only these client updates:
 
-- **Entrant:** may set `cancellationRequested` to `true` on their own `requested` or `confirmed` booking
-  that has no pending request, changing only `cancellationRequested` and `updatedAt`.
-- **Owner:** before `endDate`, may change only `status` and `updatedAt`, and only along
-  `requested -> confirmed` (with no pending cancellation), `requested -> rejected`, or
-  `confirmed -> rejected`.
+- **Entrant:** set `cancellationRequested` to `true` on their own `confirmed` booking
+  before checkout, changing only that flag and `updatedAt`. Requested bookings cannot be cancelled.
+- **Owner:** before checkout, change only `status` and `updatedAt` along
+  `requested -> rejected` or `confirmed -> rejected`.
 
-**Known gaps.** `bookedNights` stay `allow write: if false`, and `ReservationCancellationWorker` only
-releases nights for entrant-cancelled `confirmed` bookings. So, until the worker handles them:
-
-- a rejected booking's nights are **not released**;
-- an accepted booking's nights are **not reserved**, so two overlapping requests can both be accepted;
-- a cancellation requested on a `requested` booking is never processed (the rule allows the request,
-  but the worker only handles `confirmed` bookings). S17 does not offer Accept for such a booking.
+**Remaining worker work:** PR 2 must confirm accepted requests and release the locks
+of owner-rejected confirmed bookings. The existing cancellation worker handles only
+entrant-cancelled confirmed bookings. Pending requests do not hold nights. No rules
+are deployed by this change; deployment must accompany the worker and UI rollout.
 
 ## Ratings
 

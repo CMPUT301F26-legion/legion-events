@@ -12,6 +12,18 @@ service cloud.firestore {
     function campsite(id) { return get(/databases/$(database)/documents/campsites/$(id)).data; }
     function lottery(id) { return get(/databases/$(database)/documents/lotteries/$(id)).data; }
     function offer(id) { return get(/databases/$(database)/documents/offers/$(id)).data; }
+    function acceptedRequest(id, offerId, lotteryId, uid) {
+      let path = /databases/$(database)/documents/reservations/$(id);
+      let d = getAfter(path).data;
+      return id is string && id.size() > 0 && !exists(path)
+        && d.offerId == offerId && d.lotteryId == lotteryId && d.userId == uid
+        && d.status == 'requested' && d.createdAt == request.time;
+    }
+    function claimedOffer(offerId, reservationId) {
+      let d = getAfter(/databases/$(database)/documents/offers/$(offerId)).data;
+      return d.status == 'pending' && d.response == 'accept' && d.reservationId == reservationId
+        && d.respondedAt == request.time && d.updatedAt == request.time;
+    }
     function chat(id) { return get(/databases/$(database)/documents/conversations/$(id)).data; }
     // Separate comparisons let either UID-scoped conversation query prove membership.
     function participant(c) {
@@ -198,8 +210,11 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time && updatedNow();
       allow update: if mine(resource.data.userId) && resource.data.status == 'pending'
         && request.time < resource.data.expiresAt && resource.data.get('response', null) == null
-        && changedOnly(['response','respondedAt','updatedAt']) && request.resource.data.response == 'decline'
-        && request.resource.data.respondedAt == request.time && updatedNow();
+        && request.resource.data.respondedAt == request.time && updatedNow()
+        && ((changedOnly(['response','respondedAt','updatedAt']) && request.resource.data.response == 'decline')
+          || (changedOnly(['response','reservationId','respondedAt','updatedAt'])
+            && request.resource.data.response == 'accept'
+            && acceptedRequest(request.resource.data.reservationId, id, resource.data.lotteryId, request.auth.uid)));
       allow delete: if false;
     }
     match /lotteryNotificationOutbox/{id} {
@@ -218,6 +233,10 @@ service cloud.firestore {
         && request.resource.data.cancellationRequested == false
         && request.resource.data.startDate is timestamp && request.resource.data.endDate is timestamp
         && request.resource.data.startDate < request.resource.data.endDate
+        && request.resource.data.startDate == request.resource.data.startDate.date()
+        && request.resource.data.endDate == request.resource.data.endDate.date()
+        && request.resource.data.startDate >= request.time.date()
+        && request.resource.data.endDate - request.resource.data.startDate <= duration.value(366, 'd')
         && request.resource.data.guestCount is int && request.resource.data.guestCount >= 1
         && request.resource.data.totalPrice is int && request.resource.data.totalPrice >= 0
         && request.resource.data.offerId == request.resource.data.lotteryId + '_' + request.auth.uid
@@ -230,18 +249,27 @@ service cloud.firestore {
         && request.time < lottery(request.resource.data.lotteryId).bookingEndAt
         && request.resource.data.ownerId == lottery(request.resource.data.lotteryId).ownerId
         && request.resource.data.campsiteId in offer(request.resource.data.offerId).campsiteIds
+        && request.resource.data.campsiteId in lottery(request.resource.data.lotteryId).campsiteIds
+        && campsite(request.resource.data.campsiteId).active == true
+        && campsite(request.resource.data.campsiteId).ownerId == request.resource.data.ownerId
+        && request.resource.data.guestCount <= campsite(request.resource.data.campsiteId).maxGuests
+        && request.resource.data.totalPrice == campsite(request.resource.data.campsiteId).pricePerNight
+          * ((request.resource.data.endDate.toMillis() - request.resource.data.startDate.toMillis()) / 86400000)
+        && claimedOffer(request.resource.data.offerId, id)
         && request.resource.data.createdAt == request.time && updatedNow();
       // Entrants may only request a cancellation; only the worker releases occupied nights.
-      // Owners may accept a requested booking, or reject a requested or confirmed one, before checkout.
-      allow update: if (mine(resource.data.userId) && resource.data.status in ['requested','confirmed']
+      // Only the worker confirms. Owners may reject a requested or confirmed booking before checkout.
+      allow update: if (mine(resource.data.userId) && resource.data.status == 'confirmed' && request.time < resource.data.endDate
         && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
         && request.resource.data.cancellationRequested == true && updatedNow())
         || (mine(resource.data.ownerId) && request.time < resource.data.endDate
           && changedOnly(['status','updatedAt']) && updatedNow()
-          && ((resource.data.status == 'requested' && resource.data.cancellationRequested == false
-                && request.resource.data.status == 'confirmed')
-            || (resource.data.status in ['requested','confirmed'] && request.resource.data.status == 'rejected')));
+          && resource.data.status in ['requested','confirmed'] && request.resource.data.status == 'rejected');
       allow delete: if false;
+    }
+    // Idempotency records for one replacement per declined winner; privileged worker only.
+    match /offerReplacements/{id} {
+      allow read, write: if false;
     }
     match /bookedNights/{id} {
       allow read: if activeUser();

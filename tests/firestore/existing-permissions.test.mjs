@@ -128,20 +128,26 @@ test('only the offered entrant can decline a pending offer once', async () => {
   await assertFails(updateDoc(doc(client('entrant'), 'offers/decline_entrant'), response));
 });
 
-test('reservation requests, owner confirmation, and entrant cancellation requests remain supported', async () => {
+test('reservation requests require entrant acceptance and only the worker may confirm', async () => {
   const dates = lottery('booking');
   await seed('lotteries/booking', dates);
   await seed('offers/booking_entrant', { lotteryId: 'booking', userId: 'entrant', campsiteIds: ['camp'],
     status: 'pending', response: null, expiresAt: dates.bookingEndAt });
   const db = client('entrant');
   const reference = doc(db, 'reservations/booking');
-  await assertSucceeds(setDoc(reference, { lotteryId: 'booking', offerId: 'booking_entrant', campsiteId: 'camp',
-    userId: 'entrant', ownerId: 'owner', startDate: Timestamp.fromMillis(Date.now() + 86_400_000),
-    endDate: Timestamp.fromMillis(Date.now() + 172_800_000), guestCount: 2, totalPrice: 1000,
+  const batch = writeBatch(db);
+  batch.set(reference, { lotteryId: 'booking', offerId: 'booking_entrant', campsiteId: 'camp',
+    userId: 'entrant', ownerId: 'owner', startDate: Timestamp.fromMillis((Math.floor(Date.now() / 86_400_000) + 1) * 86_400_000),
+    endDate: Timestamp.fromMillis((Math.floor(Date.now() / 86_400_000) + 2) * 86_400_000), guestCount: 2, totalPrice: 1000,
     rulesAccepted: true, status: 'requested', cancellationRequested: false,
-    createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  batch.update(doc(db, 'offers/booking_entrant'), { response: 'accept', reservationId: 'booking',
+    respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  await assertSucceeds(batch.commit());
   await assertFails(getDoc(doc(client('other'), 'reservations/booking')));
-  await assertSucceeds(updateDoc(doc(client(), 'reservations/booking'), { status: 'confirmed', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(client(), 'reservations/booking'), { status: 'confirmed', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(reference, { cancellationRequested: true, updatedAt: serverTimestamp() }));
+  await environment.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'reservations/booking'), { status: 'confirmed' }));
   await assertFails(updateDoc(reference, { status: 'cancelled', updatedAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(reference, { cancellationRequested: true, updatedAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(doc(client(), 'reservations/booking'), { status: 'rejected', updatedAt: serverTimestamp() }));

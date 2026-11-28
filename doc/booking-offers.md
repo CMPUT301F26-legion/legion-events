@@ -13,6 +13,7 @@ empty list; the app does not manufacture demo offers.
 - `model/BookingOffer.kt`: the winning entrant, lottery reference, status, and timestamps.
 - `data/OfferRepository.kt`: the interface used by controllers and test doubles.
 - `data/FirebaseOfferRepository.kt`: Firebase reads, ownership checks, and the decline transaction.
+- `data/BookingOfferDocument.kt`: shared ownership and field mapping for offer and booking reads.
 - `controller/BookingOffersController.kt`: list loading, refresh, retry, and cancellation.
 - `controller/BookingOfferController.kt`: detail loading and confirmed decline actions.
 - `view/BookingOfferScreen.kt`: list/detail views and decline confirmation.
@@ -34,8 +35,9 @@ Part 5 work and is explicitly marked as coming soon in its separate section.
 The detail controller checks response expiry when confirmation is requested and
 submitted, and blocks repeated submissions while a decline is in flight. A failed
 action retains the loaded offer with a retry/reload message; an ownership denial
-removes the offer from the view. Used, declined, and expired offers have no decline
-action. Acceptance, campsite/date selection, and reservation creation are separate work.
+removes the offer from the view. Accepted, used, declined, and expired offers have no decline
+action. The booking data contract is implemented in `FirebaseBookingRepository`;
+campsite/date selection and submission screens are follow-up work. See [booking flow](booking-flow.md).
 
 The paths above are relative to `app/src/main/java/com/example/legion_events/`.
 Use `FirebaseOfferRepository.instance` for the default Firebase app, or pass a
@@ -52,8 +54,17 @@ name, email, or offer ID. Anonymous Firebase accounts have a UID too.
 `lotteryId` points to the lottery that supplies the offered campsites and booking
 window. Stay dates belong to the later reservation flow. `expiresAt` is a separate
 response deadline. The repository maps a Firestore `pending` offer to Open while
-its `response` is absent or null, and to Declined once `response` is `decline`.
+its `response` is absent or null, to Accepted when `response` is `accept`, and to
+Declined once `response` is `decline`.
 Invalid records fail instead of being treated as new open offers.
+
+The shared model also exposes the draw's saved `campsiteIds` and an optional
+`reservationId` for an accepted or used offer. Legacy offers without these fields
+remain viewable and declineable; missing campsite metadata cannot supply booking
+options. Malformed or duplicate campsite IDs and invalid reservation links fail
+mapping. Pending offers with `response: "accept"` map to Accepted and require a
+reservation link. This is a pending request, not a confirmed stay; only the worker
+may mark the offer used.
 
 The draw worker will create one offer for each winning user and lottery, using a
 stable ID on retries. The Android repository does not create offers or choose

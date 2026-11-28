@@ -75,6 +75,32 @@ class FirebaseOfferRepositoryTest {
         )
     }
 
+    @Test fun readsTheDrawsCampsitesAndTheWorkersConsumedReservationLink() = runTest {
+        val document = offer(status = "used", campsiteIds = listOf("pine", "lake"), reservationId = "booking-1")
+        `when`(reference.get()).thenReturn(Tasks.forResult(document))
+        val saved = checkNotNull(repository.getOffer("offer"))
+        assertEquals(listOf("pine", "lake"), saved.campsiteIds)
+        assertEquals("booking-1", saved.reservationId)
+        assertEquals(BookingOffer.STATUS_USED, saved.status)
+    }
+
+    @Test fun malformedCampsiteMetadataDoesNotBecomeBookable() = runTest {
+        for (value in listOf("pine", emptyList<String>(), listOf(""), listOf("pine/nested"),
+            listOf("pine", "pine"), listOf("pine", 1L), (1..9).map { "camp-$it" })) {
+            val document = offer(campsiteIds = value)
+            `when`(reference.get()).thenReturn(Tasks.forResult(document))
+            expectFailure(IllegalStateException::class.java) { repository.getOffer("offer") }
+        }
+    }
+
+    @Test fun malformedReservationLinksAreRejected() = runTest {
+        for (value in listOf("", " ", "booking/nested", 42L)) {
+            val document = offer(status = "used", reservationId = value)
+            `when`(reference.get()).thenReturn(Tasks.forResult(document))
+            expectFailure(IllegalStateException::class.java) { repository.getOffer("offer") }
+        }
+    }
+
     @Test fun aMissingOfferReturnsNullBeforeReadingItsFields() = runTest {
         val missing = mock(DocumentSnapshot::class.java)
         `when`(reference.get()).thenReturn(Tasks.forResult(missing))
@@ -262,6 +288,18 @@ class FirebaseOfferRepositoryTest {
         verify(transaction, times(1)).update(any(DocumentReference::class.java), anyMap<String, Any>())
     }
 
+    @Test fun acceptedOffersRequireARequestLinkAndCannotBeDeclined() = runTest {
+        val accepted = offer(response = "accept", reservationId = "attempt", campsiteIds = listOf("pine"))
+        `when`(reference.get()).thenReturn(Tasks.forResult(accepted))
+        assertEquals(BookingOffer.STATUS_ACCEPTED, repository.getOffer("offer")?.status)
+        `when`(transaction.get(reference)).thenReturn(accepted)
+        expectFailure(IllegalStateException::class.java) { repository.declineOffer("offer") }
+        verify(transaction, never()).update(any(DocumentReference::class.java), anyMap<String, Any>())
+        val missingLink = offer(response = "accept")
+        `when`(reference.get()).thenReturn(Tasks.forResult(missingLink))
+        expectFailure(IllegalStateException::class.java) { repository.getOffer("offer") }
+    }
+
     /** Supplies stored fields without using Firestore object mapping or a live database. */
     private fun offer(
         id: String = "offer",
@@ -271,6 +309,8 @@ class FirebaseOfferRepositoryTest {
         response: String? = null,
         expiresAt: Timestamp? = deadline,
         updatedAt: Timestamp? = null,
+        campsiteIds: Any? = null,
+        reservationId: Any? = null,
     ): DocumentSnapshot = mock(DocumentSnapshot::class.java).also { document ->
         `when`(document.exists()).thenReturn(true)
         `when`(document.id).thenReturn(id)
@@ -281,6 +321,8 @@ class FirebaseOfferRepositoryTest {
         `when`(document.get("expiresAt")).thenReturn(expiresAt)
         `when`(document.get("createdAt")).thenReturn(createdAt)
         `when`(document.get("updatedAt")).thenReturn(updatedAt)
+        `when`(document.get("campsiteIds")).thenReturn(campsiteIds)
+        `when`(document.get("reservationId")).thenReturn(reservationId)
     }
 
     /** Checks failures from suspend methods while preserving unexpected errors for diagnosis. */

@@ -3,15 +3,14 @@
  *
  * Purpose: Firestore implementation of S17's owner reservations
  *   (US 02.06.01, 02.07.01 to 02.07.03, 02.08.01).
- * Role: Data layer in MVC; reads `reservations` by owner and accepts or rejects one in a transaction.
- * Outstanding issues: Neither accepting nor rejecting writes `bookedNights`; the trusted worker must
- *   reserve accepted nights and release rejected ones (see SCHEMA.md#owner-reservations).
+ * Role: Data layer in MVC; reads `reservations` by owner and rejects one in a transaction.
+ * Outstanding issues: Rejecting does not write `bookedNights`; the trusted worker must
+ *   release rejected nights (see SCHEMA.md#owner-reservations).
  */
 package com.example.legion_events.data
 
 import android.util.Log
 import com.example.legion_events.model.Reservation
-import com.example.legion_events.model.acceptanceNotice
 import com.example.legion_events.model.rejectionNotice
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -71,22 +70,11 @@ class FirebaseOwnerReservationRepository(
     }
 
     /**
-     * Rechecks the owner, status, and pending cancellation inside a transaction, then confirms the
-     * booking and creates the entrant's notice together. Nights stay worker-only, so none are reserved here.
-     */
-    override suspend fun acceptReservation(reservationId: String) {
-        requireSingleId(reservationId, "reservation")
-        changeStatus(reservationId, Reservation.STATUS_CONFIRMED, "accept",
-            allowed = { it.canOwnerAccept(now()) }, notAllowed = "Only requested reservations can be accepted.",
-            notice = ::acceptanceNotice)
-    }
-
-    /**
      * Moves one of the owner's bookings to [status] and notifies its entrant in one transaction.
      * Writes only `status` and `updatedAt` on the booking, as the owner rule requires.
      * @param reservationId A single reservation document ID, already validated.
      * @param status The new stored status.
-     * @param action "accept" or "reject", for the denied message and log.
+     * @param action "reject", for the denied message and log.
      * @param allowed Whether the stored booking may make this change.
      * @param notAllowed Shown when [allowed] is false.
      * @param notice Writes the entrant's message from the booking and campsite name.
