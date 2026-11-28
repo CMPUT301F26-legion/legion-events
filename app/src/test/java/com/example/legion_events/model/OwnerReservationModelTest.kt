@@ -55,14 +55,19 @@ class OwnerReservationModelTest {
         }
     }
 
-    @Test fun rejectionNoticeNamesTheCampsiteStayAndOptionalReason() {
+    @Test fun confirmedCancellationNoticeNamesTheCampsiteStayAndOptionalReason() {
         val stay = booking(july4, july4 + 3 * day)
-        assertEquals("The owner rejected your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027. " +
+        assertEquals("The owner cancelled your reservation at Two Jack Lakeside for Jul 4, 2027 to Jul 7, 2027. " +
             "Reason: Fire ban", rejectionNotice(stay, "Two Jack Lakeside", "Fire ban"))
-        assertEquals("The owner rejected your reservation for Jul 4, 2027 to Jul 7, 2027.",
+        assertEquals("The owner cancelled your reservation for Jul 4, 2027 to Jul 7, 2027.",
             rejectionNotice(stay, null, null))
-        assertEquals("The owner rejected your reservation for Jul 4, 2027 to Jul 7, 2027.",
+        assertEquals("The owner cancelled your reservation for Jul 4, 2027 to Jul 7, 2027.",
             rejectionNotice(stay, " ", " "))
+    }
+
+    @Test fun anUnconfirmedRequestStillReceivesARejectionNotice() {
+        assertEquals("The owner rejected your reservation for Jul 4, 2027 to Jul 5, 2027.",
+            rejectionNotice(booking(status = Reservation.STATUS_REQUESTED), null, null))
     }
 
     @Test fun rejectionNoticeStaysWithinTheNoticeLimit() {

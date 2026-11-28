@@ -175,7 +175,7 @@ class OwnerReservationsControllerTest {
         assertNull(controller.state.value.viewing)
     }
 
-    @Test fun rejectingSendsTheTrimmedReasonAndMovesTheBookingToCancelled() = runTest(dispatcher) {
+    @Test fun cancellingConfirmedBookingSendsTheTrimmedReasonAndMovesItToCancelled() = runTest(dispatcher) {
         val stay = entry("stay", at + day, at + 2 * day, campsite = "creek")
         repository.bookings["creek"] = listOf(stay)
         val controller = loaded()
@@ -189,7 +189,7 @@ class OwnerReservationsControllerTest {
         runCurrent()
         assertEquals(listOf("stay" to "Fire ban"), repository.rejected)
         assertNull(controller.state.value.rejecting)
-        assertEquals("Reservation rejected. The entrant was notified.", controller.state.value.result)
+        assertEquals("Reservation cancelled. The entrant was notified.", controller.state.value.result)
         assertTrue(controller.state.value.active.isEmpty())
         assertEquals(listOf("stay"), controller.state.value.cancelled.ids())
         assertTrue(controller.state.value.bookedNights.isEmpty())
@@ -203,6 +203,7 @@ class OwnerReservationsControllerTest {
         controller.confirmReject()
         runCurrent()
         assertEquals(listOf("asked" to null), repository.rejected)
+        assertEquals("Booking request rejected. The entrant was notified.", controller.state.value.result)
         assertEquals(listOf("asked"), controller.state.value.cancelled.ids())
         assertTrue(controller.state.value.requestedNights.isEmpty())
     }
@@ -272,7 +273,7 @@ class OwnerReservationsControllerTest {
         repository.reject = { throw java.io.IOException("offline") }
         controller.confirmReject()
         runCurrent()
-        assertEquals("Could not reject the reservation. Check your connection and retry.",
+        assertEquals("Could not update the reservation. Check your connection and retry.",
             controller.state.value.rejecting?.error)
         controller.setRejectReason("Closed for repairs")
         assertNull(controller.state.value.rejecting?.error)

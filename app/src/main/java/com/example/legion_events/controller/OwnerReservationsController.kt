@@ -197,7 +197,7 @@ class OwnerReservationsController(
         mutableState.value = state.value.copy(rejecting = null)
     }
 
-    /** Rejects the booking, notifies the entrant, and reloads so it moves to the Cancelled tab. */
+    /** Cancels a confirmed stay or rejects a request, notifies the entrant, and reloads the lists. */
     fun confirmReject() {
         val draft = state.value.rejecting ?: return
         if (draft.inProgress) return
@@ -206,7 +206,9 @@ class OwnerReservationsController(
             try {
                 repository.rejectReservation(draft.reservation.id, draft.reason.trim().ifEmpty { null })
                 mutableState.value = state.value.copy(rejecting = null,
-                    result = "Reservation rejected. The entrant was notified.")
+                    result = if (draft.reservation.status == Reservation.STATUS_CONFIRMED)
+                        "Reservation cancelled. The entrant was notified."
+                    else "Booking request rejected. The entrant was notified.")
                 load { loadBookings(state.value.selectedCampsiteId) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -299,6 +301,6 @@ class OwnerReservationsController(
         /** Shown when campsites or bookings cannot be read. */
         const val LOAD_FAILED = "Could not load your reservations. Check your connection and retry."
         /** Shown when a rejection fails for an unexpected reason. */
-        const val REJECT_FAILED = "Could not reject the reservation. Check your connection and retry."
+        const val REJECT_FAILED = "Could not update the reservation. Check your connection and retry."
     }
 }

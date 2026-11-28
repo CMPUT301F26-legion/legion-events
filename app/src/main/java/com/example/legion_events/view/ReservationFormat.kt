@@ -23,6 +23,7 @@ internal fun reservationStatusText(status: String): String = when (status) {
     "pending" -> "Pending"
     "completed" -> "Completed"
     "cancelled" -> "Cancelled"
-    "rejected" -> "Rejected"
+    // Owner cancellations retain the existing rejected state; processing releases their nights.
+    "rejected" -> "Cancelled"
     else -> "Unknown"
 }

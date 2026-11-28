@@ -141,7 +141,7 @@ fun BookingOfferScreen(
                                         style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                     Text(when (status) {
                                         "Open offer" -> "You have an opportunity to book through this lottery. Review the response deadline before deciding."
-                                        "Awaiting confirmation" -> "You accepted this offer. Your booking request is awaiting confirmation; no nights are reserved yet."
+                                        "Confirming reservation" -> "You accepted this offer. Your reservation is being processed automatically; no owner approval is needed. Dates are reserved only after confirmation."
                                         "Declined" -> "You declined this offer."
                                         "Used" -> "This offer has already been used to book."
                                         else -> "The response deadline has passed. This offer is no longer available."
@@ -279,7 +279,7 @@ private fun offerStatus(offer: BookingOffer, expired: Boolean = false): String =
     expired || (offer.status == BookingOffer.STATUS_OPEN && offer.expiresAt?.let { it <= Timestamp.now() } == true) -> "Expired"
     offer.status == BookingOffer.STATUS_OPEN -> "Open offer"
     offer.status == BookingOffer.STATUS_DECLINED -> "Declined"
-    offer.status == BookingOffer.STATUS_ACCEPTED -> "Awaiting confirmation"
+    offer.status == BookingOffer.STATUS_ACCEPTED -> "Confirming reservation"
     offer.status == BookingOffer.STATUS_USED -> "Used"
     offer.status == BookingOffer.STATUS_EXPIRED -> "Expired"
     else -> "Unavailable"

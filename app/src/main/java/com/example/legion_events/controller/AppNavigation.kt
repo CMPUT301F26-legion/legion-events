@@ -560,6 +560,17 @@ fun AppNavigation(
                             checkNotNull(userId), bookings, createSavedStateHandle(), bookingRequestsEnabled) }
                     })
                     val information by booking.state.collectAsStateWithLifecycle()
+                    // Open the saved receipt only after processing has actually reserved the nights.
+                    // Replace selection so Back cannot reopen an already accepted booking attempt.
+                    LaunchedEffect(information.result?.id, information.result?.status) {
+                        val confirmed = information.result?.takeIf {
+                            it.status == com.example.legion_events.model.Reservation.STATUS_CONFIRMED
+                        } ?: return@LaunchedEffect
+                        navController.navigate(reservationConfirmationRoute(confirmed.id)) {
+                            popUpTo(BOOKING_FLOW_PATTERN) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
                     LifecycleResumeEffect(booking) {
                         booking.startObserving()
                         onPauseOrDispose { booking.stopObserving() }

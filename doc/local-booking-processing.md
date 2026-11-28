@@ -19,10 +19,16 @@ owner approval is required. The entrant must explicitly confirm the reviewed sta
    immediately checks owned records and checks again every five seconds, after
    each previous check completes.
 5. The entrant selects dates and guests, agrees to the policies, reviews, and
-   confirms. A saved request shows **Awaiting confirmation**. That screen listens
-   for the outcome and shows **Reservation confirmed** only after the transaction
-   commits. **View booking** opens the saved receipt. Inbox also contains a booking
-   confirmation that opens the booking details.
+   confirms. A saved request shows **Confirming your reservation…**. That screen
+   listens for the outcome and automatically opens the saved **Reservation
+   confirmed** receipt only after the transaction reserves every selected night.
+   No separate owner approval is needed. Inbox also contains a booking confirmation
+   that opens the booking details.
+6. The owner can use **Cancel reservation** on a confirmed booking, confirm the
+   cancellation, and optionally give a reason. The entrant receives a cancellation
+   notice and the foreground processor releases the dates. This reuses the existing
+   owner-rejection storage/cleanup contract (`status: rejected`), displayed as
+   **Cancelled**. Unconfirmed requests retain a separate **Reject request** action.
 
 Closing or disconnecting the owner app leaves requests pending. Reopening it
 catches up. There is no guaranteed processing while the owner app is closed.

@@ -255,7 +255,7 @@ private fun BookingResult(state: BookingFlowState, actions: BookingFlowActions) 
         Text(when (result.status) {
             Reservation.STATUS_CONFIRMED -> "Reservation confirmed"
             Reservation.STATUS_REJECTED -> "Request not confirmed"
-            Reservation.STATUS_REQUESTED -> "Awaiting confirmation"
+            Reservation.STATUS_REQUESTED -> "Confirming your reservation…"
             else -> "Booking request status: ${reservationStatusText(result.status)}"
         }, style = MaterialTheme.typography.headlineSmall)
         Text("Request reference: ${result.id}")
@@ -264,7 +264,10 @@ private fun BookingResult(state: BookingFlowState, actions: BookingFlowActions) 
         Text("${result.guestCount} ${if (result.guestCount == 1) "guest" else "guests"} · ${shortPrice(result.totalPrice)} CAD total")
         when (result.status) {
             Reservation.STATUS_REQUESTED -> {
-                Text("Your request was received. The campsite owner's app processes it while open and connected. This screen updates automatically after confirmation; no dates are held yet.")
+                CircularProgressIndicator()
+                Text("We're checking and reserving your selected dates. Your confirmation will appear automatically when your booking is complete. No owner approval is needed.")
+                Text("You can leave this screen and check your booking later. Your dates are reserved only after confirmation.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = actions.onReload) { Text("Check request status") }
             }
             Reservation.STATUS_REJECTED -> {
