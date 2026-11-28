@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.legion_events.data.ReservationEntry
 import com.example.legion_events.data.ReservationRepository
+import com.example.legion_events.model.Reservation
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -27,7 +28,7 @@ enum class ReservationTab { ACTIVE, PAST, CANCELLED }
  * State displayed in S10's Active, Past, and Cancelled tabs.
  * @property entries Upcoming and ongoing confirmed stays, ordered by check-in and then ID.
  * @property pastEntries Finished confirmed stays, ordered by latest checkout and then ID.
- * @property cancelledEntries Completed cancellations, newest completion first.
+ * @property cancelledEntries Completed cancellations and owner-cancelled (`rejected`) bookings, newest first.
  * @property selectedTab Stay period currently displayed.
  * @property loading Whether a read is pending.
  * @property error Safe request failure message, or null.
@@ -103,7 +104,9 @@ class ReservationsController(
                 .sortedWith(compareBy<ReservationEntry> { it.reservation.startDate }.thenBy { it.reservation.id }),
             pastEntries = entries.filter { it.reservation.isPast(at) }
                 .sortedWith(compareByDescending<ReservationEntry> { it.reservation.endDate }.thenBy { it.reservation.id }),
-            cancelledEntries = entries.filter { it.reservation.cancellationCompleted() }
+            cancelledEntries = entries.filter {
+                it.reservation.cancellationCompleted() || it.reservation.status == Reservation.STATUS_REJECTED
+            }
                 .sortedWith(compareByDescending<ReservationEntry> { it.reservation.updatedAt }.thenBy { it.reservation.id }),
             selectedTab = state.value.selectedTab, loading = false)
     }

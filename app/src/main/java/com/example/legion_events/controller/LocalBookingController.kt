@@ -8,12 +8,19 @@ import com.example.legion_events.data.LocalBookingRepository
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-/** Rechecks on reopening and every five seconds; failures are visible and never imply success. */
+/**
+ * Rechecks on reopening and whenever an owned reservation changes. Otherwise it polls every five
+ * seconds, doubling up to one minute while nothing is processed, to limit Firestore reads.
+ * Failures are visible and never imply success.
+ */
 class LocalBookingController(
     private val repository: LocalBookingRepository,
     private val log: (Throwable) -> Unit = { Log.w("LocalBookings", it.message, it) },
@@ -31,10 +38,19 @@ class LocalBookingController(
         stop()
         ownerId = userId
         session = viewModelScope.launch {
+            val wake = Channel<Unit>(Channel.CONFLATED)
+            launch {
+                // The first snapshot is the state the first check already reads. Polling continues if the listener fails.
+                repository.reservationChanges(userId).drop(1).catch { log(it) }.collect { wake.trySend(Unit) }
+            }
+            var wait = MIN_CHECK_INTERVAL_MS
             while (true) {
                 val failures = try {
                     val result = repository.process(userId)
-                    if (result.completed > 0) mutableRevision.value++
+                    if (result.completed > 0) {
+                        mutableRevision.value++
+                        wait = MIN_CHECK_INTERVAL_MS
+                    }
                     result.failures
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) { listOf(error) }
@@ -47,7 +63,8 @@ class LocalBookingController(
                 }
                 if (message == null) dismissed = null
                 mutableError.value = message.takeIf { it != dismissed }
-                delay(5_000)
+                withTimeoutOrNull(wait) { wake.receive() }
+                wait = minOf(wait * 2, MAX_CHECK_INTERVAL_MS)
             }
         }
     }
@@ -62,4 +79,11 @@ class LocalBookingController(
 
     fun retry() { val uid = ownerId ?: return; stop(); start(uid) }
     fun dismiss() { dismissed = mutableError.value; mutableError.value = null }
+
+    companion object {
+        /** Poll interval after processing something, and the first interval after starting. */
+        const val MIN_CHECK_INTERVAL_MS = 5_000L
+        /** Longest poll interval while idle; owned reservation changes still wake the processor at once. */
+        const val MAX_CHECK_INTERVAL_MS = 60_000L
+    }
 }

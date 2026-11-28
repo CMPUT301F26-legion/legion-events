@@ -81,6 +81,12 @@ class FirebaseLocalBookingRepositoryTest {
         assertFalse(writes.containsKey("reservations/broken"))
     }
 
+    @Test fun accountWithoutOwnedLotteriesSkipsReservationProcessing() = runTest {
+        documents.remove("lotteries/draw")
+        assertEquals(LocalBookingResult(0), repository.process("owner"))
+        assertTrue(writes.isEmpty())
+    }
+
     @Test fun occupiedNightRejectsOnlyThisAttemptAndPreservesUnexpiredOffer() = runTest {
         documents["bookedNights/camp_${nights[0]}"] = mutableMapOf("reservationId" to "other", "campsiteId" to "camp")
         assertTrue(repository.confirm("request", "owner"))

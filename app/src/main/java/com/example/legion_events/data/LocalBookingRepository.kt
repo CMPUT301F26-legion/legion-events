@@ -8,6 +8,10 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.tasks.await
 
 /** Independent failures never prevent another campsite's requests from progressing. */
@@ -16,6 +20,12 @@ data class LocalBookingResult(val completed: Int, val failures: List<Throwable> 
 /** Checks only the signed-in owner's records; never needs service-account credentials. */
 interface LocalBookingRepository {
     suspend fun process(ownerId: String): LocalBookingResult
+
+    /**
+     * Emits whenever one of the owner's reservations changes, so new requests and cancellation
+     * requests are processed without waiting for the next poll. The first emission is the current state.
+     */
+    fun reservationChanges(ownerId: String): Flow<Unit> = emptyFlow()
 }
 
 /**
@@ -30,6 +40,12 @@ class FirebaseLocalBookingRepository(
 ) : LocalBookingRepository {
     override suspend fun process(ownerId: String): LocalBookingResult {
         checkAccount(ownerId)
+        // Every reservation and decline belongs to an owned lottery, and lotteries are never deleted,
+        // so accounts that own none skip the other reads.
+        val lotteries = firestore.collection("lotteries").whereEqualTo("ownerId", ownerId)
+            .get(Source.SERVER).await().documents
+        checkAccount(ownerId)
+        if (lotteries.isEmpty()) return LocalBookingResult(0)
         val requests = firestore.collection("reservations").whereEqualTo("ownerId", ownerId)
             .get(Source.SERVER).await().documents
         checkAccount(ownerId)
@@ -48,9 +64,6 @@ class FirebaseLocalBookingRepository(
             .sortedWith(compareBy<DocumentSnapshot> { it.get("createdAt") as? Timestamp }.thenBy { it.id })
             .forEach { attempt("reservation ${it.id}") { confirm(it.id, ownerId) } }
         attempt("owned lottery declines") {
-          val lotteries = firestore.collection("lotteries").whereEqualTo("ownerId", ownerId)
-              .get(Source.SERVER).await().documents
-          checkAccount(ownerId)
           lotteries.filter { it.get("winnersDrawn") == true }.forEach { lottery ->
             attempt("declines for lottery ${lottery.id}") {
                 val offers = firestore.collection("offers").whereEqualTo("lotteryId", lottery.id)
@@ -64,6 +77,13 @@ class FirebaseLocalBookingRepository(
           false
         }
         return LocalBookingResult(completed, failures)
+    }
+
+    /** Listens to the owner's reservations; only changed documents are read after the first snapshot. */
+    override fun reservationChanges(ownerId: String): Flow<Unit> = callbackFlow {
+        val registration = firestore.collection("reservations").whereEqualTo("ownerId", ownerId)
+            .addSnapshotListener { _, error -> if (error != null) close(error) else trySend(Unit) }
+        awaitClose { registration.remove() }
     }
 
     /** Explicit acceptance is the approval; the owner never needs to press Accept. */

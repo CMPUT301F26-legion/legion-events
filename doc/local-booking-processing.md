@@ -16,8 +16,11 @@ owner approval is required. The entrant must explicitly confirm the reviewed sta
    keeps its existing anonymous Firebase account. Use the account that owns the
    campsite on the owner device.
 4. Keep the owner's app open and online on any screen. Its foreground controller
-   immediately checks owned records and checks again every five seconds, after
-   each previous check completes.
+   immediately checks owned records, and again as soon as one of the owner's
+   reservations changes (a new request or a cancellation request). Otherwise it
+   polls every five seconds after each check completes, doubling up to once a
+   minute while nothing is processed, so declines may take up to a minute.
+   Accounts that own no lottery skip every read after the owned-lottery query.
 5. The entrant selects dates and guests, agrees to the policies, reviews, and
    confirms. A saved request shows **Confirming your reservation…**. That screen
    listens for the outcome and automatically opens the saved **Reservation

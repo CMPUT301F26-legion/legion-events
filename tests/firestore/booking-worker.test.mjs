@@ -44,11 +44,13 @@ test('entrants and owners can read the final reservation and offer, but cannot r
   }
 });
 for (const path of ['offerReplacements/draw_entrant', 'reservationReleases/booking']) {
-  test(`${path.split('/')[0]} markers are private and immutable to clients`, async () => {
+  test(`${path.split('/')[0]} markers are owner-readable and immutable to clients`, async () => {
     await seed(path, { processedAt: serverTimestamp() });
+    // The foreground owner processor reads its own markers; entrants and other users cannot.
+    await assertSucceeds(getDoc(doc(db('owner'), path)));
     for (const uid of ['entrant', 'owner', 'other']) {
       const ref = doc(db(uid), path);
-      await assertFails(getDoc(ref));
+      if (uid !== 'owner') await assertFails(getDoc(ref));
       await assertFails(setDoc(ref, { processedAt: serverTimestamp() }));
       await assertFails(deleteDoc(ref));
     }

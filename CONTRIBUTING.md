@@ -140,9 +140,9 @@ BookingRepository / FirebaseBookingRepository provide current choices, explicit
 acceptance, and request recovery. BookingRequest, BookingOptions, and BookedNight
 define dates, price, policy, and lock contracts. BookingFlowController uses these
 contracts for selection, policy agreement, fresh review, and explicit submission;
-see [booking UI](doc/booking-ui.md). Submission defaults off until the compatible
-worker is operational; build with `-PbookingRequestsEnabled=true` only after
-verifying that setup.
+see [booking UI](doc/booking-ui.md). Submission is enabled by default because the
+owner's app processes requests (see [foreground booking](doc/local-booking-processing.md));
+build with `-PbookingRequestsEnabled=false` to allow selection and review only.
 See [booking flow](doc/booking-flow.md) for lifecycle, rollout, and checks.
 
 ## Reservations
@@ -150,8 +150,9 @@ See [booking flow](doc/booking-flow.md) for lifecycle, rollout, and checks.
 The **Bookings** tab opens S10's Active, Past, and Cancelled tabs. A stay is
 active while its status is `confirmed` and checkout is in the future, including stays
 in progress. Past shows confirmed stays at or after checkout, newest checkout first.
-Rejected and unconfirmed bookings are excluded. Worker-completed cancellations
-appear in Cancelled, newest cancellation first, so their receipts remain accessible.
+Rejected and unconfirmed bookings are excluded from both. Completed cancellations and
+owner-cancelled (`rejected`) bookings appear in Cancelled, newest first, so their receipts
+remain accessible. Check-in and checkout are shown as UTC calendar days, matching S17.
 `ReservationsController` filters owned bookings and moves stays to Past at checkout
 without a database write. Switching tabs reuses the same read; `SavedStateHandle`
 retains the selection across recreation and when returning from details.
