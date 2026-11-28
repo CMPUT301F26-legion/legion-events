@@ -10,6 +10,7 @@ package com.example.legion_events.controller
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.legion_events.model.nightFormat
 import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.model.Campsite
 import kotlinx.coroutines.CancellationException
@@ -53,6 +54,22 @@ data class CampsiteListState(
     }
 }
 
+/**
+ * Returns whether a campsite's capacity is strictly greater than a guest count.
+ * @param campsite The listing; its [Campsite.maxGuests] is compared.
+ * @param guests The guest count to compare against.
+ * @return True if `maxGuests > guests`.
+ */
+fun campsiteGuestMoreThan(campsite: Campsite, guests: Int): Boolean = campsite.maxGuests > guests
+
+/**
+ * Returns whether a campsite's capacity is strictly less than a guest count.
+ * @param campsite The listing; its [Campsite.maxGuests] is compared.
+ * @param guests The guest count to compare against.
+ * @return True if `maxGuests < guests`.
+ */
+fun campsiteGuestLessThan(campsite: Campsite, guests: Int): Boolean = campsite.maxGuests < guests
+
 /** Removes case and accent differences when matching search words. */
 private fun normalized(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFD)
     .replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
@@ -91,6 +108,19 @@ class CampsiteListController(
         mutableState.value = state.value.copy(filter = filter)
     }
 
+    /**
+     * Returns whether a loaded active campsite is offered on one night.
+     * Checks the owner's `availableNights` only; nights already held by bookings are not checked.
+     * @param date A night in `YYYY-MM-DD` format, e.g. "2026-12-04".
+     * @param campsiteId The campsite document ID.
+     * @return True if the campsite is loaded and lists [date]; false if it does not, or is not loaded.
+     * @throws IllegalArgumentException If [date] is not a real `YYYY-MM-DD` date.
+     */
+    fun filterByDate(date: String, campsiteId: String): Boolean {
+        require(isNightKey(date)) { "Use a YYYY-MM-DD date." }
+        return state.value.campsites.find { it.id == campsiteId }?.availableNights?.contains(date) == true
+    }
+
     /** Reloads listings after a failure, keeping only one active listener. */
     fun retry() {
         listener?.cancel()
@@ -108,4 +138,11 @@ class CampsiteListController(
             }
         }
     }
+}
+
+/** True for a real calendar date written exactly as `YYYY-MM-DD`, matching stored night keys. */
+private fun isNightKey(date: String): Boolean {
+    if (!Regex("\\d{4}-\\d{2}-\\d{2}").matches(date)) return false
+    val format = nightFormat().apply { isLenient = false }
+    return runCatching { format.format(format.parse(date)!!) == date }.getOrDefault(false)
 }

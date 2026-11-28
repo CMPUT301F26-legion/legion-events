@@ -64,6 +64,30 @@ class CampsiteListControllerTest {
         assertFalse(controller.state.value.loading)
     }
 
+    @Test fun guestComparisonsAreStrictAgainstMaxGuests() {
+        val meadow = sites.single { it.id == "meadow" }   // maxGuests = 4
+        assertTrue(campsiteGuestMoreThan(meadow, 3))
+        assertFalse(campsiteGuestMoreThan(meadow, 4))
+        assertFalse(campsiteGuestMoreThan(meadow, 5))
+        assertTrue(campsiteGuestLessThan(meadow, 5))
+        assertFalse(campsiteGuestLessThan(meadow, 4))
+        assertFalse(campsiteGuestLessThan(meadow, 3))
+    }
+
+    @Test fun filterByDateChecksTheLoadedCampsitesOfferedNights() = runTest(dispatcher) {
+        val open = Campsite("lake", "carol", "Lake", "Canmore", 3, 5000, availableNights = listOf("2026-12-04", "2026-12-05"))
+        val repository = object : CampsiteRepository { override fun observeCampsites() = flowOf(sites + open) }
+        val controller = controller(repository, SavedStateHandle())
+        runCurrent()
+        assertTrue(controller.filterByDate("2026-12-04", "lake"))
+        assertFalse(controller.filterByDate("2026-12-06", "lake"))
+        assertFalse(controller.filterByDate("2026-12-04", "pine"))
+        assertFalse(controller.filterByDate("2026-12-04", "missing"))
+        for (bad in listOf("2026-12-4", "2026-02-30", "04/12/2026", "", "2026-12-04T00:00")) {
+            assertThrows(IllegalArgumentException::class.java) { controller.filterByDate(bad, "lake") }
+        }
+    }
+
     @Test fun retryRecoversFromFailureAndKeepsOnlyOneListener() = runTest(dispatcher) {
         var fail = true
         var active = 0
