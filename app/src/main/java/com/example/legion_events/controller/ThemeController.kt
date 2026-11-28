@@ -1,12 +1,13 @@
 /*
  * ThemeController.kt
  *
- * Purpose: Holds the app-wide light or dark appearance and saves changes.
+ * Purpose: Holds the app-wide light or dark appearance and text size, and saves changes.
  * Role: Controller in MVC; ThemeToggle changes it and ThemePreferences stores it.
- * Outstanding issues: Font size and button size (WOW accessibility) are a later part.
+ * Outstanding issues: Button size (WOW accessibility) is a later part.
  */
 package com.example.legion_events.controller
 
+import com.example.legion_events.model.TextSize
 import androidx.lifecycle.ViewModel
 import com.example.legion_events.data.ThemePreferences
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,5 +28,17 @@ class ThemeController(private val preferences: ThemePreferences) : ViewModel() {
         if (enabled == darkTheme.value) return
         preferences.setDarkTheme(enabled)
         mutableDarkTheme.value = enabled
+    }
+
+    /** Current text size, changed only by this controller. */
+    private val mutableTextSize = MutableStateFlow(preferences.textSize())
+    /** Read-only text size consumed by the app's root theme. */
+    val textSize = mutableTextSize.asStateFlow()
+
+    /** Resizes all text in the app and remembers the selection for the next launch. */
+    fun setTextSize(size: TextSize) {
+        if (size == textSize.value) return
+        preferences.setTextSize(size)
+        mutableTextSize.value = size
     }
 }

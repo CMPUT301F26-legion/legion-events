@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val darkTheme by theme.darkTheme.collectAsStateWithLifecycle()
+            val textSize by theme.textSize.collectAsStateWithLifecycle()
             // Keep system bar icons readable even when the app choice differs from the device mode.
             SideEffect {
                 enableEdgeToEdge(
@@ -123,10 +124,10 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(LightBackground.toArgb(), DarkForest.toArgb()) { darkTheme },
                 )
             }
-            LegioneventsTheme(darkTheme = darkTheme) {
+            LegioneventsTheme(darkTheme = darkTheme, textScale = textSize.scale) {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    topBar = { ThemeToggle(darkTheme, theme::setDarkTheme) },
+                    topBar = { ThemeToggle(darkTheme, theme::setDarkTheme, textSize, theme::setTextSize) },
                     snackbarHost = { SnackbarHost(snackbar) },
                 ) { innerPadding ->
                     Box(Modifier.padding(innerPadding)) {

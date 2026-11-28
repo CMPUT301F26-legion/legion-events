@@ -18,6 +18,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -29,6 +30,7 @@ import com.example.legion_events.data.CampsiteRepository
 import com.example.legion_events.data.ThemePreferences
 import com.example.legion_events.data.UserRepository
 import com.example.legion_events.model.Campsite
+import com.example.legion_events.model.TextSize
 import com.example.legion_events.model.UserProfile
 import com.example.legion_events.ui.theme.DarkForest
 import com.example.legion_events.ui.theme.ForestGreen
@@ -98,6 +100,38 @@ class ThemeSelectionTest {
         compose.runOnIdle {
             assertEquals(LightBackground, palette.background)
             assertFalse(ThemePreferences(preferences).isDarkTheme())
+        }
+    }
+
+    @Test fun textSizeScalesAllTextPersistsAndKeepsDarkMode() {
+        val theme = ThemeController(ThemePreferences(preferences))
+        var baseScale = 0f
+        var fontScale = 0f
+        compose.setContent {
+            baseScale = LocalDensity.current.fontScale
+            val darkTheme by theme.darkTheme.collectAsStateWithLifecycle()
+            val textSize by theme.textSize.collectAsStateWithLifecycle()
+            LegioneventsTheme(darkTheme = darkTheme, textScale = textSize.scale) {
+                val scale = LocalDensity.current.fontScale
+                SideEffect { fontScale = scale }
+                ThemeToggle(darkTheme, theme::setDarkTheme, textSize, theme::setTextSize)
+            }
+        }
+        compose.onNodeWithContentDescription("Default text").assertIsSelected()
+        compose.runOnIdle { assertEquals(baseScale, fontScale, 0.001f) }
+        compose.onNodeWithContentDescription("Large text").performClick().assertIsSelected()
+        compose.onNodeWithContentDescription("Default text").assertIsNotSelected()
+        compose.runOnIdle {
+            assertEquals(baseScale * 1.3f, fontScale, 0.001f)
+            assertEquals(TextSize.LARGE, ThemeController(ThemePreferences(preferences)).textSize.value)
+        }
+        compose.onNodeWithText("Dark mode").performClick().assertIsOn()
+        compose.onNodeWithContentDescription("Large text").assertIsSelected()
+        compose.onNodeWithContentDescription("Small text").performClick()
+        compose.runOnIdle {
+            assertEquals(baseScale * 0.85f, fontScale, 0.001f)
+            assertEquals(TextSize.SMALL, ThemePreferences(preferences).textSize())
+            assertTrue(ThemePreferences(preferences).isDarkTheme())
         }
     }
 

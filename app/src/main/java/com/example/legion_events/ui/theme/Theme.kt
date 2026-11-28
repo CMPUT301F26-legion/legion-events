@@ -12,6 +12,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 
 /** Shared dark palette; components use the same color roles as light mode. */
@@ -75,16 +78,23 @@ private val LightColorScheme = lightColorScheme(
  * Components read MaterialTheme.colorScheme so they adapt without their own mode checks.
  *
  * @param darkTheme Selected appearance; defaults to the device mode for previews and standalone use.
+ * @param textScale Multiplier for all text, from the selected [com.example.legion_events.model.TextSize].
  * @param content App screens and controls that should inherit the theme.
  */
 @Composable
 fun LegioneventsTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    textScale: Float = 1f,
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-        typography = Typography,
-        content = content,
-    )
+    // Scaling fontScale resizes every sp-based text, including Material components' own labels,
+    // and multiplies with the device's font size setting instead of replacing it.
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * textScale)) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
+            typography = Typography,
+            content = content,
+        )
+    }
 }
