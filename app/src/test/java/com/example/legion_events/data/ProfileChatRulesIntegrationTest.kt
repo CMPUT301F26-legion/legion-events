@@ -86,6 +86,34 @@ class ProfileChatRulesIntegrationTest {
         expect(200, saved); assertTrue(saved.second.contains("Latest reply"))
     }
 
+    /** Either user of a sorted pair can start a campsite-free thread; both can message and nobody else can read it. */
+    @Test fun peerToPeerThreadsAreCreatedByEitherUserAndStayPrivate() {
+        val (low, high) = listOf(alice, outsider).sorted()
+        val peerThread = "peer-$tag"
+        commit(high, listOf(update("conversations/$peerThread", peer(low, high), create = true)))
+        val hello = "peer-hello-$tag"
+        commit(alice, send(hello, alice, outsider, "Hi peer", peerThread))
+        commit(outsider, send("peer-reply-$tag", outsider, alice, "Hi back", peerThread))
+        for (uid in listOf(alice, outsider)) assertTrue(query(uid, "messages", "conversationId", peerThread).contains("messages/$hello\""))
+        query(owner, "messages", "conversationId", peerThread, expected = 403)
+        expect(403, request("GET", "$root/conversations/$peerThread", uid = owner))
+    }
+
+    /** Peer threads must be sorted, include the creator, carry no campsite context, and name two active users. */
+    @Test fun invalidPeerToPeerThreadsAreRejected() {
+        val disabled = "disabled-$tag"
+        seed("users/$disabled", mapOf("name" to "", "email" to "", "phone" to "", "role" to "user", "disabled" to true,
+            "photoId" to null, "notificationsEnabled" to true, "fcmToken" to null))
+        val (low, high) = listOf(alice, outsider).sorted()
+        fun attempt(uid: String, fields: Map<String, Any?>) =
+            commit(uid, listOf(update("conversations/bad-${UUID.randomUUID()}", fields, create = true)), expected = 403)
+        attempt(alice, peer(high, low))
+        attempt(owner, peer(low, high))
+        attempt(alice, peer(low, high) + ("lotteryId" to "lottery"))
+        attempt(alice, peer(alice, alice))
+        listOf(alice, disabled).sorted().let { (a, b) -> attempt(alice, peer(a, b)) }
+    }
+
     /** Deleting the profile and its current owned image in the same commit is allowed by the real rules. */
     @Test fun profileAndCurrentPhotoCanBeDeletedAtomically() {
         commit(alice, listOf(mapOf("delete" to prefix + "photos/$photo"), mapOf("delete" to prefix + "users/$alice")))
@@ -108,10 +136,14 @@ class ProfileChatRulesIntegrationTest {
     private fun conversation(entrant: String) = mapOf("campsiteId" to site, "entrantId" to entrant, "ownerId" to owner,
         "lotteryId" to null, "reservationId" to null, "lastMessage" to "")
 
+    /** Defines a campsite-free peer-to-peer thread; the app stores its two users sorted. */
+    private fun peer(entrant: String, owner: String) = mapOf("campsiteId" to null, "entrantId" to entrant, "ownerId" to owner,
+        "lotteryId" to null, "reservationId" to null, "lastMessage" to "")
+
     /** Matches the app's atomic immutable-message and preview writes. */
-    private fun send(id: String, sender: String, receiver: String, text: String) = listOf(
-        update("messages/$id", mapOf("conversationId" to thread, "senderId" to sender, "receiverId" to receiver,
-            "text" to text, "read" to false), create = true), update("conversations/$thread", mapOf("lastMessage" to text)))
+    private fun send(id: String, sender: String, receiver: String, text: String, conversation: String = thread) = listOf(
+        update("messages/$id", mapOf("conversationId" to conversation, "senderId" to sender, "receiverId" to receiver,
+            "text" to text, "read" to false), create = true), update("conversations/$conversation", mapOf("lastMessage" to text)))
 
     /** Builds typed REST document fields and server timestamp transforms. */
     private fun update(path: String, values: Map<String, Any?>, create: Boolean = false): Map<String, Any?> {

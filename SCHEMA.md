@@ -90,6 +90,16 @@ recreation or retry. Only the entrant starts a thread, against an active campsit
 owned by a different user. Both participants can reply and reopen an existing thread,
 including when the listing is no longer available.
 
+### Peer-to-peer threads
+
+A conversation with `campsiteId` null is a peer-to-peer thread between two users, started with
+`startPeerToPeerConversation(otherUserId)`. `lotteryId` and `reservationId` must also be null. The two UIDs
+are stored sorted (`entrantId < ownerId`), so in these threads the fields carry no entrant or owner role. Its
+stable ID is the SHA-256 of `/<lowerUid>/<higherUid>`, which cannot match a campsite thread's key because
+campsite IDs are never blank. Either user may create it, and both users must have active (`disabled == false`)
+profiles. Messages and previews use the same rules as campsite threads. The S20 owner-message log skips
+peer-to-peer threads because they have no owner.
+
 Sending atomically creates an immutable message and updates only `lastMessage`
 and `updatedAt` on its conversation. Text is trimmed, nonempty, and at most 4000
 characters; `read` starts false. The sender is the current Auth UID and the receiver
@@ -382,5 +392,5 @@ gallery and cards already skip missing photos, and the owner can set a new cover
 
 S20 Admin logs read whole collections, which the rules allow for an admin:
 `notifications` for the notification log (US 03.08.01), and `ownerNotices` plus the
-`messages` whose `senderId` is their conversation's `ownerId` for the owner-to-entrant
+`messages` whose `senderId` is their campsite conversation's `ownerId` for the owner-to-entrant
 message log (US 03.12.01). Entrant replies are not listed.

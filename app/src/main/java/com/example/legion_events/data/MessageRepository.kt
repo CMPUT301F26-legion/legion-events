@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.Flow
 /**
  * A private thread with optional current campsite label and the viewing participant's UID.
  * @property conversation Stored membership and preview.
- * @property campsiteName Current campsite name, or null when unavailable.
+ * @property campsiteName Current campsite name, or null when unavailable or for a peer-to-peer thread.
  * @property myId Authenticated participant; used to distinguish sent messages in the view.
  */
 data class ConversationSummary(val conversation: Conversation, val campsiteName: String?, val myId: String)
@@ -25,6 +25,12 @@ interface MessageRepository {
     fun observeConversations(): Flow<List<ConversationSummary>>
     /** Opens one stable entrant–owner thread for an active campsite, reusing it on retry. */
     suspend fun startConversation(campsiteId: String): String
+    /**
+     * Opens one stable thread with another user, with no campsite; either user starting it reaches the same thread.
+     * @param otherUserId The other user's UID; must differ from the signed-in user and belong to an active account.
+     * @return The conversation ID.
+     */
+    suspend fun startPeerToPeerConversation(otherUserId: String): String
     /** Reads a participant-owned thread, or null when absent or inaccessible. */
     suspend fun getConversation(conversationId: String): ConversationSummary?
     /** Observes only this participant's selected thread, in chronological order. */

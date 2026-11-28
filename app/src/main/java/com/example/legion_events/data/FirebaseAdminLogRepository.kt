@@ -29,7 +29,7 @@ class FirebaseAdminLogRepository(private val firestore: FirebaseFirestore) : Adm
         val notices = async { firestore.collection("ownerNotices").get().await().documents }
         val conversations = async { firestore.collection("conversations").get().await().documents }
         val messages = async { firestore.collection("messages").get().await().documents }
-        val owners = conversations.await().associate { it.id to it.getString("ownerId") }
+        val owners = conversationOwners(conversations.await())
         notices.await().map { it.toNoticeEntry() } +
             messages.await().mapNotNull { it.toOwnerMessageEntry(owners) }
     }
@@ -39,6 +39,13 @@ class FirebaseAdminLogRepository(private val firestore: FirebaseFirestore) : Adm
         val instance: FirebaseAdminLogRepository by lazy { FirebaseAdminLogRepository(FirebaseFirestore.getInstance()) }
     }
 }
+
+/**
+ * Maps each campsite conversation's ID to its owner UID. Peer-to-peer threads (no campsite) are left out:
+ * they have no owner role, so their messages are not owner messages.
+ */
+internal fun conversationOwners(conversations: List<DocumentSnapshot>): Map<String, String?> =
+    conversations.filter { it.getString("campsiteId") != null }.associate { it.id to it.getString("ownerId") }
 
 /** Maps a `notifications/{id}` document; lottery results have no sender or body. */
 internal fun DocumentSnapshot.toNotificationEntry() = AdminLogEntry(

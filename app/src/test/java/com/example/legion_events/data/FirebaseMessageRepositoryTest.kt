@@ -150,6 +150,56 @@ class FirebaseMessageRepositoryTest {
         assertEquals(emptyList<String>(), pastContacts(threads, "nobody"))
     }
 
+    @Test fun peerToPeerStartWritesASortedCampsiteFreeThreadThatBothUsersShare() = runTest {
+        val key = peerConversationKey("alice", "bob")
+        val peer = mock(DocumentReference::class.java)
+        `when`(threads.document(key)).thenReturn(peer)
+        `when`(peer.set(anyMap<String, Any?>())).thenReturn(Tasks.forResult<Void>(null))
+        assertEquals(key, repository.startPeerToPeerConversation("bob"))
+        `when`(user.uid).thenReturn("bob")
+        assertEquals(key, repository.startPeerToPeerConversation("alice"))
+        verify(peer, times(2)).set(mapOf("campsiteId" to null, "entrantId" to "alice", "ownerId" to "bob",
+            "lotteryId" to null, "reservationId" to null, "lastMessage" to "",
+            "createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp()))
+        assertEquals(key, peerConversationKey("bob", "alice"))
+        assertNotEquals(key, conversationKey("pine", "alice", "bob"))
+        verify(site, never()).get()
+    }
+
+    @Test fun anExistingPeerThreadIsReopenedAndInvalidPeersAreRejected() = runTest {
+        val key = peerConversationKey("alice", "bob")
+        val peer = mock(DocumentReference::class.java)
+        val denied = mock(FirebaseFirestoreException::class.java)
+        val existing = doc(mapOf("campsiteId" to null, "entrantId" to "alice", "ownerId" to "bob", "lastMessage" to "Hi"), key)
+        `when`(threads.document(key)).thenReturn(peer)
+        `when`(peer.set(anyMap<String, Any?>())).thenReturn(Tasks.forException(denied))
+        `when`(peer.get(Source.SERVER)).thenReturn(Tasks.forResult(existing))
+        assertEquals(key, repository.startPeerToPeerConversation("bob"))
+        clearInvocations(firestore)
+        fails { repository.startPeerToPeerConversation("alice") }
+        fails { repository.startPeerToPeerConversation("nested/path") }
+        fails { repository.startPeerToPeerConversation(" ") }
+        verifyNoInteractions(firestore)
+    }
+
+    @Test fun peerThreadsMapWithoutACampsiteOnlyWhenTheirUsersAreSorted() {
+        val peer = doc(mapOf("campsiteId" to null, "entrantId" to "alice", "ownerId" to "bob", "lastMessage" to ""), "p").toConversation("bob")
+        assertTrue(peer.isPeerToPeer); assertNull(peer.campsiteId)
+        assertEquals("alice", peer.receiverFor("bob"))
+        assertFalse(conversation().toConversation("alice").isPeerToPeer)
+        assertThrows(Exception::class.java) {
+            doc(mapOf("campsiteId" to null, "entrantId" to "bob", "ownerId" to "alice", "lastMessage" to ""), "p").toConversation("bob")
+        }
+    }
+
+    @Test fun adminOwnerLogSkipsPeerThreads() {
+        fun stored(id: String, campsite: String?) = mock(DocumentSnapshot::class.java).also {
+            `when`(it.id).thenReturn(id); `when`(it.getString("campsiteId")).thenReturn(campsite); `when`(it.getString("ownerId")).thenReturn("bob")
+        }
+        val campsiteThread = stored("c", "pine"); val peerThread = stored("p", null)
+        assertEquals(mapOf("c" to "bob"), conversationOwners(listOf(campsiteThread, peerThread)))
+    }
+
     /** Wraps document mocks in a query result. */
     private fun snapshot(vararg documents: DocumentSnapshot) = mock(QuerySnapshot::class.java).also {
         `when`(it.documents).thenReturn(documents.toList())

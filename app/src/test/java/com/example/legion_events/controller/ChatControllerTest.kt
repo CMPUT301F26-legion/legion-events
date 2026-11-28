@@ -107,6 +107,35 @@ class ChatControllerTest {
         assertEquals(0, repository.listListeners)
     }
 
+    @Test fun relatedUsersAreListedInOrderAndMessagedOnesLinkToTheirThread() = runTest(dispatcher) {
+        repository.preview = "Hello"
+        val controller = MessagesController(repository) { listOf("owner", "bob") }
+        controller.resume(); runCurrent()
+        assertEquals(listOf(RelatedUserRow("owner", "Owner", listOf("Pine Ridge"), "thread"), RelatedUserRow("bob", "Entrant", emptyList(), null)),
+            controller.state.value.relatedUsers)
+        controller.pause()
+    }
+
+    @Test fun peerThreadsListTheirUserAsAContact() = runTest(dispatcher) {
+        repository.preview = "Hello"; repository.campsite = null
+        val controller = MessagesController(repository) { listOf("owner") }
+        controller.resume(); runCurrent()
+        assertEquals("Contact", controller.state.value.relatedUsers.single().role)
+        controller.pause()
+    }
+
+    @Test fun relatedUserFailureKeepsConversationsAndRetryRecovers() = runTest(dispatcher) {
+        var fail = true
+        val controller = MessagesController(repository) { if (fail) error("Denied") else listOf("owner") }
+        controller.resume(); runCurrent()
+        assertEquals("Could not load people. Retry.", controller.state.value.relatedError)
+        assertEquals(1, controller.state.value.conversations.size)
+        fail = false; controller.resume(); runCurrent()
+        assertNull(controller.state.value.relatedError)
+        assertEquals(listOf("owner"), controller.state.value.relatedUserIds)
+        controller.pause()
+    }
+
     /** Creates the controller in a real navigation-like ViewModelStore with a restorable draft. */
     private fun controller(saved: SavedStateHandle = SavedStateHandle()): ChatController = ViewModelProvider.create(store, viewModelFactory {
         initializer { ChatController(repository, saved, campsiteId = "pine") }
@@ -114,12 +143,15 @@ class ChatControllerTest {
 
     /** Counts subscriptions and explicit sends, with a simulated uncertain commit result. */
     private class FakeMessages : MessageRepository {
-        val summary = ConversationSummary(Conversation("thread", "pine", "alice", "owner", "", null, null), "Pine Ridge", "alice")
+        var preview = ""; var campsite: String? = "pine"
+        val summary get() = ConversationSummary(Conversation("thread", campsite, "alice", "owner", preview, null, null),
+            campsite?.let { "Pine Ridge" }, "alice")
         val messages = MutableStateFlow(emptyList<ChatMessage>())
         var starts = 0; var sends = 0; var listeners = 0; var listListeners = 0
         var available = true; var failSend = false
         val ids = mutableListOf<String>()
         override suspend fun startConversation(campsiteId: String): String { starts++; return "thread" }
+        override suspend fun startPeerToPeerConversation(otherUserId: String): String = error("Unexpected peer start")
         override suspend fun getConversation(conversationId: String) = summary.takeIf { available }
         override suspend fun getPastContacts(userId: String) = emptyList<String>()
         override fun observeMessages(conversationId: String) = messages.onStart { listeners++ }.onCompletion { listeners-- }

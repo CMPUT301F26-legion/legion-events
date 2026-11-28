@@ -50,6 +50,7 @@ class RelatedUsersTest {
         }
         override fun observeConversations() = error("Unused")
         override suspend fun startConversation(campsiteId: String) = error("Unused")
+        override suspend fun startPeerToPeerConversation(otherUserId: String) = error("Unused")
         override suspend fun getConversation(conversationId: String) = error("Unused")
         override fun observeMessages(conversationId: String) = error("Unused")
         override suspend fun send(conversationId: String, messageId: String, text: String) = error("Unused")

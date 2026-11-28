@@ -32,7 +32,7 @@ fun ChatScreen(state: ChatState, onBack: () -> Unit, onRetry: () -> Unit, onDraf
         Column(Modifier.fillMaxSize().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BackArrow(onBack)
-                Text(state.thread?.campsiteName ?: "Private conversation", style = MaterialTheme.typography.headlineSmall)
+                Text(state.thread?.campsiteName ?: if (state.thread?.conversation?.isPeerToPeer == true) "Direct message" else "Private conversation", style = MaterialTheme.typography.headlineSmall)
             }
             if (state.loading) CircularProgressIndicator()
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); Button(onClick = onRetry) { Text("Retry") } }
@@ -43,7 +43,8 @@ fun ChatScreen(state: ChatState, onBack: () -> Unit, onRetry: () -> Unit, onDraf
                         Surface(shape = MaterialTheme.shapes.medium,
                             color = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant) {
                             Column(Modifier.padding(12.dp).widthIn(max = 280.dp)) {
-                                Text(if (mine) "You" else if (message.senderId == state.thread?.conversation?.ownerId) "Owner" else "Entrant",
+                                Text(when { mine -> "You"; state.thread?.conversation?.isPeerToPeer == true -> "Them"
+                                    message.senderId == state.thread?.conversation?.ownerId -> "Owner"; else -> "Entrant" },
                                     style = MaterialTheme.typography.labelSmall)
                                 Text(message.text)
                             }

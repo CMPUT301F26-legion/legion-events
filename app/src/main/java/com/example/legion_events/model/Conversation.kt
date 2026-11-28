@@ -14,19 +14,25 @@ const val MAX_CHAT_LENGTH = 4000
 
 /**
  * Membership and preview stored in conversations/{id}.
+ *
+ * A campsite thread links an entrant with that campsite's owner. A peer-to-peer thread has no campsite;
+ * its two users are stored in sorted order (entrantId < ownerId), so those fields carry no role.
  * @property id Conversation document ID.
- * @property campsiteId Campsite the conversation concerns.
- * @property entrantId Entrant participant UID.
- * @property ownerId Campsite owner participant UID.
+ * @property campsiteId Campsite the conversation concerns, or null for a peer-to-peer thread.
+ * @property entrantId Entrant participant UID, or the lower UID of a peer-to-peer thread.
+ * @property ownerId Campsite owner participant UID, or the higher UID of a peer-to-peer thread.
  * @property lastMessage Latest committed message preview.
  * @property createdAt Server creation time, or null while pending.
  * @property updatedAt Latest server update time, or null while pending.
  * @property lotteryId Optional related lottery ID.
  * @property reservationId Optional related reservation ID.
  */
-data class Conversation(val id: String, val campsiteId: String, val entrantId: String, val ownerId: String,
+data class Conversation(val id: String, val campsiteId: String?, val entrantId: String, val ownerId: String,
     val lastMessage: String, val createdAt: Timestamp?, val updatedAt: Timestamp?,
     val lotteryId: String? = null, val reservationId: String? = null) {
+    /** True for a thread between two users with no campsite; entrant/owner roles do not apply. */
+    val isPeerToPeer: Boolean get() = campsiteId == null
+
     /** Returns the other participant, rejecting callers outside this conversation. */
     fun receiverFor(userId: String): String {
         require(entrantId != ownerId && userId in listOf(entrantId, ownerId)) { "This conversation is private." }

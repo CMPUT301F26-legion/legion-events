@@ -17,6 +17,22 @@ service cloud.firestore {
     function participant(c) {
       return activeUser() && (request.auth.uid == c.entrantId || request.auth.uid == c.ownerId);
     }
+    // An entrant opens a thread with an active campsite's owner, optionally about their lottery or booking.
+    function campsiteChat(c) {
+      return c.campsiteId != null && c.entrantId == request.auth.uid
+        && c.ownerId == campsite(c.campsiteId).ownerId && campsite(c.campsiteId).active
+        && (c.lotteryId == null || (lottery(c.lotteryId).ownerId == c.ownerId && c.campsiteId in lottery(c.lotteryId).campsiteIds))
+        && (c.reservationId == null || (get(/databases/$(database)/documents/reservations/$(c.reservationId)).data.userId == request.auth.uid
+          && get(/databases/$(database)/documents/reservations/$(c.reservationId)).data.campsiteId == c.campsiteId));
+    }
+    // A peer-to-peer thread has no campsite; its two active users are stored sorted, so they hold no role.
+    function peerChat(c) {
+      return c.campsiteId == null && c.lotteryId == null && c.reservationId == null
+        && c.entrantId is string && c.ownerId is string && c.entrantId < c.ownerId
+        && request.auth.uid in [c.entrantId, c.ownerId]
+        && get(/databases/$(database)/documents/users/$(c.entrantId)).data.disabled == false
+        && get(/databases/$(database)/documents/users/$(c.ownerId)).data.disabled == false;
+    }
     function openLottery(l) {
       return l.status == 'open' && l.winnersDrawn == false
         && request.time >= l.registrationStartAt && request.time < l.registrationEndAt;
@@ -258,17 +274,13 @@ service cloud.firestore {
     }
     match /conversations/{id} {
       allow read: if participant(resource.data) || admin();
-      allow create: if activeUser() && request.resource.data.entrantId == request.auth.uid
+      allow create: if activeUser()
         && request.resource.data.keys().hasAll(['campsiteId','lotteryId','reservationId','entrantId','ownerId','lastMessage','createdAt','updatedAt'])
         && request.resource.data.keys().hasOnly(['campsiteId','lotteryId','reservationId','entrantId','ownerId','lastMessage','createdAt','updatedAt'])
-        && request.resource.data.ownerId == campsite(request.resource.data.campsiteId).ownerId
-        && request.resource.data.entrantId != request.resource.data.ownerId && campsite(request.resource.data.campsiteId).active
+        && request.resource.data.entrantId != request.resource.data.ownerId
         && request.resource.data.lastMessage == ''
-        && (request.resource.data.lotteryId == null || (lottery(request.resource.data.lotteryId).ownerId == request.resource.data.ownerId
-          && request.resource.data.campsiteId in lottery(request.resource.data.lotteryId).campsiteIds))
-        && (request.resource.data.reservationId == null || (get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.userId == request.auth.uid
-          && get(/databases/$(database)/documents/reservations/$(request.resource.data.reservationId)).data.campsiteId == request.resource.data.campsiteId))
-        && request.resource.data.createdAt == request.time && updatedNow();
+        && request.resource.data.createdAt == request.time && updatedNow()
+        && (campsiteChat(request.resource.data) || peerChat(request.resource.data));
       // lastMessage is a display preview; participants cannot change membership.
       allow update: if participant(resource.data) && changedOnly(['lastMessage','updatedAt'])
         && text(request.resource.data.lastMessage, 4000) && updatedNow();

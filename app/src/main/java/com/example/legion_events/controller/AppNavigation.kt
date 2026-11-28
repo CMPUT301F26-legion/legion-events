@@ -73,6 +73,7 @@ import com.example.legion_events.view.ChatScreen
 import com.example.legion_events.view.MessagesScreen
 import com.example.legion_events.data.MessageRepository
 import com.example.legion_events.data.FirebaseMessageRepository
+import com.example.legion_events.data.loadRelatedUsers
 import com.example.legion_events.data.encodePhoto
 import com.example.legion_events.view.WelcomeScreen
 import com.example.legion_events.view.BookingOfferScreen
@@ -837,7 +838,9 @@ fun AppNavigation(
             }
             composable(MESSAGES_ROUTE) {
                 RequireAccount(state, controller) {
-                    val list: MessagesController = viewModel(factory = viewModelFactory { initializer { MessagesController(messages) } })
+                    val list: MessagesController = viewModel(key = "messages-$userId", factory = viewModelFactory {
+                        initializer { MessagesController(messages) { loadRelatedUsers(checkNotNull(userId), messages, owners, ownerReservations) } }
+                    })
                     val threads by list.state.collectAsStateWithLifecycle()
                     LifecycleResumeEffect(list) { list.resume(); onPauseOrDispose { list.pause() } }
                     MessagesScreen(threads, { navController.popBackStack() }, list::resume) { id ->

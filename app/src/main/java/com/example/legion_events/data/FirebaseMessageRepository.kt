@@ -30,8 +30,9 @@ class FirebaseMessageRepository(private val auth: FirebaseAuth, private val fire
             (entrant + owner).distinctBy { it.id }.sortedWith(compareByDescending<Conversation> { it.updatedAt }.thenBy { it.id })
         }.map { conversations ->
             val summaries = conversations.map { conversation ->
-                if (!names.containsKey(conversation.campsiteId)) names[conversation.campsiteId] = campsiteName(conversation.campsiteId)
-                ConversationSummary(conversation, names[conversation.campsiteId], uid)
+                val site = conversation.campsiteId
+                if (site != null && !names.containsKey(site)) names[site] = campsiteName(site)
+                ConversationSummary(conversation, site?.let { names[it] }, uid)
             }
             checkIdentity(uid)
             summaries
@@ -61,19 +62,34 @@ class FirebaseMessageRepository(private val auth: FirebaseAuth, private val fire
         val owner = checkNotNull(site.get("ownerId") as? String)
         validId(owner)
         check(owner != uid) { "You own this campsite." }
-        val id = conversationKey(campsiteId, uid, owner)
+        return createOrReopen(conversationKey(campsiteId, uid, owner), uid, campsiteId, uid, owner)
+    }
+
+    /** Uses a pair-only key with the UIDs sorted, so neither user can open a second thread with the other. */
+    override suspend fun startPeerToPeerConversation(otherUserId: String): String {
+        validId(otherUserId)
+        val uid = userId()
+        require(otherUserId != uid) { "You cannot message yourself." }
+        val (low, high) = listOf(uid, otherUserId).sorted()
+        return createOrReopen(peerConversationKey(uid, otherUserId), uid, null, low, high)
+    }
+
+    /**
+     * Creates an empty thread, or verifies the existing one when the create is rejected.
+     * Existing threads are create-only here: rules reject resetting their creation time or preview.
+     */
+    private suspend fun createOrReopen(id: String, uid: String, campsiteId: String?, entrantId: String, ownerId: String): String {
         val reference = firestore.collection("conversations").document(id)
         try {
-            reference.set(mapOf("campsiteId" to campsiteId, "entrantId" to uid, "ownerId" to owner,
+            reference.set(mapOf("campsiteId" to campsiteId, "entrantId" to entrantId, "ownerId" to ownerId,
                 "lotteryId" to null, "reservationId" to null, "lastMessage" to "",
                 "createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp())).await()
         } catch (error: FirebaseFirestoreException) {
-            // Existing threads are create-only here: rules reject resetting their creation time or preview.
             val existing = reference.get(Source.SERVER).await()
             checkIdentity(uid)
             if (!existing.exists()) throw error
             val conversation = existing.toConversation(uid)
-            check(conversation.campsiteId == campsiteId && conversation.entrantId == uid && conversation.ownerId == owner)
+            check(conversation.campsiteId == campsiteId && conversation.entrantId == entrantId && conversation.ownerId == ownerId)
         }
         checkIdentity(uid)
         return id
@@ -88,7 +104,7 @@ class FirebaseMessageRepository(private val auth: FirebaseAuth, private val fire
             checkIdentity(uid)
             if (!document.exists()) return null
             val conversation = document.toConversation(uid)
-            val name = campsiteName(conversation.campsiteId)
+            val name = conversation.campsiteId?.let { campsiteName(it) }
             checkIdentity(uid)
             return ConversationSummary(conversation, name, uid)
         } catch (error: FirebaseFirestoreException) {
@@ -178,6 +194,16 @@ internal fun conversationKey(campsiteId: String, entrantId: String, ownerId: Str
     MessageDigest.getInstance("SHA-256").digest("$campsiteId/$entrantId/$ownerId".toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
 
+/**
+ * Creates the key for a peer-to-peer thread. Sorting makes it the same whoever starts the thread, and the
+ * empty campsite segment cannot match [conversationKey], whose campsite ID is never blank.
+ */
+internal fun peerConversationKey(userA: String, userB: String): String {
+    val (low, high) = listOf(userA, userB).sorted()
+    return MessageDigest.getInstance("SHA-256").digest("/$low/$high".toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+}
+
 /** Rejects paths and blank IDs before database access. */
 private fun validId(id: String) { require(id.isNotBlank() && '/' !in id) { "A single document ID is required." } }
 
@@ -186,7 +212,10 @@ internal fun DocumentSnapshot.toConversation(uid: String): Conversation {
     val entrant = chatString("entrantId")
     val owner = chatString("ownerId")
     check(entrant != owner && uid in listOf(entrant, owner)) { "This conversation is private." }
-    return Conversation(id, chatString("campsiteId"), entrant, owner, get("lastMessage") as? String ?: "",
+    val campsite = get("campsiteId")?.let { checkNotNull(it as? String).also(::validId) }
+    // Peer-to-peer threads store their users sorted; anything else is not a document the app created.
+    check(campsite != null || entrant < owner) { "Invalid peer-to-peer conversation." }
+    return Conversation(id, campsite, entrant, owner, get("lastMessage") as? String ?: "",
         chatTime("createdAt"), chatTime("updatedAt"), get("lotteryId") as? String, get("reservationId") as? String)
 }
 
