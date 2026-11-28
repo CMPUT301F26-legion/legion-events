@@ -24,6 +24,85 @@ service cloud.firestore {
       return d.status == 'pending' && d.response == 'accept' && d.reservationId == reservationId
         && d.respondedAt == request.time && d.updatedAt == request.time;
     }
+    // Foreground booking mode trusts an owner to process their own campsite, just as local draws do.
+    // The app reads/writes every night atomically. Rules check each lock and linked state transition;
+    // rules cannot enumerate a variable 366-night write set or prove random replacement selection.
+    function bookingBefore(id) { return get(/databases/$(database)/documents/reservations/$(id)).data; }
+    function bookingAfter(id) { return getAfter(/databases/$(database)/documents/reservations/$(id)).data; }
+    function bookingConfirmed(id) {
+      let before = bookingBefore(id);
+      let after = bookingAfter(id);
+      let o = offer(before.offerId);
+      let oa = getAfter(/databases/$(database)/documents/offers/$(before.offerId)).data;
+      return mine(before.ownerId) && before.status == 'requested' && after.status == 'confirmed'
+        && after.updatedAt == request.time && o.status == 'pending' && o.response == 'accept'
+        && o.reservationId == id && o.userId == before.userId && o.lotteryId == before.lotteryId
+        && oa.status == 'used' && oa.reservationId == id && oa.updatedAt == request.time;
+    }
+    function eligibleBooking(d) {
+      let l = lottery(d.lotteryId);
+      let c = campsite(d.campsiteId);
+      let o = offer(d.offerId);
+      return l.ownerId == d.ownerId && l.winnersDrawn == true && c.ownerId == d.ownerId && c.active == true
+        && get(/databases/$(database)/documents/users/$(d.userId)).data.disabled == false
+        && d.offerId == d.lotteryId + '_' + d.userId && d.campsiteId in l.campsiteIds && d.campsiteId in o.campsiteIds
+        && o.expiresAt == l.bookingEndAt && o.respondedAt == d.createdAt
+        && d.createdAt >= l.bookingStartAt && d.createdAt < l.bookingEndAt && d.createdAt < o.expiresAt
+        && d.rulesAccepted == true && d.cancellationRequested == false
+        && d.startDate == d.startDate.date() && d.endDate == d.endDate.date()
+        && d.startDate >= d.createdAt.date() && d.endDate > d.startDate
+        && d.endDate - d.startDate <= duration.value(366, 'd')
+        && d.guestCount is int && d.guestCount >= 1 && d.guestCount <= c.maxGuests
+        && d.totalPrice == c.pricePerNight * ((d.endDate.toMillis() - d.startDate.toMillis()) / 86400000);
+    }
+    function bookingReleased(id) {
+      let b = bookingBefore(id);
+      let a = bookingAfter(id);
+      return mine(b.ownerId) && ((b.status == 'confirmed' && b.cancellationRequested == true
+          && a.status == 'cancelled' && a.cancellationRequested == false && a.updatedAt == request.time)
+        || (b.status == 'rejected' && a.status == 'rejected'
+          && getAfter(/databases/$(database)/documents/reservationReleases/$(id)).data.processedAt == request.time));
+    }
+    function bookingNotice(d, id) {
+      let b = bookingBefore(d.reservationId);
+      let confirmed = d.type == 'reservation_confirmed';
+      return d.keys().hasAll(['toUserId','fromUserId','lotteryId','reservationId','type','title','body','read','createdAt','updatedAt'])
+        && d.keys().hasOnly(['toUserId','fromUserId','lotteryId','reservationId','type','title','body','read','createdAt','updatedAt'])
+        && d.type in ['reservation_confirmed','reservation_cancelled']
+        && id == d.type + '_' + d.reservationId && d.toUserId == b.userId && d.lotteryId == b.lotteryId
+        && d.fromUserId == null && d.read == false && d.createdAt == request.time && d.updatedAt == request.time
+        && d.title == (confirmed ? 'Reservation confirmed' : 'Reservation cancelled')
+        && d.body == (confirmed ? 'Your campsite reservation is confirmed. View your booking details.'
+          : 'Your reservation has been cancelled and its dates released.')
+        && (confirmed ? bookingConfirmed(d.reservationId) : (bookingReleased(d.reservationId) && bookingAfter(d.reservationId).status == 'cancelled'));
+    }
+    function replacement(id) { return getAfter(/databases/$(database)/documents/offerReplacements/$(id)).data; }
+    function replacementCommitted(id) {
+      let o = offer(id);
+      let l = lottery(o.lotteryId);
+      let m = replacement(id);
+      return mine(l.ownerId) && l.winnersDrawn == true && o.status == 'pending' && o.response == 'decline'
+        && o.get('reservationId', null) == null && o.expiresAt == l.bookingEndAt && o.campsiteIds == l.campsiteIds
+        && !exists(/databases/$(database)/documents/offerReplacements/$(id))
+        && m.declinedOfferId == id && m.lotteryId == o.lotteryId && m.processedAt == request.time;
+    }
+    function replacementWinner(id, uid, lotteryId) {
+      let m = replacement(id);
+      let entry = get(/databases/$(database)/documents/waitlist/$(lotteryId + '_' + uid)).data;
+      let after = getAfter(/databases/$(database)/documents/waitlist/$(lotteryId + '_' + uid)).data;
+      return replacementCommitted(id) && m.replacementUserId == uid && m.lotteryId == lotteryId
+        && m.replacementOfferId == lotteryId + '_' + uid && request.time < offer(id).expiresAt
+        && entry.userId == uid && entry.lotteryId == lotteryId && entry.status == 'lost'
+        && after.status == 'won' && after.updatedAt == request.time
+        && !exists(/databases/$(database)/documents/offers/$(lotteryId + '_' + uid))
+        && get(/databases/$(database)/documents/users/$(uid)).data.disabled == false;
+    }
+    function replacementResult(d, id) {
+      let declined = getAfter(/databases/$(database)/documents/offers/$(d.offerId)).data.replacementFor;
+      return id == 'lottery_replacement_' + declined && d.type == 'lottery_won'
+        && d.offerId == d.lotteryId + '_' + d.toUserId && d.createdAt == request.time
+        && replacementWinner(declined, d.toUserId, d.lotteryId);
+    }
     function chat(id) { return get(/databases/$(database)/documents/conversations/$(id)).data; }
     // Separate comparisons let either UID-scoped conversation query prove membership.
     function participant(c) {
@@ -104,6 +183,17 @@ service cloud.firestore {
               && request.resource.data.entrantCount >= 0));
     }
 
+    // Closing registration is a deadline-only transition, including for older test lotteries
+    // whose booking dates were edited in the console. All other fields remain unchanged.
+    function endRegistrationUpdate() {
+      return mine(resource.data.ownerId) && resource.data.status == 'open'
+        && resource.data.winnersDrawn == false
+        && resource.data.registrationStartAt < request.time
+        && request.time < resource.data.registrationEndAt
+        && changedOnly(['registrationEndAt','updatedAt'])
+        && request.resource.data.registrationEndAt == request.time && updatedNow();
+    }
+
     // LOCAL DRAW additions. The owner is trusted to select the entrants and winners.
     // The immutable manifest bounds that authority to one closed lottery and shares rule reads
     // across up to 100 entrants, avoiding the atomic-write document-access limit.
@@ -168,8 +258,16 @@ service cloud.firestore {
           && (resource.data.entrantCount == 0 || request.resource.data.campsiteIds == resource.data.campsiteIds)
           && request.resource.data.waitlistLimit >= resource.data.entrantCount
           && updatedNow())
-        || entrantCounterChange(id) || localDrawUpdate(id);
+        || endRegistrationUpdate() || entrantCounterChange(id) || localDrawUpdate(id);
       allow delete: if false;
+      // Permission-only eligibility probes: these documents are never stored. An owner can
+      // distinguish an active entrant from a disabled/deleted one without reading private profiles.
+      match /bookingEligibility/{uid} {
+        allow get: if mine(lottery(id).ownerId)
+          && (uid == request.auth.uid || get(/databases/$(database)/documents/waitlist/$(id + '_' + uid)).data.userId == uid)
+          && get(/databases/$(database)/documents/users/$(uid)).data.disabled == false;
+        allow list, write: if false;
+      }
     }
     function counterAfter(id, delta) {
       let before = lottery(id);
@@ -194,12 +292,16 @@ service cloud.firestore {
           && id == resource.data.lotteryId + '_' + resource.data.userId
           && changedOnly(['status','updatedAt']) && updatedNow()
           && resource.data.userId in drawRecord(resource.data.lotteryId).entrantIds
-          && request.resource.data.status == (resource.data.userId in drawRecord(resource.data.lotteryId).winnerIds ? 'won' : 'lost'));
+          && request.resource.data.status == (resource.data.userId in drawRecord(resource.data.lotteryId).winnerIds ? 'won' : 'lost'))
+        || (resource.data.status == 'lost' && request.resource.data.status == 'won'
+          && id == resource.data.lotteryId + '_' + resource.data.userId && changedOnly(['status','updatedAt']) && updatedNow()
+          && replacementWinner(getAfter(/databases/$(database)/documents/offers/$(id)).data.replacementFor,
+            resource.data.userId, resource.data.lotteryId));
       allow delete: if false;
     }
     match /offers/{id} {
       allow read: if mine(resource.data.userId) || mine(lottery(resource.data.lotteryId).ownerId) || admin();
-      allow create: if localDrawCommitted(request.resource.data.lotteryId)
+      allow create: if (localDrawCommitted(request.resource.data.lotteryId)
         && request.resource.data.keys().hasAll(['lotteryId','userId','campsiteIds','status','response','expiresAt','createdAt','updatedAt'])
         && request.resource.data.keys().hasOnly(['lotteryId','userId','campsiteIds','status','response','expiresAt','createdAt','updatedAt'])
         && id == request.resource.data.lotteryId + '_' + request.resource.data.userId
@@ -207,18 +309,36 @@ service cloud.firestore {
         && request.resource.data.campsiteIds == lottery(request.resource.data.lotteryId).campsiteIds
         && request.resource.data.expiresAt == lottery(request.resource.data.lotteryId).bookingEndAt
         && request.resource.data.status == 'pending' && request.resource.data.response == null
-        && request.resource.data.createdAt == request.time && updatedNow();
-      allow update: if mine(resource.data.userId) && resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time && updatedNow())
+        || (request.resource.data.keys().hasAll(['lotteryId','userId','campsiteIds','status','response','expiresAt','createdAt','updatedAt','replacementFor'])
+          && request.resource.data.keys().hasOnly(['lotteryId','userId','campsiteIds','status','response','expiresAt','createdAt','updatedAt','replacementFor'])
+          && id == request.resource.data.lotteryId + '_' + request.resource.data.userId
+          && replacementWinner(request.resource.data.replacementFor, request.resource.data.userId, request.resource.data.lotteryId)
+          && request.resource.data.campsiteIds == offer(request.resource.data.replacementFor).campsiteIds
+          && request.resource.data.expiresAt == offer(request.resource.data.replacementFor).expiresAt
+          && request.resource.data.status == 'pending' && request.resource.data.response == null
+          && request.resource.data.createdAt == request.time && updatedNow());
+      allow update: if (mine(resource.data.userId) && resource.data.status == 'pending'
         && request.time < resource.data.expiresAt && resource.data.get('response', null) == null
         && request.resource.data.respondedAt == request.time && updatedNow()
         && ((changedOnly(['response','respondedAt','updatedAt']) && request.resource.data.response == 'decline')
           || (changedOnly(['response','reservationId','respondedAt','updatedAt'])
             && request.resource.data.response == 'accept'
-            && acceptedRequest(request.resource.data.reservationId, id, resource.data.lotteryId, request.auth.uid)));
+            && acceptedRequest(request.resource.data.reservationId, id, resource.data.lotteryId, request.auth.uid))))
+        || (resource.data.status == 'pending' && resource.data.response == 'accept'
+          && mine(lottery(resource.data.lotteryId).ownerId) && updatedNow()
+          && ((changedOnly(['status','updatedAt']) && request.resource.data.status == 'used'
+              && bookingConfirmed(resource.data.reservationId))
+            || (changedOnly(['response','reservationId','respondedAt','updatedAt']) && request.resource.data.response == null
+              && !request.resource.data.keys().hasAny(['reservationId','respondedAt'])
+              && bookingAfter(resource.data.reservationId).status == 'rejected'
+              && bookingAfter(resource.data.reservationId).ownerId == request.auth.uid
+              && bookingAfter(resource.data.reservationId).userId == resource.data.userId
+              && bookingAfter(resource.data.reservationId).lotteryId == resource.data.lotteryId)));
       allow delete: if false;
     }
     match /lotteryNotificationOutbox/{id} {
-      allow create: if localResult(request.resource.data, id)
+      allow create: if (localResult(request.resource.data, id) || replacementResult(request.resource.data, id))
         && request.resource.data.keys().hasAll(['type','toUserId','lotteryId','offerId','createdAt','deliveryStatus','updatedAt'])
         && request.resource.data.keys().hasOnly(['type','toUserId','lotteryId','offerId','createdAt','deliveryStatus','updatedAt'])
         && request.resource.data.deliveryStatus == 'pending' && updatedNow();
@@ -257,29 +377,66 @@ service cloud.firestore {
           * ((request.resource.data.endDate.toMillis() - request.resource.data.startDate.toMillis()) / 86400000)
         && claimedOffer(request.resource.data.offerId, id)
         && request.resource.data.createdAt == request.time && updatedNow();
-      // Entrants may only request a cancellation; only the worker releases occupied nights.
-      // Only the worker confirms. Owners may reject a requested or confirmed booking before checkout.
+      // Entrants request cancellation; the foreground owner processor completes it and releases dates.
       allow update: if (mine(resource.data.userId) && resource.data.status == 'confirmed' && request.time < resource.data.endDate
         && resource.data.cancellationRequested == false && changedOnly(['cancellationRequested','updatedAt'])
         && request.resource.data.cancellationRequested == true && updatedNow())
         || (mine(resource.data.ownerId) && request.time < resource.data.endDate
           && changedOnly(['status','updatedAt']) && updatedNow()
-          && resource.data.status in ['requested','confirmed'] && request.resource.data.status == 'rejected');
+          && resource.data.status in ['requested','confirmed'] && request.resource.data.status == 'rejected')
+        || (mine(resource.data.ownerId) && resource.data.status == 'requested' && request.resource.data.status == 'rejected'
+          && changedOnly(['status','updatedAt']) && updatedNow()
+          && offer(resource.data.offerId).reservationId == id && offer(resource.data.offerId).response == 'accept'
+          && getAfter(/databases/$(database)/documents/offers/$(resource.data.offerId)).data.response == null)
+        || (mine(resource.data.ownerId) && changedOnly(['status','updatedAt']) && updatedNow()
+          && bookingConfirmed(id) && eligibleBooking(resource.data))
+        || (mine(resource.data.ownerId) && changedOnly(['status','cancellationRequested','updatedAt']) && updatedNow()
+          && bookingReleased(id) && resource.data.status == 'confirmed' && request.resource.data.status == 'cancelled')
+        || (mine(resource.data.ownerId) && resource.data.status == 'rejected' && request.resource.data.status == 'rejected'
+          && changedOnly(['cancellationRequested','updatedAt']) && request.resource.data.cancellationRequested == false && updatedNow());
       allow delete: if false;
     }
-    // Idempotency records for one replacement per declined winner; privileged worker only.
+    // Immutable, owner-scoped idempotency records. Empty replacement decisions also close a decline once.
     match /offerReplacements/{id} {
-      allow read, write: if false;
+      allow get: if mine(lottery(offer(id).lotteryId).ownerId);
+      allow create: if replacementCommitted(id)
+        && request.resource.data.keys().hasAll(['lotteryId','declinedOfferId','replacementUserId','replacementOfferId','processedAt'])
+        && request.resource.data.keys().hasOnly(['lotteryId','declinedOfferId','replacementUserId','replacementOfferId','processedAt'])
+        && ((request.resource.data.replacementUserId == null && request.resource.data.replacementOfferId == null)
+          || replacementWinner(id, request.resource.data.replacementUserId, request.resource.data.lotteryId));
+      allow list, update, delete: if false;
+    }
+    match /reservationReleases/{id} {
+      allow get: if mine(bookingBefore(id).ownerId);
+      allow create: if mine(bookingBefore(id).ownerId) && bookingBefore(id).status == 'rejected'
+        && request.resource.data.keys().hasAll(['reservationId','processedAt'])
+        && request.resource.data.keys().hasOnly(['reservationId','processedAt'])
+        && request.resource.data.reservationId == id && request.resource.data.processedAt == request.time;
+      allow list, update, delete: if false;
     }
     match /bookedNights/{id} {
       allow read: if activeUser();
-      allow write: if false;
+      allow create: if request.resource.data.keys().hasAll(['campsiteId','reservationId','date'])
+        && request.resource.data.keys().hasOnly(['campsiteId','reservationId','date'])
+        && id == request.resource.data.campsiteId + '_' + request.resource.data.date
+        && request.resource.data.campsiteId == bookingBefore(request.resource.data.reservationId).campsiteId
+        && request.resource.data.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && request.resource.data.date in campsite(request.resource.data.campsiteId).availableNights
+        && timestamp.date(int(request.resource.data.date.split('-')[0]), int(request.resource.data.date.split('-')[1]),
+          int(request.resource.data.date.split('-')[2])) >= bookingBefore(request.resource.data.reservationId).startDate
+        && timestamp.date(int(request.resource.data.date.split('-')[0]), int(request.resource.data.date.split('-')[1]),
+          int(request.resource.data.date.split('-')[2])) < bookingBefore(request.resource.data.reservationId).endDate
+        && bookingConfirmed(request.resource.data.reservationId);
+      allow delete: if bookingReleased(resource.data.reservationId)
+        && resource.data.campsiteId == bookingBefore(resource.data.reservationId).campsiteId;
+      allow update: if false;
     }
     match /notifications/{id} {
       allow read: if mine(resource.data.toUserId) || admin();
-      allow create: if localResult(request.resource.data, id)
+      allow create: if ((localResult(request.resource.data, id) || replacementResult(request.resource.data, id))
         && request.resource.data.keys().hasAll(['type','toUserId','lotteryId','offerId','createdAt'])
-        && request.resource.data.keys().hasOnly(['type','toUserId','lotteryId','offerId','createdAt']);
+        && request.resource.data.keys().hasOnly(['type','toUserId','lotteryId','offerId','createdAt']))
+        || bookingNotice(request.resource.data, id);
       allow update: if mine(resource.data.toUserId) && changedOnly(['read','updatedAt'])
         && request.resource.data.read is bool && updatedNow();
       allow delete: if false;

@@ -29,6 +29,7 @@ import com.example.legion_events.controller.InboxState
 import com.example.legion_events.model.LotteryNotification
 import com.example.legion_events.model.OwnerNotice
 import com.example.legion_events.model.CancellationNotification
+import com.example.legion_events.model.ReservationConfirmedNotification
 import java.text.DateFormat
 
 /** Shows loading, retry, empty, or populated inbox state with optional push permission and offer actions. */
@@ -48,7 +49,7 @@ fun InboxScreen(
     ) {
         item {
             Text("Inbox", style = MaterialTheme.typography.headlineMedium)
-            Text("Your lottery results, cancellation confirmations, and owner notices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Your lottery results, reservation confirmations, and owner notices.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onMessages) { Text("Messages") }
         }
         if (onEnablePush != null) {
@@ -66,6 +67,14 @@ fun InboxScreen(
                     when (notification) {
                         is LotteryNotification -> LotteryResultCard(notification, onOffer)
                         is CancellationNotification -> CancellationCard(notification, onReservation)
+                        is ReservationConfirmedNotification -> OutlinedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Reservation confirmed", style = MaterialTheme.typography.titleMedium)
+                                Text("Your campsite is booked. View your reservation details.")
+                                Text("Reservation ${notification.reservationId}", style = MaterialTheme.typography.bodySmall)
+                                Button(onClick = { onReservation(notification.reservationId) }) { Text("View booking") }
+                            }
+                        }
                     }
                 }
                 if (state.notices.isNotEmpty()) {

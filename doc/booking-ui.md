@@ -1,7 +1,7 @@
 # Winner booking selection and review (PR 3)
 
 This connects US 01.04.01, US 01.04.02, and US 02.11.01 to the
-[booking repository contract](booking-flow.md) and [trusted worker](booking-worker.md).
+[booking repository contract](booking-flow.md) and [foreground owner processor](local-booking-processing.md).
 The entry is **Lotteries → Booking offers → View offer → Reserve a campsite**.
 Complete open offers expose the entry; legacy offers without campsite choices,
 accepted offers, and terminal/expired offers retain their existing behavior.
@@ -28,7 +28,7 @@ regardless of device time zone or daylight saving. The offer's booking deadline 
 the submission window and does not restrict the stay to that date range.
 Changing campsite resets dates and guest count. Changing campsite, dates, or guests
 clears agreement; changed rules, policy, or price at review also require acceptance
-again. Only the worker can confirm the request or reserve nights.
+again. The foreground owner processor confirms the request and reserves nights atomically.
 
 ## State, retries, and navigation
 
@@ -52,77 +52,53 @@ original response was lost. Repository policy/price validation failures return t
 selection for refresh and new agreement. A saved rejection can return to refreshed
 choices and a new review/attempt ID under the same unexpired offer.
 
-Basic manual status recovery is included so this flow is usable and safe. PR 4
-still owns automatic status tracking, richer pending/rejected recovery, the
-confirmation Inbox type/navigation, and the final confirmation-screen handoff.
-Confirmed requests can already open the existing booking-details screen.
+The pending screen observes its own saved request while visible and updates after
+confirmation or rejection without resubmitting. Confirmation during an in-flight
+submission is retained even if an older pending response arrives afterwards.
+Listeners stop when the screen pauses. Reload reconnects a failed listener.
+Confirmed requests open the saved receipt; the confirmation Inbox item opens the
+existing booking-details screen.
 
 Class relationships: [UML](uml/booking_ui.svg), [editable source](uml/booking_ui.dot).
 
-## Worker activation and submission gate
+## Demo setup
 
-The Firestore rules have been deployed, but the worker still needs activation.
-The new UI is connected for selection/review; **submission defaults to disabled**.
-The product displays that reservations are not available yet, without exposing
-deployment or build details in the entrant flow.
+The owner's app now processes bookings while open and connected. Submission is
+enabled by default, and the standalone GitHub/Cloud Run worker is optional. Deploy
+the matching owner-scoped Firestore rules and update both apps in place. See the
+[foreground booking guide](local-booking-processing.md) for exact setup, transaction
+behavior, permissions, limitations, and verification commands.
 
-The simplest worker setup after PR 2 merges into main:
+Build with `-PbookingRequestsEnabled=false` to keep submission disabled during a
+rollout. Tests can still inject either gate value without enabling live writes.
 
-1. Have the team's Google Cloud administrator provision the existing Google OIDC
-   federation and a service account with Firestore read/write access.
-2. In GitHub repository **Settings → Secrets and variables → Actions → Variables**,
-   configure FIREBASE_PROJECT_ID, GCP_WORKLOAD_IDENTITY_PROVIDER, and
-   GCP_LOTTERY_WORKER_SERVICE_ACCOUNT with that setup's values.
-3. Set repository variable BOOKING_PROCESSING_ENABLED to true.
-4. Under **Actions → Booking worker**, run the workflow on main and verify success.
-   The same workflow is scheduled every five minutes. It intentionally skips
-   feature branches and runs only when the enable variable is true.
+## Troubleshooting submission
 
-Setting the enable variable alone does not provision Google credentials or IAM.
-The separate private Cloud Run service with Eventarc and a one-minute Scheduler
-sweep is the faster processing option; its concrete setup is in the worker guide.
-No backend deployment, repository-variable change, or live booking occurs in PR 3.
+“We couldn't verify your request” preserves the accepted request ID and selection
+for recovery. It does not mean the request has been confirmed. Check the
+request status before retrying that same attempt.
 
-After the team verifies that the worker processes test-project bookings correctly,
-build the Android app with submission enabled:
+A Firestore `PERMISSION_DENIED` on the acceptance transaction can indicate stale
+published rules. The offer update must permit `response: accept` together with
+`reservationId`, and the rules must include `acceptedRequest` and `claimedOffer`.
+Those checks bind the new requested reservation and its offer claim in one atomic
+write. Rules that permit only `response: decline` reject the booking UI's write.
+Publish the reviewed booking rules to the app's Firebase project, then retry the
+original attempt. The booking-contract rules tests exercise both the batch
+contract and the repository's read-then-write transaction.
 
-```sh
-./gradlew :app:assembleDebug -PbookingRequestsEnabled=true
-```
-
-This sets BuildConfig.BOOKING_REQUESTS_ENABLED. Without the property it is false.
-Android Studio can read the same property from the developer's local Gradle
-configuration. Tests inject the enabled/disabled value without enabling live writes.
-No runtime setting in the Android app starts the backend.
+After successful submission, “Awaiting confirmation” means the request is saved.
+Keep the campsite owner's updated app open and online. It will confirm the request,
+lock the selected nights, consume the offer, and create the Inbox receipt together.
+If processing reports missing permissions, verify the published foreground booking
+rules. The pending screen updates from saved server state and never fabricates a
+confirmation. A closed owner app leaves the request pending until it reopens.
 
 ## Verification
 
-Local JVM tests cover date gaps, occupied checkout boundaries, past check-in,
-capacity, CAD arithmetic, time zones, the 366-night maximum, explicit review,
-policy/price changes, concurrent clicks, expiry, rollout, lost responses, and
-saved-state retry behavior. Compose tests use only fake repositories and accounts.
-The navigation regression verifies encoded offer IDs and the Lotteries tab.
+The [foreground booking guide](local-booking-processing.md#verification) lists the
+current checks. Existing fake Compose tests cover date selection, policy agreement,
+review dismissal, rollout gating, empty availability, and dark mode. Use a separate
+disposable test device for instrumentation so the demo account is preserved.
 
-```sh
-./gradlew --offline :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-./gradlew --offline --no-configuration-cache :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.example.legion_events.BookingFlowScreenTest
-./gradlew --offline --no-configuration-cache :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.example.legion_events.BookingOfferNavigationTest
-```
-
-Local verification passed 369 JVM tests, with four optional pre-existing integration
-tests skipped, and all 11 booking UI/navigation tests on the connected Android 17
-emulator. The debug APK built successfully; lint reported zero errors and 25
-existing warnings. The default APK has BOOKING_REQUESTS_ENABLED=false.
-
-The UI tests exercise real date pickers, policy agreement, review dismissal,
-pending submission, the disabled rollout gate, empty availability, and dark mode.
-Disable the configuration cache when changing instrumentation runner arguments
-so the Android plugin does not reuse an earlier test-class filter.
-Optional preview capture uses instrumentation argument captureBookingScreens=true
-and writes fake-data PNGs only into the app's cache.
-
-Keep this PR based on feature/booking-worker while PR 2 is pending. The worker,
-rules, and repository contract files remain unchanged; no Figma files were edited.
-Leave the existing local .idea/misc.xml change out of the commit.
+Leave the existing local `.idea/misc.xml` change out of the commit.

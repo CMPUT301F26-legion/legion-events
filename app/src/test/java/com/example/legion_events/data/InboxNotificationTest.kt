@@ -10,6 +10,7 @@ package com.example.legion_events.data
 import com.example.legion_events.model.CancellationNotification
 import com.example.legion_events.model.LotteryNotification
 import com.example.legion_events.model.LotteryResult
+import com.example.legion_events.model.ReservationConfirmedNotification
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import org.junit.Assert.*
@@ -18,6 +19,12 @@ import org.mockito.Mockito.*
 
 /** Checks only saved document values, without a network connection or listener. */
 class InboxNotificationTest {
+    @Test fun confirmationReceiptsKeepTheOwnedBookingReference() {
+        assertEquals(ReservationConfirmedNotification("notice", "booking #1", Timestamp(10, 0)),
+            document(mapOf("type" to "reservation_confirmed")).toInboxNotification("alice"))
+        assertNull(document(mapOf("type" to "reservation_confirmed", "toUserId" to "bob")).toInboxNotification("alice"))
+        assertNull(document(mapOf("type" to "reservation_confirmed", "reservationId" to "nested/path")).toInboxNotification("alice"))
+    }
     @Test fun cancellationNoticesKeepTheSavedReservationIdAndCompletionTime() {
         assertEquals(CancellationNotification("notice", "booking #1", Timestamp(10, 0)),
             document().toInboxNotification("alice"))

@@ -2,7 +2,7 @@
  * BookingFlowController.kt
  * Purpose: Coordinate winner selection, policy acceptance, review, and explicit submission.
  * Role: Controller in MVC; owns the saved draft and retry-safe accepted attempt.
- * Outstanding issues: Automatic worker-status tracking and confirmation Inbox routing are PR 4.
+ * Observes saved processing outcomes while the entrant screen is visible.
  */
 package com.example.legion_events.controller
 
@@ -63,6 +63,30 @@ class BookingFlowController(
     /** Read-only view state. */
     val state = mutableState.asStateFlow()
     private var work: Job? = null
+    private var watching: Job? = null
+
+    /** Screen lifecycle owns this listener; updates cannot submit or change an accepted selection. */
+    fun startObserving() {
+        if (watching?.isActive == true) return
+        watching = viewModelScope.launch {
+            try {
+                repository.observeRequestsForOffer(offerId).collect { requests ->
+                    checkRequests(requests)
+                    val current = state.value
+                    val id = current.result?.id ?: current.pendingAttempt?.id ?: return@collect
+                    val saved = requests.firstOrNull { it.id == id } ?: return@collect
+                    clearAttempt()
+                    mutableState.value = current.copy(result = saved, pendingAttempt = null, message = null)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SecurityException) { unavailable() }
+            catch (_: Exception) {
+                mutableState.value = state.value.copy(message = "Live booking updates stopped. Check request status to reconnect.")
+            }
+        }
+    }
+
+    fun stopObserving() { watching?.cancel(); watching = null }
 
     init {
         val scope = "$offerId:$userId"
@@ -77,6 +101,8 @@ class BookingFlowController(
     fun reload() {
         if (state.value.submitting || state.value.reviewing) return
         work?.cancel()
+        val reconnect = watching != null
+        stopObserving()
         val attempt = restoredAttempt()
         mutableState.value = BookingFlowState(selection = restoredSelection(), submissionEnabled = submissionEnabled, checkedAt = now())
         work = viewModelScope.launch {
@@ -111,6 +137,7 @@ class BookingFlowController(
                     error = if (attempt == null) "Could not load booking choices. Check your connection and retry." else null,
                     message = if (attempt != null) "Could not check your request. Retry the same request or check its status." else null)
             }
+            if (reconnect) startObserving()
         }
     }
 
@@ -241,7 +268,8 @@ class BookingFlowController(
                 checkRequests(listOf(result))
                 check(result.id == request.id) { "Unexpected booking request." }
                 clearAttempt()
-                mutableState.value = state.value.copy(submitting = false, pendingAttempt = null, result = result)
+                val observed = state.value.result?.takeIf { it.id == result.id && it.status != Reservation.STATUS_REQUESTED }
+                mutableState.value = state.value.copy(submitting = false, pendingAttempt = null, result = observed ?: result)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SecurityException) { unavailable() }
             catch (_: IllegalArgumentException) {
@@ -252,7 +280,8 @@ class BookingFlowController(
                     message = "The booking details changed. Refresh the choices and review them again.")
             } catch (_: Exception) {
                 mutableState.value = state.value.copy(submitting = false,
-                    message = "We couldn't verify your request. Check its status or retry the same request.")
+                    message = if (state.value.result?.id == request.id) null else
+                        "We couldn't verify your request. Check its status or retry the same request.")
             }
         }
     }

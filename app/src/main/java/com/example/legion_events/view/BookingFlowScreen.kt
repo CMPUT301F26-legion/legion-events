@@ -247,7 +247,7 @@ private fun BookingSummary(name: String, request: BookingRequest) {
     }
 }
 
-/** Reports the saved worker state honestly; a requested record never displays a booking confirmation. */
+/** Reports saved processing state; a requested record never displays a booking confirmation. */
 @Composable
 private fun BookingResult(state: BookingFlowState, actions: BookingFlowActions) {
     val result = checkNotNull(state.result)
@@ -264,7 +264,7 @@ private fun BookingResult(state: BookingFlowState, actions: BookingFlowActions) 
         Text("${result.guestCount} ${if (result.guestCount == 1) "guest" else "guests"} · ${shortPrice(result.totalPrice)} CAD total")
         when (result.status) {
             Reservation.STATUS_REQUESTED -> {
-                Text("Your request was received. It is awaiting confirmation and does not hold campsite nights yet.")
+                Text("Your request was received. The campsite owner's app processes it while open and connected. This screen updates automatically after confirmation; no dates are held yet.")
                 OutlinedButton(onClick = actions.onReload) { Text("Check request status") }
             }
             Reservation.STATUS_REJECTED -> {
@@ -273,6 +273,7 @@ private fun BookingResult(state: BookingFlowState, actions: BookingFlowActions) 
             }
             Reservation.STATUS_CONFIRMED -> Button(onClick = { actions.onViewReservation(result.id) }) { Text("View booking") }
         }
+        state.message?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         TextButton(onClick = actions.onBack) { Text("Back to offer") }
     }
 }

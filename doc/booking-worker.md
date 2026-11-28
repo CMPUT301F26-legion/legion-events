@@ -1,5 +1,7 @@
 # Booking worker (PR 2)
 
+The demo now uses the [foreground owner processor](local-booking-processing.md). This standalone backend remains optional; no GitHub worker needs enabling for foreground processing.
+
 This implements the trusted backend for the [PR 1 booking contract](booking-flow.md).
 It adds no Android screens. Submission, review, and rules acceptance are connected
 in PR 3; pending/rejected recovery and confirmation Inbox handling follow in PR 4.

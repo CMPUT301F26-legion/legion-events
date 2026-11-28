@@ -2,7 +2,7 @@
  * FirebaseBookingRepository.kt
  * Purpose: Load winner choices and atomically record explicit entrant acceptance.
  * Role: Data layer in MVC; never confirms bookings or writes occupied nights.
- * Outstanding issues: The confirming worker and booking screens follow in PRs 2 and 3.
+ * Confirmation is handled separately by foreground owner processing.
  */
 package com.example.legion_events.data
 
@@ -24,6 +24,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 /**
  * Uses server reads for recovery and choices. A stable request ID plus an offer claim makes
@@ -80,6 +83,22 @@ class FirebaseBookingRepository(
         requireBookingId(offerId)
         val uid = currentUserId()
         return requestsForOffer(offerId, uid)
+    }
+
+    override fun observeRequestsForOffer(offerId: String): Flow<List<Reservation>> = callbackFlow {
+        requireBookingId(offerId)
+        val uid = currentUserId()
+        val listener = firestore.collection("reservations").whereEqualTo("userId", uid)
+            .whereEqualTo("offerId", offerId).addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                runCatching {
+                    checkAccount(uid)
+                    snapshot?.documents.orEmpty().map { document ->
+                        document.toOwnedRequest(uid).also { check(it.offerId == offerId) }
+                    }
+                }.onSuccess { trySend(it) }.onFailure { close(it) }
+            }
+        awaitClose { listener.remove() }
     }
 
     override suspend fun acceptOffer(request: BookingRequest): Reservation {

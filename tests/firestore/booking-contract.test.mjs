@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, getDoc, getDocs, query, collection, where, writeBatch, serverTimestamp, Timestamp, setLogLevel } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, getDocs, query, collection, where, writeBatch, runTransaction, serverTimestamp, Timestamp, setLogLevel } from 'firebase/firestore';
 const endpoint = process.env.FIRESTORE_EMULATOR_HOST;
 assert.ok(endpoint, 'Set FIRESTORE_EMULATOR_HOST to run the rules tests.');
 const [host, port] = endpoint.split(':');
@@ -59,6 +59,34 @@ test('explicit acceptance atomically saves a pending request, claims the offer, 
   const result = await assertSucceeds(getDocs(query(collection(client(), 'reservations'), where('userId', '==', 'entrant'), where('offerId', '==', f.offerId))));
   assert.equal(result.size, 1);
   await assertFails(getDoc(doc(client('other'), `reservations/${f.id}`)));
+});
+test('the booking repository transaction can read choices, save acceptance, and recover its original request', async () => {
+  const f = await fixture();
+  const db = client(f.uid);
+  const offerRef = doc(db, `offers/${f.offerId}`);
+  const requestRef = doc(db, `reservations/${f.id}`);
+  const ownedRequests = () => getDocs(query(collection(db, 'reservations'),
+    where('userId', '==', f.uid), where('offerId', '==', f.offerId)));
+  assert.equal((await ownedRequests()).size, 0);
+  await assertSucceeds(runTransaction(db, async transaction => {
+    const offer = (await transaction.get(offerRef)).data();
+    await transaction.get(doc(db, `lotteries/${offer.lotteryId}`));
+    await transaction.get(doc(db, `campsites/${f.request.campsiteId}`));
+    transaction.set(requestRef, f.request);
+    transaction.update(offerRef, { response: 'accept', reservationId: f.id,
+      respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  }));
+  const saved = (await assertSucceeds(ownedRequests())).docs;
+  assert.deepEqual(saved.map(document => document.id), [f.id]);
+  assert.equal(saved[0].data().status, 'requested');
+  assert.equal(saved[0].data().rulesAccepted, true);
+  const claimed = (await getDoc(offerRef)).data();
+  assert.equal(claimed.reservationId, f.id);
+  assert.equal(claimed.response, 'accept');
+  assert.equal(claimed.status, 'pending');
+  // A successful request still awaits the trusted worker; clients cannot consume the offer.
+  await assertFails(updateDoc(offerRef, { status: 'used', updatedAt: serverTimestamp() }));
+  await assertFails(accept(f, {}, { id: `${f.id}-duplicate` }));
 });
 test('standalone requests and standalone accept responses are denied', async () => {
   const f = await fixture();

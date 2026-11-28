@@ -26,3 +26,10 @@ data class CancellationNotification(
     val reservationId: String,
     override val createdAt: Timestamp,
 ) : InboxNotification
+
+/** Receipt saved atomically with the confirmed reservation and occupied dates. */
+data class ReservationConfirmedNotification(
+    override val id: String,
+    val reservationId: String,
+    override val createdAt: Timestamp,
+) : InboxNotification

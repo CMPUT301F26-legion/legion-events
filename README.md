@@ -4,6 +4,9 @@ The home screen lists active Firestore campsites with text search, guest-capacit
 and nightly-price filters. See [CONTRIBUTING.md](CONTRIBUTING.md) for project conventions
 and [SCHEMA.md](SCHEMA.md) for account roles and listing fields.
 
+For the booking demo, follow the [foreground booking setup](doc/local-booking-processing.md).
+The owner’s app processes accepted reservations while open; no GitHub booking worker is required.
+
 The [booking-offer guide](doc/booking-offers.md) describes the Part 6 offer repository,
 the screens under **Lotteries → Booking offers → View offers**, decline behavior, and tests.
 

@@ -13,6 +13,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -248,6 +249,42 @@ class BookingFlowControllerTest {
         assertNotNull(controller.state.value.message)
     }
 
+    @Test fun liveConfirmationUpdatesTheAcceptedRequestWithoutResubmitting() = runTest(dispatcher) {
+        val controller = controller(); runCurrent(); select(controller); controller.review(); runCurrent()
+        controller.startObserving(); controller.confirm(); runCurrent()
+        val request = checkNotNull(controller.state.value.result)
+        repository.updates.emit(listOf(request.copy(status = Reservation.STATUS_CONFIRMED))); runCurrent()
+        assertEquals(Reservation.STATUS_CONFIRMED, controller.state.value.result?.status)
+        assertEquals(1, repository.attempts.size)
+        controller.stopObserving()
+    }
+
+    @Test fun liveRejectionRequiresFreshReviewAndListenerStopsWhenScreenCloses() = runTest(dispatcher) {
+        val controller = controller(); runCurrent(); select(controller); controller.review(); runCurrent()
+        controller.startObserving(); controller.confirm(); runCurrent()
+        val request = checkNotNull(controller.state.value.result)
+        repository.updates.emit(listOf(request.copy(status = Reservation.STATUS_REJECTED))); runCurrent()
+        assertEquals(Reservation.STATUS_REJECTED, controller.state.value.result?.status)
+        assertEquals(1, repository.attempts.size)
+        controller.stopObserving()
+        repository.updates.emit(listOf(request.copy(status = Reservation.STATUS_CONFIRMED))); runCurrent()
+        assertEquals(Reservation.STATUS_REJECTED, controller.state.value.result?.status)
+    }
+
+    @Test fun liveConfirmationDuringLostSubmissionResponseIsNeverReplacedByPendingState() = runTest(dispatcher) {
+        val response = CompletableDeferred<Reservation>()
+        repository.save = { response.await() }
+        val controller = controller(); runCurrent(); select(controller); controller.review(); runCurrent()
+        val request = saved(checkNotNull(controller.state.value.review))
+        controller.startObserving(); controller.confirm(); runCurrent()
+        repository.updates.emit(listOf(request.copy(status = Reservation.STATUS_CONFIRMED))); runCurrent()
+        response.complete(request); runCurrent()
+        assertEquals(Reservation.STATUS_CONFIRMED, controller.state.value.result?.status)
+        assertFalse(controller.state.value.submitting)
+        assertEquals(1, repository.attempts.size)
+        controller.stopObserving()
+    }
+
     /** Creates a lifecycle-owned controller with a deterministic clock and request IDs. */
     private fun controller(handle: SavedStateHandle = SavedStateHandle(), enabled: Boolean = true) =
         ViewModelProvider.create(store, viewModelFactory {
@@ -265,6 +302,8 @@ class BookingFlowControllerTest {
 
     /** Server reads and writes are separately controllable; no Firebase account or network is used. */
     private inner class FakeBookings : BookingRepository {
+        val updates = MutableSharedFlow<List<Reservation>>()
+        override fun observeRequestsForOffer(offerId: String) = updates
         var options = initial
         var requests = emptyList<Reservation>()
         val attempts = mutableListOf<BookingRequest>()

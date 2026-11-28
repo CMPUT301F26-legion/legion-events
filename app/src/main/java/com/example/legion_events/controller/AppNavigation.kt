@@ -364,6 +364,7 @@ fun AppNavigation(
     offers: OfferRepository = FirebaseOfferRepository.instance,
     notifications: NotificationRepository = FirebaseNotificationRepository.instance,
     localDrawRevision: Int = 0,
+    localBookingRevision: Int = 0,
     waitlists: WaitlistRepository = FirebaseWaitlistRepository.instance,
     notices: OwnerNoticeRepository = FirebaseOwnerNoticeRepository.instance,
     inboxRecipient: String? = null,
@@ -559,6 +560,10 @@ fun AppNavigation(
                             checkNotNull(userId), bookings, createSavedStateHandle(), bookingRequestsEnabled) }
                     })
                     val information by booking.state.collectAsStateWithLifecycle()
+                    LifecycleResumeEffect(booking) {
+                        booking.startObserving()
+                        onPauseOrDispose { booking.stopObserving() }
+                    }
                     BookingFlowScreen(information, BookingFlowActions(
                         onBack = { navController.popBackStack() },
                         onReload = booking::reload,
@@ -572,7 +577,7 @@ fun AppNavigation(
                         onConfirm = booking::confirm,
                         onRetrySubmission = booking::retrySubmission,
                         onChooseAgain = booking::chooseAgain,
-                        onViewReservation = { id -> navController.navigate(reservationDetailsRoute(id)) { launchSingleTop = true } },
+                        onViewReservation = { id -> navController.navigate(reservationConfirmationRoute(id)) { launchSingleTop = true } },
                     ))
                 }
             }
@@ -922,7 +927,7 @@ fun AppNavigation(
                     })
                     val bookingState by bookings.state.collectAsStateWithLifecycle()
                     // Reload on every return so campsites added in S13 and new bookings appear.
-                    LifecycleResumeEffect(bookings) {
+                    LifecycleResumeEffect(bookings, localBookingRevision) {
                         bookings.refresh()
                         onPauseOrDispose {}
                     }

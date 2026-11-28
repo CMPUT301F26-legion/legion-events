@@ -91,10 +91,11 @@ The Android mode constant selects behavior, while Firestore rules control author
    configured for that project.
 2. Keep the campsite owner's app open and connected. Create two lotteries and
    join them using another test account. Keep the booking period in the future.
-3. Change each `registrationEndAt` Timestamp to a past time in the Firebase
-   console. The current owner edit form locks lotteries after registration
-   opens or entrants join. Local triggering honors successfully saved changes
-   and does not change that edit restriction.
+3. In the owner's app, open the lottery and confirm **End registration now**.
+   The owner-only rule sets `registrationEndAt` to the server time and preserves
+   all other fields, including the booking window. Keep the owner's app open;
+   the foreground controller checks for due draws every five seconds. Older
+   test lotteries with booking dates edited in the console can also be closed.
 4. Confirm `winnersDrawn` becomes true, the entrant's waitlist entry becomes
    `won`, and one offer and one Inbox result appear for each lottery. Open the
    result on the entrant's device and check the offer's campsite and deadline.

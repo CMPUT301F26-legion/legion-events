@@ -39,9 +39,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Enable only after the compatible rules and booking worker have been verified.
+        // Foreground owner processing is bundled with the app; deploy its matching Firestore rules.
         buildConfigField("boolean", "BOOKING_REQUESTS_ENABLED",
-            providers.gradleProperty("bookingRequestsEnabled").orElse("false").map { it.toBooleanStrict().toString() }.get())
+            providers.gradleProperty("bookingRequestsEnabled").orElse("true").map { it.toBooleanStrict().toString() }.get())
     }
 
     buildTypes {
